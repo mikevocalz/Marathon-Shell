@@ -10,7 +10,7 @@ Use atmosphere behind content and stable readable surfaces beneath text. A wallp
 
 ## One token system
 
-Extend current theme sources; introduce no competing hard-coded palette. Define semantic surface/text/border/accent/status/focus roles; typography and font fallbacks; spacing and radius scales; elevation; touch targets; icon weights; motion and haptic roles. Generate QML and NYC-Tron exports from the same versioned schema.
+Extend current theme sources; introduce no competing hard-coded palette. Define semantic surface/text/border/accent/status/focus roles; typography and font fallbacks; spacing and radius scales; elevation; touch targets; icon weights; motion and haptic roles. Generate the OS's QML theme from a versioned public schema. Optional NYC-Tron application adapters may consume public theme roles. System controls remain Qt/Keel/Marathon.Silica; Nitro Forge premium components and assets are not part of the system UI or its dependencies.
 
 Initial design parameters to validate: a 4-unit spacing rhythm; touch hit regions of at least 44 logical units, preferably 48 for primary touch controls; separate visual icon size from hit area; readable body typography that responds to user scale. Logical units must be calibrated through device scale, not treated as physical pixels. Check text contrast at 4.5:1 for ordinary text and 3:1 for large text, with visible control/focus contrast and actual accessibility testing.
 
