@@ -38,7 +38,7 @@ The local service must support stable provider IDs, idempotency keys, sync curso
 
 Evolve existing covers into semantic summaries shared by overview, ongoing activity surfaces and lock screen. Use app plus instance IDs, privacy class, expiry, update budget and supported actions.
 
-Examples: mail draft state; next event; music playback; timer; download progress; navigation instruction where supported; Forge saved/unsaved document; Moyo session resume with protected student details. These are integration targets, not claims those applications already run on Marathon.
+Examples: mail draft state; next event; music playback; timer; download progress; navigation instruction where supported; a separately installed app's saved/unsaved document; Moyo session resume with protected student details. These are integration targets, not claims those applications already run on Marathon.
 
 Keep cover positions stable during selection. Prefer semantic state or cached thumbnails to continuously rendering background video surfaces. Distinguish closing a view from stopping audio/navigation/background work. Redact sensitive content immediately on lock, profile unavailability or permission revocation.
 
@@ -69,7 +69,7 @@ Complete trackpad activation/selection where exposed; predictable Tab order; IME
 
 Build on existing Keel actions, sharing and portals. Define versioned typed input/output schemas, MIME support, caller/task identity, permission requirements, deadlines, cancellation and result delivery. Grant narrow file access; do not expose arbitrary paths.
 
-A focused task runs in the target app's isolated process. The compositor presents it and returns its result to the original context. Reference journey: email attachment → Forge annotation → edited attachment returned to the same draft. Also support capture-to-note, calendar creation and sharing through advertised capabilities.
+A focused task runs in the target app's isolated process. The compositor presents it and returns its result to the original context. Reference journey: email attachment → independently installed compatible annotation app → edited attachment returned to the same draft. Use a non-premium test fixture for OS validation; a licensed Forge-powered app may participate through the same public APIs. Also support capture-to-note, calendar creation and sharing through advertised capabilities.
 
 ## 8. First-party application modernization
 
@@ -79,13 +79,17 @@ Every supported app needs a coherent cover, adaptive layout, text scaling, keybo
 
 Add Focus/quiet schedules, bedside charging presentation, controlled alarm exceptions and notification privacy. Work/personal organization is an initial UX feature; security-isolated profiles are a separate architecture and validation milestone.
 
-## 9. Native RN, NYC-Tron UI and Nitro Forge
+## 9. Native application SDK and optional commercial packages
 
-Keep existing QML apps intact. Prove a native Linux/Wayland React Native host using Hermes/Fabric and Qt Quick integration. Share app-facing contracts and candidate Rust engines with the separate QNX target, but implement and test OS adapters independently.
+Keep existing QML apps intact. Prove a native Linux/Wayland React Native host using Hermes/Fabric and Qt Quick integration. Share generic app-facing contracts with the separate QNX target, but implement and test OS adapters independently. Premium Forge engines remain in the separately distributed commercial product.
 
 Required adapters: window/lifecycle, rendering, input/IME, accessibility, menus/popovers, clipboard, file grants, audio, notifications, permissions, secure storage, networking, activities and action results. Audit Expo Modules v2 and Nitro Modules v1 support per module; version labels do not provide platform implementations.
 
-Generate QML and NYC-Tron token exports from one schema. Compile reusable Forge engines for each target after checking dependencies, licensing and ABI compatibility. Start with Notes/document viewing and annotation rather than bundling the whole suite into the compositor.
+Expose public theme roles that optional NYC-Tron application adapters can consume. Nitro Forge remains a separate premium product for sale: do not copy its source, components, engines, assets or entitlement code into Marathon, its images, bundled apps, public examples or CI artifacts. OS builds, boot, updates and core workflows must succeed with no Forge package, credentials or license present.
+
+The developer experience target is install the selected licensed Forge package, import its components, and build the app through documented native tooling. Provide generic module discovery/autolinking, version/ABI checks, platform service bindings, packaging and actionable diagnostics so developers do not patch Marathon or hand-wire each component. Keep Forge-specific adapters, native binaries, commercial distribution and entitlement policy with Forge or the consuming app. Preserve its existing licensing; this OS plan grants no redistribution rights.
+
+Validate the platform SDK using non-premium fixtures. In the separate authorized Forge project, validate a licensed consuming app on Marathon: package installation, native linkage, rendering, input, accessibility, file access, lifecycle, update and uninstall. Removing Forge or the app must leave the OS fully functional. Seamless support is an acceptance goal, not an existing compatibility claim.
 
 SDK acceptance: a clean sample installs, signs, launches, renders, accepts input, backgrounds, survives restart, publishes a cover, invokes a permitted action, updates and uninstalls on device. Publish capability discovery and honest unsupported-operation errors. CI must test the distributed SDK, not only monorepo internals.
 
@@ -112,7 +116,7 @@ Treat messages, pages and attachments as untrusted content. Enforce permissions 
 | P0 — baseline | Fork/branch, reproducible reference image, gap ledger, device matrix, adaptive contracts | Known source/image/dependency SHAs; recorded failures; repeatable boot |
 | P1 — visual/interaction foundation | Tokens, native screen prototypes, Flow state, accessible controls, compact/expanded/hinged layouts | Home→Peek→Hub→resume across phone and tablet geometry without state loss |
 | P2 — communication | Durable Hub providers, offline queue, activity schema, invocation | Real account journey with exactly-once send and attachment return |
-| P3 — native ecosystem | RN host, NYC-Tron adapter, Forge sample, SDK packaging | Clean install-to-uninstall lifecycle on a reference device |
+| P3 — native ecosystem | RN host, public platform adapters, non-premium sample, SDK packaging; separate commercial-app compatibility validation | Clean install-to-uninstall lifecycle on a reference device |
 | P4 — expanded workspace | Split/window policy, paired apps, drag/drop, keyboard/pen, external display | Resize/posture/hot-plug journey preserves work and focus |
 | P5 — release qualification | Security, cellular, power, accessibility, OTA, core app/store completion | Published device evidence; no critical release blockers |
 
