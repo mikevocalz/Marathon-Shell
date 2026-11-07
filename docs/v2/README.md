@@ -1,0 +1,45 @@
+# Marathon v2 — native BB10 × Sailfish successor
+
+Planning baseline: November 7, 2026. Status: proposed programme; no v2 functionality is implemented by these documents.
+
+## Product decision
+
+Build a native MarathonOS that feels like BB10 and Sailfish had a baby: communication-first, fluid, personal, tactile and productive. Preserve Marathon's Qt 6/QML compositor, Keel/Silica foundation, ambience system and native app ecosystem. Support phones, tablets, foldables, dual screens and external displays through adaptive native layouts. There is **no browser version of the OS** and no WebView shell. An ordinary browser application remains part of a useful OS.
+
+The product should make it unusually easy to read, reply, capture, search and resume. A beautiful demonstrator is not a qualified daily-driver release.
+
+## Plan index
+
+- [Modernization programme](MODERNIZATION_PLAN.md): features, architecture, dependencies, delivery phases and release gates.
+- [UI and interaction specification](UI_SPEC.md): visual language, screen inventory, adaptive rules and motion.
+- [Implementation backlog](BACKLOG.md): ordered work packages and acceptance evidence.
+
+## Repository and branch policy
+
+- Upstream: https://github.com/patrickjquinn/Marathon-Shell
+- Fork: `mikevocalz/Marathon-Shell`; development branch: `v2`.
+- Base: upstream `main`, verified at `c2c1b2fe32aeaa51edf75a45045cbfbbc08c4ac5` on November 7, 2026.
+- The newer device-specific `release/q25-v1` branch is an integration source to evaluate, not an automatic replacement for main. Review its fixes and dependency changes individually before importing them.
+- Preserve upstream history, attribution and existing license notices. Retain `main` as the upstream tracking baseline; submit small feature branches into `v2`.
+- Do not force-push shared branches. Record each upstream integration SHA and its regression results.
+- The first commit is documentation only. This plan does not bump the package version, publish a release, flash a device, change signing keys or announce upstream endorsement.
+- The fork and `v2` branch were verified through GitHub on November 7, 2026. This documentation commit establishes the planning baseline.
+
+## Decisions fixed by this brief
+
+1. Qt/QML stays the native shell; Keel stays the native application foundation.
+2. BB10 contributes Peek/Flow, Hub, useful active frames, keyboard productivity and app-to-app continuity.
+3. Sailfish contributes ambience, expressive typography, fluid manipulation, pulley menus and live covers.
+4. Modernization adds accessibility, discoverability, adaptive panes, coherent motion and reliable native services.
+5. Tablet/foldable layout contracts start in the foundation phase. Shipping a particular device still requires a separate hardware port and qualification.
+6. NYC-Tron UI and Nitro Forge integrate as native application capabilities; they do not replace the shell. React Native Marathon and QNX are separate platform targets.
+7. Retain Deckard as an optional compatibility lane; first-party features and our RN applications must not depend on Android emulation.
+8. Normal navigation, messaging, search and settings remain usable without AI.
+
+## Evidence and limitations
+
+The existing research, *MarathonOS as a modern BB10 successor* (November 6, 2026), supplies the detailed audit and 34-source register. This plan incorporates it, then adds the explicit native-only scope and first-class adaptive UI decision.
+
+Rechecked upstream README, tree, main SHA, contribution guide, Keel migration and Sailfish keep/drop document. No AGENTS.md was present in the returned main tree. No build or hardware run was performed for this planning change. Existing capability descriptions below are source/documentation evidence, not independently reproduced readiness claims.
+
+The old CONTRIBUTING guide still refers to MarathonUI; the current README and Keel migration document explicitly supersede that API. Use the Keel imports and Marathon.Silica extension strategy. Any proposed accessible dialog controls or adaptive command surfaces that differ from current Keel interaction guidance need an explicit v2 design decision and regression review, not an undocumented toolkit fork.
