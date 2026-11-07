@@ -32,7 +32,7 @@ The product should make it unusually easy to read, reply, capture, search and re
 3. Sailfish contributes ambience, expressive typography, fluid manipulation, pulley menus and live covers.
 4. Modernization adds accessibility, discoverability, adaptive panes, coherent motion and reliable native services.
 5. Tablet/foldable layout contracts start in the foundation phase. Shipping a particular device still requires a separate hardware port and qualification.
-6. NYC-Tron UI and Nitro Forge integrate as native application capabilities; they do not replace the shell. React Native Marathon and QNX are separate platform targets.
+6. Nitro Forge is the owner's separate premium commercial component product. Marathon provides generic native runtime/SDK support so licensed developers can install selected Forge packages in their own apps with minimal setup. Forge components, engines, assets and licensing code are not bundled, vendored or dependencies of the OS, shell or bundled system apps. NYC-Tron application adapters remain separate from system controls. React Native Marathon and QNX are separate platform targets.
 7. Retain Deckard as an optional compatibility lane; first-party features and our RN applications must not depend on Android emulation.
 8. Normal navigation, messaging, search and settings remain usable without AI.
 
