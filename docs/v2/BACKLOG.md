@@ -19,8 +19,8 @@ All entries are **planned**, not completed. IDs are planning identifiers, not Gi
 | V2-013 | P2 / apps | Mail/Messages/Calendar/Notes and attachment UI | 005,008,009,011 | Complete communication journey on phone/tablet with offline states |
 | V2-014 | P3 / runtime | Native RN Marathon host and service capability inventory | 001,002,006 | Actual native window, Fabric/input/lifecycle proof; no Android dependency |
 | V2-015 | P3 / UI runtime | NYC-Tron Qt adapter and generated token parity | 003,014 | Native menus, text, focus, accessibility and adaptive panes |
-| V2-016 | P3 / editor | Forge document viewer/annotation and Rust engine audit | 011,015 | Annotate attachment and return to original draft |
-| V2-017 | P3 / SDK + packaging | Signed RN sample and reproducible developer template | 014,015,016 | Clean install, update, permission change, restart and uninstall |
+| V2-016 | P3 / app compatibility | Generic native package integration; separate licensed Forge consuming-app validation | 011,015 | Install/import/build selected packages without OS patches; public OS tests use non-premium fixtures; premium validation stays in the authorized Forge/app project |
+| V2-017 | P3 / SDK + packaging | Signed RN sample and reproducible developer template | 014,015 | Non-premium sample: clean install, update, permission change, restart and uninstall; no Forge license or package required |
 | V2-018 | P4 / compositor | Split-screen, task pairs and window constraints | 002,004,010 | Pair restore and resize retain work without focus stealing |
 | V2-019 | P4 / compositor | External displays, mixed DPI, snap and hot-plug | 018 | Unplug recovers all windows onto a reachable display |
 | V2-020 | P4 / input + portals | Native drag/drop, pointer and pen capabilities | 011,018 | Scoped file transfers, keyboard equivalents, verified pen properties |
@@ -63,3 +63,7 @@ Each PR records relevant tests actually run and any skipped hardware validation.
 - Final product branding and artwork; preserve upstream license/trademark provenance meanwhile.
 
 These decisions do not block establishing the fork, planning branch, theme specification or adaptive contracts.
+
+## Commercial product boundary
+
+Nitro Forge is a separate premium product for sale. V2-016 covers compatibility, not incorporation into Marathon. The OS must build, boot and run all core workflows without Forge. Do not vendor premium source, binaries, assets or license credentials into this repository, system images, bundled apps, examples or public CI. Forge-specific package adapters and commercial validation belong in the separately authorized Forge/consuming-app repositories. Generic SDK tests use non-premium fixtures. OS release readiness does not depend on purchasing Forge; commercial app compatibility is tracked separately.
