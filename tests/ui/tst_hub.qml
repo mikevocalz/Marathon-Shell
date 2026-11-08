@@ -44,6 +44,7 @@ TestCase {
         closedSpy.clear();
         hub.isInPeekMode = false;
         hub.filterApp = "";
+        hub.unreadOnly = false;
     }
 
     // Every role the delegate reads, since a ListView sees only the roles
@@ -81,13 +82,13 @@ TestCase {
         compare(hub.dayLabel(isoDay(10)), Qt.formatDate(ten, "d MMMM"));
     }
 
-    function test_filtersOnlyWithMoreThanOneApp() {
+    function test_unreadFilterAvailableWithSingleSource() {
         const filters = findChild(hub, "hubFilters");
+        verify(!filters.visible);
         addNotification(1, "mail");
         addNotification(2, "mail");
-        verify(!filters.visible);
-        addNotification(3, "messages");
         verify(filters.visible);
+        addNotification(3, "messages");
         compare(hub.sources.map(s => s.app), ["mail", "messages"]);
         compare(hub.sources[0].unread, 2);
     }
@@ -102,6 +103,40 @@ TestCase {
         tryCompare(list, "count", 2);
         hub.filterApp = "";
         tryCompare(list, "count", 3);
+    }
+
+    function test_unreadFilterCombinesWithSource() {
+        addNotification(1, "mail");
+        addNotification(2, "messages");
+        addNotification(3, "mail");
+        const list = findChild(hub, "hubList");
+        compare(list.count, 3);
+
+        NotificationService.setProperty(0, "isRead", true);
+        hub.unreadOnly = true;
+        tryCompare(list, "count", 2);
+        hub.filterApp = "mail";
+        tryCompare(list, "count", 1);
+        hub.unreadOnly = false;
+        tryCompare(list, "count", 2);
+    }
+
+    function test_unreadBadgeUpdatesWhenMarkedRead() {
+        addNotification(1, "mail");
+        addNotification(2, "mail");
+        NotificationService.setProperty(0, "isRead", true);
+        tryVerify(() => hub.sources.length === 1 && hub.sources[0].unread === 1);
+    }
+
+    function test_unreadChipTogglesWithoutChangingSource() {
+        addNotification(1, "mail");
+        addNotification(2, "messages");
+        const unread = findChild(hub, "hubUnreadFilter");
+        verify(unread.visible);
+        hub.filterApp = "mail";
+        mouseClick(unread);
+        compare(hub.unreadOnly, true);
+        compare(hub.filterApp, "mail");
     }
 
     function test_filterClearsWhenItsAppIsGone() {
