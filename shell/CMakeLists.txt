@@ -220,6 +220,7 @@ set(QML_FILES
     qml/core/Clock.js
     qml/core/Scales.js
     qml/core/LauncherGrid.js
+    qml/core/OverviewGrid.js
 )
 
 set(JSON_FILES
