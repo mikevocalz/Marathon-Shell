@@ -45,6 +45,7 @@ TestCase {
         hub.isInPeekMode = false;
         hub.filterApp = "";
         hub.unreadOnly = false;
+        hub.refreshSources();
     }
 
     // Every role the delegate reads, since a ListView sees only the roles
