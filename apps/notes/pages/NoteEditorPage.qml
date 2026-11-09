@@ -14,6 +14,7 @@ Page {
     property bool taskRequested: false
 
     readonly property var note: store.notes.find(n => n.id === noteId)
+    readonly property string draftText: bodyArea.text
     // Nested Silica dialogs also resolve this when the editor is a bound component.
     readonly property PageStack pageStack: page.pageContainer as PageStack
 
@@ -40,6 +41,26 @@ Page {
             page.store.save(Store.remove(page.store.notes, page.noteId));
             page.pageStack.pop();
         });
+    }
+
+    function focusEditor() {
+        bodyArea.forceActiveFocus();
+    }
+
+    // A checklist toggle in the adjacent Tasks pane changes one character.
+    // Keep the editing position when reflecting that saved change here.
+    function refreshBodyFromStore() {
+        const cursor = bodyArea.cursorPosition;
+        const start = bodyArea.selectionStart;
+        const end = bodyArea.selectionEnd;
+        const scrollPosition = editorFlickable.contentY;
+        bodyArea.text = Store.text(note);
+        if (start !== end)
+            bodyArea.select(cursor === start ? end : start, cursor === start ? start : end);
+        else
+            bodyArea.cursorPosition = cursor;
+        editorFlickable.contentY = scrollPosition;
+        autosaveTimer.stop();
     }
 
     onStatusChanged: if (status === PageStatus.Deactivating)
@@ -78,6 +99,9 @@ Page {
     }
 
     SilicaFlickable {
+        id: editorFlickable
+
+        objectName: "editorFlickable"
         anchors.fill: parent
         contentHeight: column.height
 

@@ -8,8 +8,11 @@ Page {
     id: page
 
     property var store
+    property var workspace
 
     SilicaListView {
+        id: view
+
         objectName: "foldersView"
         anchors.fill: parent
         header: PageHeader {
@@ -18,6 +21,7 @@ Page {
         model: Store.folders(page.store.notes)
 
         ViewPlaceholder {
+            x: view.originX
             enabled: page.store.notes.length === 0
             text: qsTr("No folders")
             hintText: qsTr("Add a #tag to a note to file it here")
@@ -30,10 +34,15 @@ Page {
 
             contentHeight: Theme.itemSizeMedium
             Accessible.name: nameLabel.text + ", " + countLabel.text
-            onClicked: pageStack.push(Qt.resolvedUrl("NotesPage.qml"), {
-                store: page.store,
-                folder: item.modelData.tag
-            })
+            onClicked: {
+                if (page.workspace)
+                    page.workspace.openFolder(item.modelData.tag);
+                else
+                    pageStack.push(Qt.resolvedUrl("NotesPage.qml"), {
+                        store: page.store,
+                        folder: item.modelData.tag
+                    });
+            }
 
             Icon {
                 id: icon

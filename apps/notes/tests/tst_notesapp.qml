@@ -195,8 +195,9 @@ TestCase {
         ]);
         compare(t.app.notes.length, 1);
         compare(t.app.notes[0].title, "Marathon");
-        tryCompare(t.app.pageStack, "depth", 2);
-        compare(t.app.pageStack.currentPage.noteId, t.app.notes[0].id);
+        tryVerify(() => t.app.workspace.currentEditor !== null);
+        compare(t.app.workspace.currentEditor.noteId, t.app.notes[0].id);
+        compare(findChild(t.app.workspace.currentEditor, "bodyField").text, "Marathon\nhttps://marathonos.org");
     }
 
     function test_sharedCaptureUsesThePersistedIdAfterEmptyRestart() {

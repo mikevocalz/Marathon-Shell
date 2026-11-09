@@ -27,6 +27,7 @@ ApplicationWindow {
     readonly property var notes: savedState.notes
     readonly property double nextNoteId: savedState.nextId
     property string route: typeof MARATHON_APP_ROUTE !== "undefined" ? MARATHON_APP_ROUTE : ""
+    readonly property NotesWorkspace workspace: pageStack.currentPage as NotesWorkspace
 
     function save(next) {
         store.value = Store.serialize(next, nextNoteId);
@@ -51,31 +52,36 @@ ApplicationWindow {
         const next = Store.create(notes, text, Date.now(), nextNoteId);
         save(next);
         activate();
-        pageStack.push(Qt.resolvedUrl("pages/NoteEditorPage.qml"), {
-            store: app,
-            noteId: next[0].id
-        });
+        workspace.openNote(next[0].id);
     }
 
     function newNote() {
-        pageStack.push(Qt.resolvedUrl("pages/NoteEditorPage.qml"), {
-            store: app,
-            noteId: -1
-        });
+        workspace.newNote();
+    }
+
+    function handleBack() {
+        const menu = pageStack.currentPage ? app._openMenu(pageStack.currentPage) : null;
+        if (menu) {
+            menu.close();
+            return true;
+        }
+        if (workspace && workspace.handleBack())
+            return true;
+        if (pageStack.depth > 1) {
+            pageStack.pop();
+            return true;
+        }
+        minimizeRequested();
+        return true;
     }
 
     appId: "notes"
     onApplicationActiveChanged: {
-        const page = pageStack.currentPage as NoteEditorPage;
-        if (!applicationActive && page && page.commit)
-            page.commit();
+        if (!applicationActive && workspace)
+            workspace.commitEditor();
     }
     Component.onCompleted: {
         importLegacy();
-        if (route === "/folders" || route === "/tasks")
-            pageStack.push(Qt.resolvedUrl(route === "/folders" ? "pages/FoldersPage.qml" : "pages/TasksPage.qml"), {
-                store: app
-            }, PageStackAction.Immediate);
     }
 
     NotesActions {
@@ -99,8 +105,9 @@ ApplicationWindow {
     }
 
     initialPage: Component {
-        NotesPage {
+        NotesWorkspace {
             store: app
+            initialSection: app.route
         }
     }
 }
