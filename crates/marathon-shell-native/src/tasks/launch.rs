@@ -700,6 +700,28 @@ impl Tasks {
         self.app_launch_failed(&q(&app.id), &q(&app.name), &q(error));
     }
 
+    /// Prepare one catalogue snapshot before opening its launch placeholder.
+    fn runner_for_app(
+        &self,
+        app: &App,
+        policy: &sandbox::LaunchPolicy,
+    ) -> Result<(sandbox::Runner, Map), &'static str> {
+        let mut runner = self.runner(&app.id, &app.permissions, false);
+        runner.install_root.clone_from(&app.install_root);
+        if !runner.install_root.as_os_str().is_empty() {
+            runner
+                .install_root
+                .file_name()
+                .and_then(|s| s.to_str())
+                .filter(|token| token.starts_with("gen-"))
+                .ok_or("Legacy app requires migration and a device restart")?;
+        }
+        // environment() and the bwrap argument builder both use variables()
+        // for the selected generation's ID/token; keep one source of truth.
+        let env = sandbox::environment(&runner, policy);
+        Ok((runner, env))
+    }
+
     fn launch_marathon(mut self: Pin<&mut Self>, app: &App, foreground_generation: u64) -> bool {
         let policy = match sandbox::LaunchPolicy::from_environment() {
             Ok(policy) => policy,
@@ -717,31 +739,15 @@ impl Tasks {
                 ),
             );
         }
-        let mut runner = self.runner(&app.id, &app.permissions, false);
-        runner.install_root = app.install_root.clone();
+        let (mut runner, mut env) = match self.runner_for_app(app, &policy) {
+            Ok(prepared) => prepared,
+            Err(error) => {
+                self.as_mut().reject_launch(app, error);
+                return false;
+            }
+        };
         let webengine = sandbox::uses_webengine(&runner);
         let camera = sandbox::uses_camera(&runner);
-        let mut env = sandbox::environment(&runner, &policy);
-        if !runner.install_root.as_os_str().is_empty() {
-            // Keep the catalogue's generation through bwrap/QProcess startup.
-            // The runner validates the token in the app's generation namespace.
-            let Some(token) = runner
-                .install_root
-                .file_name()
-                .and_then(|s| s.to_str())
-                .filter(|token| token.starts_with("gen-"))
-            else {
-                self.as_mut().rust_mut().launching.remove(&app.id);
-                self.app_launch_failed(
-                    &q(&app.id),
-                    &q(&app.name),
-                    &q("Legacy app requires migration and a device restart"),
-                );
-                return false;
-            };
-            env.insert(q("MARATHON_APP_GENERATION_ID"), QVariant::from(&q(&app.id)));
-            env.insert(q("MARATHON_APP_GENERATION"), QVariant::from(&q(token)));
-        }
         if !self.background_launches.contains(&app.id) {
             self.as_mut().open(app, false);
             self.as_mut().show(app, &app.kind, -1);
