@@ -91,6 +91,11 @@ fn signed_updates_keep_system_policy_and_preserve_bundled_app_data() {
 }
 
 #[test]
+fn newer_generation_retention_also_defers_writable_cleanup() {
+    isolated("retained");
+}
+
+#[test]
 fn journey_worker() {
     let Ok(mode) = std::env::var("MARATHON_TEST_JOURNEY") else {
         return;
@@ -122,6 +127,7 @@ fn journey_worker() {
         "remove" | "keep" => remove(&package, &first, mode == "keep"),
         "interrupted" => interrupted(&first),
         "signed" => signed(&package, &first),
+        "retained" => retained(&first),
         _ => unreachable!("unknown journey"),
     }
 }
@@ -315,4 +321,47 @@ fn signed(package: &Path, first: &apps::App) {
     assert!(apps::find(ID).unwrap().is_protected);
     assert!(!install::can_uninstall(ID));
     assert!(install::uninstall(ID).is_err());
+}
+
+fn retained(first: &apps::App) {
+    assert!(install::uninstall(ID).unwrap().unpublished());
+    {
+        let locked =
+            transaction::LockedApp::at(paths::user_installs(), ID, NEXT_BOOT.to_owned()).unwrap();
+        transaction::write_json(
+            &first.install_root.join("retention.json"),
+            &json!({"id": ID, "bootId": NEXT_BOOT}),
+        )
+        .unwrap();
+        let report = cleanup::uninstall_locked(&locked).unwrap();
+        assert!(matches!(
+            report.app_files,
+            install::CleanupState::Deferred(_)
+        ));
+        for state in [&report.data, &report.config, &report.cache] {
+            assert!(matches!(state, install::CleanupState::Deferred(_)));
+        }
+        for path in [
+            paths::data_dir(ID),
+            paths::cache_dir(ID),
+            paths::config_dir(ID),
+        ] {
+            assert_eq!(
+                fs::read_to_string(path.join("sentinel")).unwrap(),
+                "owned data"
+            );
+        }
+    }
+    let locked = transaction::LockedApp::at(
+        paths::user_installs(),
+        ID,
+        "cccccccc-cccc-cccc-cccc-cccccccccccc".to_owned(),
+    )
+    .unwrap();
+    assert!(cleanup::uninstall_locked(&locked)
+        .unwrap()
+        .filesystem_complete());
+    assert!(!paths::data_dir(ID).exists());
+    assert!(!paths::cache_dir(ID).exists());
+    assert!(!paths::config_dir(ID).exists());
 }

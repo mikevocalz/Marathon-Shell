@@ -317,16 +317,21 @@ pub(crate) fn uninstall_locked(locked: &transaction::LockedApp) -> Result<Uninst
         report.config = CleanupState::Retained;
         report.settings = CleanupState::Retained;
     }
+    if report.system_app_remains {
+        report.cache = CleanupState::Retained;
+    }
     if job["bootId"].as_str() != Some(&locked.boot) {
         report.app_files = remove_generations(locked);
-        report.cache = if report.system_app_remains {
-            CleanupState::Retained
-        } else {
-            remove_owned(&paths::cache_dir(&locked.id))
-        };
-        if !keep {
-            report.data = remove_owned(&paths::data_dir(&locked.id));
-            report.config = remove_owned(&paths::config_dir(&locked.id));
+        // A newer retention marker or unrecognized generation invalidates the
+        // old job's quiescence proof for writable data as well as code.
+        if report.app_files.finished() {
+            if !report.system_app_remains {
+                report.cache = remove_owned(&paths::cache_dir(&locked.id));
+            }
+            if !keep {
+                report.data = remove_owned(&paths::data_dir(&locked.id));
+                report.config = remove_owned(&paths::config_dir(&locked.id));
+            }
         }
     }
     job["report"] = serde_json::to_value(&report).map_err(|e| e.to_string())?;
