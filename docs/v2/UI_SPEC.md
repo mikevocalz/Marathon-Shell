@@ -8,6 +8,8 @@ Sailfish provides ambience, typography and fluid covers; BB10 provides communica
 
 Use atmosphere behind content and stable readable surfaces beneath text. A wallpaper should influence accent and ambience without determining contrast. Light, dark, high-contrast and reduced-transparency states are designed together. Maintain compact communication lists while allowing editorial typography where geometry permits.
 
+See [the November 9 visual refresh research](VISUAL_REFRESH_RESEARCH_2026-11-09.md) for inspected Mobbin references, current theme ownership and the proposed visual refinements, alongside [TAT and the design influence roster](DESIGN_INFLUENCES.md). That brief distinguishes the implemented dark palette from light-theme design targets.
+
 ## One token system
 
 Extend current theme sources; introduce no competing hard-coded palette. Define semantic surface/text/border/accent/status/focus roles; typography and font fallbacks; spacing and radius scales; elevation; touch targets; icon weights; motion and haptic roles. Generate the OS's QML theme from a versioned public schema. Optional NYC-Tron application adapters may consume public theme roles. System controls remain Qt/Keel/Marathon.Silica; Nitro Forge premium components and assets are not part of the system UI or its dependencies.
