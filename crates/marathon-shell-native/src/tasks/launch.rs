@@ -58,6 +58,21 @@ fn take_failed_launch(state: &mut TasksRust, request_id: &str) -> Option<(Launch
     Some((launch, current))
 }
 
+/// Remove only this registration: a newer PID keeps the app's lifecycle,
+/// and a reused PID keeps its new app's gate identity.
+fn forget_pid_registration(state: &mut TasksRust, app_id: &str, pid: i64) -> (bool, bool) {
+    let current = state.app_to_pid.get(app_id) == Some(&pid);
+    let reverse = state.pid_to_app.get(&pid).is_some_and(|id| id == app_id);
+    if current {
+        state.app_to_pid.remove(app_id);
+    }
+    if reverse {
+        state.pid_to_app.remove(&pid);
+        crate::gate::forget_pid(pid);
+    }
+    (current, reverse)
+}
+
 /// Android desktop files are rewritten during a session cutover. The
 /// catalogue may still hold the old launcher until Shell restarts.
 fn android_exec(app: &App) -> String {
@@ -876,21 +891,10 @@ impl Tasks {
         }
     }
 
-    fn forget_registered_pid(mut self: Pin<&mut Self>, app_id: &str, pid: i64) -> bool {
-        let (current, reverse) = {
-            let mut rust = self.as_mut().rust_mut();
-            let current = rust.app_to_pid.get(app_id) == Some(&pid);
-            let reverse = rust.pid_to_app.get(&pid).is_some_and(|id| id == app_id);
-            if current {
-                rust.app_to_pid.remove(app_id);
-            }
-            if reverse {
-                rust.pid_to_app.remove(&pid);
-            }
-            (current, reverse)
-        };
+    pub(super) fn forget_registered_pid(mut self: Pin<&mut Self>, app_id: &str, pid: i64) -> bool {
+        let (current, reverse) =
+            forget_pid_registration(&mut self.as_mut().rust_mut(), app_id, pid);
         if reverse {
-            crate::gate::forget_pid(pid);
             self.as_mut().pid_unregistered(pid, &q(app_id));
         }
         if current {
@@ -1421,8 +1425,8 @@ mod tests {
     use std::time::{Duration, Instant};
 
     use super::{
-        discard_app_windows, is_android_app_id, is_foreground_flatpak_run, take_failed_launch,
-        AndroidHandoff, ForegroundLaunches, Launch, TasksRust,
+        discard_app_windows, forget_pid_registration, is_android_app_id, is_foreground_flatpak_run,
+        take_failed_launch, AndroidHandoff, ForegroundLaunches, Launch, TasksRust,
     };
 
     fn pending_launch(app_id: &str, instance: &str) -> Launch {
@@ -1433,6 +1437,82 @@ mod tests {
             sandbox_instance: instance.into(),
             ..Launch::default()
         }
+    }
+
+    #[test]
+    fn failed_adoption_revokes_its_pid_and_gate_registration_once() {
+        let mut state = TasksRust::default();
+        let pid = 4_000_000_001;
+        state.app_to_pid.insert("notes".into(), pid);
+        state.pid_to_app.insert(pid, "notes".into());
+        state.pending_route = Some(("compose".into(), "{\"text\":\"retained\"}".into()));
+        crate::gate::remember_pid(pid, "notes");
+        assert_eq!(
+            crate::gate::resolve(4_000_000_001).as_deref(),
+            Some("notes")
+        );
+
+        assert_eq!(
+            forget_pid_registration(&mut state, "notes", pid),
+            (true, true)
+        );
+        assert!(!state.app_to_pid.contains_key("notes"));
+        assert!(!state.pid_to_app.contains_key(&pid));
+        assert!(crate::gate::resolve(4_000_000_001).is_none());
+        assert_eq!(
+            state.pending_route,
+            Some(("compose".into(), "{\"text\":\"retained\"}".into()))
+        );
+        assert_eq!(
+            forget_pid_registration(&mut state, "notes", pid),
+            (false, false)
+        );
+    }
+
+    #[test]
+    fn old_adoption_cleanup_preserves_the_replacement_registration() {
+        let mut state = TasksRust::default();
+        let old_pid = 4_000_000_002;
+        let new_pid = 4_000_000_003;
+        state.app_to_pid.insert("notes".into(), new_pid);
+        state.pid_to_app.insert(old_pid, "notes".into());
+        state.pid_to_app.insert(new_pid, "notes".into());
+        crate::gate::remember_pid(old_pid, "notes");
+        crate::gate::remember_pid(new_pid, "notes");
+
+        assert_eq!(
+            forget_pid_registration(&mut state, "notes", old_pid),
+            (false, true)
+        );
+        assert_eq!(state.app_to_pid["notes"], new_pid);
+        assert_eq!(state.pid_to_app[&new_pid], "notes");
+        assert!(crate::gate::resolve(4_000_000_002).is_none());
+        assert_eq!(
+            crate::gate::resolve(4_000_000_003).as_deref(),
+            Some("notes")
+        );
+        crate::gate::forget_pid(new_pid);
+    }
+
+    #[test]
+    fn stale_cleanup_cannot_revoke_a_reused_pid() {
+        let mut state = TasksRust::default();
+        let pid = 4_000_000_004;
+        state.app_to_pid.insert("camera".into(), pid);
+        state.pid_to_app.insert(pid, "camera".into());
+        crate::gate::remember_pid(pid, "camera");
+
+        assert_eq!(
+            forget_pid_registration(&mut state, "notes", pid),
+            (false, false)
+        );
+        assert_eq!(state.app_to_pid["camera"], pid);
+        assert_eq!(state.pid_to_app[&pid], "camera");
+        assert_eq!(
+            crate::gate::resolve(4_000_000_004).as_deref(),
+            Some("camera")
+        );
+        crate::gate::forget_pid(pid);
     }
 
     #[test]
