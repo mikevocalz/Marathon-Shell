@@ -265,7 +265,7 @@ impl AppLifecycle1 {
                 "Category '{category}' not declared in manifest"
             )));
         }
-        ipc::on_gui(&self.qt, move |obj| obj.begin_claim(&app_id, &category)).await
+        ipc::on_gui(&self.qt, move |obj| obj.begin_claim(&app_id, &category)).await?
     }
 
     async fn end_background_task(
