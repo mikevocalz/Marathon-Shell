@@ -9,7 +9,7 @@ import "../core/OverviewGrid.js" as OverviewGrid
 Item {
     id: taskSwitcher
 
-    readonly property bool haveWayland: HAVE_WAYLAND
+    readonly property bool haveWayland: typeof HAVE_WAYLAND !== "undefined" && HAVE_WAYLAND
     // TaskCard's cover corners.
     readonly property real coverRadius: Silica.Theme.paddingMedium
     // Whether this page is the one on screen. `visible` cannot answer that:
@@ -197,6 +197,7 @@ Item {
     GridView {
         id: taskGrid
 
+        objectName: "taskGrid"
         // Two columns on phones; use the additional width of tablets and
         // desktop windows for more live covers without shrinking their content.
         readonly property real gap: Silica.Theme.paddingMedium
@@ -221,9 +222,12 @@ Item {
         function realignPage() {
             if (width <= 0 || height <= 0)
                 return;
-            Qt.callLater(function () {
-                taskGrid.showPage(OverviewGrid.pageForIndex(taskGrid.pageAnchorIndex, taskGrid.columns, taskGrid.rowsPerPage));
-            });
+            pageAnimation.stop();
+            cancelFlick();
+            forceLayout();
+            const page = OverviewGrid.clampPage(OverviewGrid.pageForIndex(pageAnchorIndex, columns, rowsPerPage), count, columns, rowsPerPage);
+            dragStartPage = page;
+            contentY = originY + page * pageHeight;
         }
 
         function settle() {
@@ -244,9 +248,12 @@ Item {
         anchors.bottomMargin: Constants.bottomBarHeight + gap / 2
         cellWidth: Math.floor(width / columns)
         cellHeight: Math.floor(height / rowsPerPage)
-        onColumnsChanged: realignPage()
+        onCellWidthChanged: realignPage()
         onCellHeightChanged: realignPage()
-        onCountChanged: realignPage()
+        onCountChanged: {
+            pageAnchorIndex = Math.max(0, Math.min(pageAnchorIndex, count - 1));
+            Qt.callLater(realignPage);
+        }
         // Pads a part-filled last page so it can be paged to.
         footer: Item {
             width: 1

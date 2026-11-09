@@ -7,13 +7,48 @@ TestCase {
 
     function test_columns_data() {
         return [
-            { "tag": "compact-portrait", "width": 390, "scale": 1, "expected": 2 },
-            { "tag": "square-phone", "width": 720, "scale": 1, "expected": 2 },
-            { "tag": "small-tablet", "width": 1000, "scale": 1, "expected": 3 },
-            { "tag": "wide-tablet", "width": 1500, "scale": 1, "expected": 4 },
-            { "tag": "large-text", "width": 1100, "scale": 1.4, "expected": 2 },
-            { "tag": "scaled-desktop", "width": 1500, "scale": 1.5, "expected": 3 },
-            { "tag": "unmeasured", "width": 0, "scale": 1, "expected": 2 }
+            {
+                "tag": "compact-portrait",
+                "width": 390,
+                "scale": 1,
+                "expected": 2
+            },
+            {
+                "tag": "square-phone",
+                "width": 720,
+                "scale": 1,
+                "expected": 2
+            },
+            {
+                "tag": "small-tablet",
+                "width": 1000,
+                "scale": 1,
+                "expected": 3
+            },
+            {
+                "tag": "wide-tablet",
+                "width": 1500,
+                "scale": 1,
+                "expected": 4
+            },
+            {
+                "tag": "large-text",
+                "width": 1100,
+                "scale": 1.4,
+                "expected": 2
+            },
+            {
+                "tag": "scaled-desktop",
+                "width": 1500,
+                "scale": 1.5,
+                "expected": 3
+            },
+            {
+                "tag": "unmeasured",
+                "width": 0,
+                "scale": 1,
+                "expected": 2
+            }
         ];
     }
 
