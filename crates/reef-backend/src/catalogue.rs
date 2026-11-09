@@ -941,14 +941,10 @@ pub(crate) mod tests {
             cat.variant_picks("pacific", Some(&ancient)).unwrap_err(),
             "engine, engine-armv80"
         );
-        assert!(cat
-            .variant_picks("other", Some(&xperia))
-            .unwrap()
-            .is_empty());
-        assert!(cat
-            .variant_picks("unlisted", Some(&xperia))
-            .unwrap()
-            .is_empty());
+        let other = cat.variant_picks("other", Some(&xperia)).unwrap();
+        assert!(other.is_empty(), "{other:?}");
+        let unlisted = cat.variant_picks("unlisted", Some(&xperia)).unwrap();
+        assert!(unlisted.is_empty(), "{unlisted:?}");
         let names = |c: &Catalogue, f| {
             c.visible_on(Some(f))
                 .iter()
@@ -1275,8 +1271,12 @@ pub(crate) mod tests {
         assert_eq!(f, ["shipwright-keel-silica", "shipwright-shoal-mail"]);
         // Old catalogues without any of this still load.
         let old = Catalogue::parse(SAMPLE.as_bytes(), "aarch64").unwrap();
-        assert!(old.featured.is_empty());
-        assert!(old.packages[0].screenshots.is_empty());
+        assert!(old.featured.is_empty(), "{:?}", old.featured);
+        assert!(
+            old.packages[0].screenshots.is_empty(),
+            "{:?}",
+            old.packages[0].screenshots
+        );
     }
 
     #[test]
