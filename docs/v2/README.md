@@ -16,6 +16,7 @@ The product should make it unusually easy to read, reply, capture, search and re
 - [Engineering workflow and skills](ENGINEERING_WORKFLOW.md): native/API guidance, source versions, agent responsibilities and validation.
 - [V1 gap audit and upstream intake](V1_GAP_AUDIT.md): complete open-item inventory, current-versus-inherited source findings, dated Reddit feedback and repair priorities.
 - [Remediation queue and programme tracker](REMEDIATION_QUEUE.md): eight ready-to-file repair tickets, detailed acceptance and all 37 packages linked to the current draft PRs; the issue board is disabled.
+- [QNX reference crosswalk](QNX_REFERENCE_CROSSWALK.md): verified 6.3 manuals, current QNX 8 checks and concrete lifecycle/recovery lessons for the existing Linux-native repairs and separate RNQNX plans.
 
 ## Approved 2.0 scope
 

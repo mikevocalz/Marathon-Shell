@@ -4,6 +4,8 @@ Snapshot: **November 9, 2026**. This is a source, tracker and community-evidence
 
 The follow-up [remediation queue](REMEDIATION_QUEUE.md) converts these findings into eight ready-to-file tickets and a 37-package tracker, including draft PRs #4–#8. GitHub issue creation returned HTTP 410 because this fork's Issues feature is disabled, so no remediation issue was created. The queue also records the later QML-validator/real-UI CI gap; the earlier tracker counts in this audit remain a dated pre-task snapshot.
 
+The [QNX reference crosswalk](QNX_REFERENCE_CROSSWALK.md) verifies the supplied historical manuals against selected current official documentation and strengthens these tickets' lifecycle, failure and recovery acceptance. It supplies engineering lessons, not additional observed v1 defects or a QNX/Linux compatibility claim.
+
 ## 1. First finding: update the baseline before duplicating fixes
 
 The fork's inherited source is materially behind upstream. The fork's original `main` is `c2c1b2fe32aeaa51edf75a45045cbfbbc08c4ac5`; the inspected v2 planning baseline is `bc39c23cac18221df21e410a45f8cc72d0ae9824`. Current upstream `main` is **`567f1faa8bfdf31611dd401134c293daa160221c`**, with **548 commits ahead and zero behind** the original fork base. This was checked with GitHub compare and locally with `git rev-list --left-right --count`. [Compare the two source revisions][upstream-compare].

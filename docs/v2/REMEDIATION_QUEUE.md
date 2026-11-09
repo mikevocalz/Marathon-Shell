@@ -14,17 +14,33 @@ The PR states below were checked through GitHub on November 9. **Every linked PR
 | [#5: background declaration contract][pr5] | Aligns schema/parser/lint/generator, rejects ambiguous actions/duplicate schedules and unsupported third-party declarations | 69 targeted Rust checks, Clippy, bundled-manifest/CLI checks reported. No third-party scheduling lifecycle, Mail sync action or automatic suspend. R06 follows it. |
 | [#6: approved scope and audit][pr6] | 37-package programme, 2.1-only Work/Personal boundary, engineering workflow and current-source audit | Documentation/source review. No runtime package is complete because this PR exists. |
 | [#7: live shell metrics][pr7] | Tracks the actual shell window and preserves native `Constants.qml` bindings; keeps the runner fallback | 10 Qt 6.11.3 checks reported, including real `Constants.qml`. Existing/cold/warm app propagation and physical display changes remain under R07. |
-| [#8: durable task slice][pr8] | Task notes, completion, optional local due dates, bounded inert source metadata, typed task actions and persistent ID allocation | 43 store checks across Qt/time-zone combinations and 32 real pinned Keel.Actions checks reported. Full editor/page UI, reminder scheduling, Hub capture, source navigation, attachment grants and downgrade qualification remain. |
+| [#8: durable task slice][pr8] | Task notes, completion, optional local due dates, bounded inert source metadata, typed task actions and persistent ID allocation; real DatePicker owning-stack fix | 43 store checks across Qt/time-zone combinations, 32 real Keel.Actions checks and the later complete Notes host suite (127 checks) passed. Production storage/bus and device qualification, reminders, Hub capture, source navigation, attachment grants and downgrade qualification remain. See the exact checkpoint below. |
 
 Earlier [#2: cover layout][pr2] and [#3: Hub triage][pr3] are also draft prototypes awaiting real native UI validation. [#1: managed native client RFC][pr1] is a documentation draft targeting `main`; it establishes no implemented runtime and must be scoped explicitly for any later `v2` integration.
 
 The local integrated candidate `7cfc5479f3c2ba1ec861db5dfdcdc082ae4256fa` combines upstream `567f1faa` and the #4–#8 changes without cherry-pick conflicts. At the recorded checkpoint it passed **73 targeted Rust tests** (35 app-platform, 38 background) and **4/4 registered CTest targets**: screen metrics (10 Qt checks), Notes store (43), real Keel.Actions (32), and test reachability. This is stronger integration evidence for those boundaries, but it is not the full Silica/editor/page suite, a whole-image build or device qualification. Format and commit-subject checks passed for the three code PRs; full Alpine CI was still in progress when recorded.
+
+**Later native UI checkpoint:** the complete existing Notes `tests/run.sh`, invoked through CTest, passed **127 checks, zero failures and zero skips** on combined-upstream commit `14b70b8f19ecabd2f5d71ccfca8b5e4418788e53`, tree `2865ee7ec008018e4875e2e415fa3af958c71e5f`. The breakdown is Editor 15, Actions 32, App 13, Cover 6, Pages 18 and Store 43, including suite initialization/cleanup; these counts overlap the earlier isolated logic/action checks and must not be added as wholly independent coverage. The first complete UI run exposed a real due-date dialog owning-PageStack scope bug and test signature/lifetime issues; the corrected suite covers native DatePicker accept/cancel and restart behavior.
+
+That run used **Qt 6.11.3** and real pinned Keel `0df499bf` Silica, Share and Configuration sources, with the upstream JSON Configuration fallback isolated through `KEEL_DCONF_FILE` and the existing repository Platform test fixture. It did not exercise production mlite/dconf, an external sharing/session bus, device interaction or downgrade-reader compatibility. The actual toolkit build passed; those remaining backends are not silently covered by it. Published draft #8 follow-up `7a9fabbf705112299134320b3e039a07f560c167` matches the tested task tree `3364d94e4b5182f5852dd8348b31e7d01417c2cb`; the later combined tree above includes the upstream intake and companion changes. The QML-validator repair and required hosted native UI gate under R08 remain open, as do the broader work-package gates.
+
+**Hosted CI checkpoint, November 9 at 09:23 UTC:** these results supersede the earlier in-progress observations for #5/#7. They are not an all-green CI claim.
+
+| Candidate | Observed result | Evidence |
+|---|---|---|
+| Draft #5 | Build/test job failed only `Lint_Untranslated`; 42/43 CTest targets passed. Format and commit-subject checks passed. | [Run 42589139632, job 129066166101](https://github.com/mikevocalz/Marathon-Shell/actions/runs/42589139632/job/129066166101) |
+| Draft #7 | Build/test job failed only `Lint_Untranslated`; 43/44 CTest targets passed. Format and commit-subject checks passed. | [Run 42589491288, job 129067322641](https://github.com/mikevocalz/Marathon-Shell/actions/runs/42589491288/job/129067322641) |
+| Draft #8 follow-up `7a9fabbf` | Build/test workflow still in progress at this checkpoint; format and commit-subject checks passed. | [Run 42592644028](https://github.com/mikevocalz/Marathon-Shell/actions/runs/42592644028) |
+
+The #5/#7 failure is the same four terminal key labels (`Esc`, `Tab`, `Ctrl`, `Alt`). `apps/terminal/components/VirtualKeyRow.qml` has identical blob `3013442537adbb58289ca8ebde22073f9cfc7182` in planning base `bc39c23` and both PR heads; the focused lint failure was reproduced independently. Upstream already corrects those labels in [commit `8126b0f518eff1c6f59cfd9460f009f333698f77`](https://github.com/patrickjquinn/Marathon-Shell/commit/8126b0f518eff1c6f59cfd9460f009f333698f77), included in draft intake #4. The full `check-untranslated.py` check over `shell/qml`, `marathon-silica` and `apps` passes on combined candidate `14b70b8f`; no duplicate label patch is needed. Review/integrate the existing intake and rerun the exact hosted candidates rather than treating their inherited failure as a new regression or claiming they are already green. CI logs also explicitly skip `qmllint`, so R08 remains necessary even after this lint fix.
 
 ## Repair order
 
 Review/integrate #4 and qualify the affected source before duplicating upstream fixes. R01–R04 protect installation integrity and app boundaries; R08 makes the native UI gate dependable and should proceed in parallel. R05 supplies reference-device evidence throughout. R06 and R07 extend the bounded foundation slices in #5 and #7. Independent work can run in separate worktrees; integration and boundary review are sequential gates.
 
 The native/API skills, source/version verification, multiagent implementation and independent review requirements in [ENGINEERING_WORKFLOW.md](ENGINEERING_WORKFLOW.md) apply to every ticket. Preserve Qt/Keel; use non-premium fixtures; target `v2`. Pick exact supported APIs from the selected source/SDK before coding.
+
+The [QNX reference crosswalk](QNX_REFERENCE_CROSSWALK.md) adds specific lifetime, IPC, recovery and timing acceptance below. Its verified 6.3/2005 manuals and selected current QNX 8 sources inform the design; Marathon retains its Linux/Wayland implementation and the separate RNQNX plans retain their own target evidence. These are stronger acceptance details for R01–R08, not new packages or proof of defects beyond this audit.
 
 ## R01 — make app replacement atomic and preserve running generations
 
@@ -40,6 +56,7 @@ The native/API skills, source/version verification, multiagent implementation an
 
 - Fail staging copy, disk allocation, receipt serialization, exchange and parent-directory synchronization independently. At every boundary, the discoverable installation is the intact old generation or the complete new generation with its matching receipt; never absent or mixed.
 - Kill/restart the installer at each durable boundary and reconcile without guessing from a partially written file. Repeated recovery/rollback is idempotent.
+- Reconcile the durable transaction/generation receipt when completion is lost after commit. Client failure or a caller-visible timeout does not prove rollback; retry cannot blindly apply an update whose outcome is unknown.
 - Race install/update/uninstall/cleanup for the same app; serialize them without touching another app. A stale permission approval or replaced package cannot bypass revalidation.
 - Keep an old runner alive through update; it can load its remaining resources consistently. New launches use the committed generation. Cleanup failure cannot delete the live destination or a generation still in use.
 - Reject unsupported cross-filesystem/atomic-exchange conditions safely. Preserve signed-package validation, archive traversal/symlink rejection and protected-app rules.
@@ -63,6 +80,7 @@ The native/API skills, source/version verification, multiagent implementation an
 - Test foreign paths and symlink/path-substitution attempts. Preserve user-created shared/media files and another app's data and credentials.
 - Create credentials for two real app identities; uninstall one removes only its owned credentials when requested. Legacy ambiguous items are reported, never silently claimed deleted.
 - Race cleanup with update, an active process and background work under the R01 lock/lifecycle policy; no new work starts after effective revocation. The transaction lock does not stop app writes: define lifecycle quiescence/revocation before final deletion and test an active writer so it cannot recreate supposedly removed data.
+- Kill a client/runner before orderly cleanup and identify the trusted observer that revokes its session grants and subscriptions. Persistent data follows the selected retention policy; correctness must not depend on the app running a shutdown callback.
 
 **Closing evidence:** filesystem fault tests, two-app secret-boundary tests and actual uninstall/retry UI or CLI output. Document what cannot yet be removed safely.
 
@@ -80,6 +98,7 @@ The native/API skills, source/version verification, multiagent implementation an
 
 - Two real fixtures with different identities cannot read each other's secrets, change unrelated dconf keys, call another app's private service or access sibling data/cache. Allowed operations remain functional.
 - Repeat the denial matrix for cold launch, warm adoption, restart, bus activation/reconnect and service owner replacement. Identity cannot be self-asserted by changing an app ID.
+- Authorize each exposed operation against the actual peer and current permissions; invalidate cached authority on owner/generation replacement. Malformed or oversized boundary requests fail without unbounded allocation or bypassing the same checks.
 - Revoke a permission during an operation and after adoption; subsequent calls fail consistently. A network-denied app cannot inherit the spare's network access.
 - Test absence/failure of each enforcement mechanism. The release does not silently advertise a boundary that was not established.
 - Define and test the sandbox override for unset, `0`, `1` and malformed values. Current `sandbox.rs` disables bwrap whenever `MARATHON_DISABLE_SANDBOX` is present, including `0`; parsing, diagnostics and reported protection must agree. [Launcher source][sandbox-source].
@@ -101,6 +120,7 @@ The native/API skills, source/version verification, multiagent implementation an
 - Text scaling, reduced motion and orientation/viewport changes preserve an understandable reading and focus order. Password/protected fields remain protected.
 - An ordinary hostile app cannot subscribe to or enumerate another app's accessible text; trusted AT can access the user-selected scope. Denial/revocation/restart is explicit and recoverable.
 - App death, AT restart, lock/unlock and dialog cancellation do not strand focus or retain stale private content.
+- Bound AT/app requests and event queues; a hung peer must not stall unrelated shell input. Test teardown with pending callbacks and reject late events after the authorized session is disposed; no owner thread may wait for a worker that needs that owner to complete.
 - Validate the same contract for cold and warm launches and supported native toolkit integration; label any unavailable lane accurately.
 
 **Closing evidence:** actual AT logs/interaction recording on the native stack plus negative privacy tests. A stub tree or screenshot does not close this ticket.
@@ -124,6 +144,8 @@ The native/API skills, source/version verification, multiagent implementation an
 
 **Acceptance:** each cell names pass, reproduced failure, unsupported or not run, with artifact/date and a follow-up ticket. Repeated journeys survive restart and realistic interruptions. Preserve the working data copy before destructive recovery tests. Keep subscriber details and secrets out of public diagnostics. Release claims derive from the matrix; an untested device, carrier or image does not inherit another row's result.
 
+Include a controlled death/hang/restart test for an allowlisted provider used by the selected journeys. Observe recovering/unavailable state, preserved user drafts, fresh state after reconnect and rejection of old-generation events. Reconcile unknown mutation outcomes before replay. Record input/call/media latency distributions under defined load and meaningful provider progress; a heartbeat timer alone does not prove useful work or establish a real-time guarantee.
+
 **Closing evidence:** publish the selected release-target matrix and recovery procedure with no unresolved critical journey for that target. Subsequent image changes invalidate affected cells until retested; the matrix remains a continuing release gate.
 
 ## R06 — complete installed background-work lifecycle and a real mail action
@@ -140,6 +162,7 @@ The native/API skills, source/version verification, multiagent implementation an
 
 - Install/update/remove and failed installation leave registration consistent with the committed package/receipt. Restart regenerates only authorized work; removed/revoked apps leave no active units or future timers.
 - Bound tasks per app, intervals, execution time, retries, overlap and concurrency. Handle missed slots, clock jumps, time zones, unmet charging/battery/network constraints and repeated failures without an invocation storm.
+- Count admission/queue time in operation deadlines and document the selected Linux clock's suspend behavior. Keep calendar/due-date persistence separate from elapsed-clock values. Test time correction, freeze/resume and reboot; cancellation must retain native resources until use actually ends.
 - Test permission revocation, stale action identity, service/app death, in-flight update/removal and bus reconnect. A revoked task cannot schedule new work after its effective revocation point.
 - Exercise the actual advertised Mail action against controlled supported accounts, offline/reconnect and expired credentials; distinguish sync success from content merely appearing in a fixture.
 - Measure hardware alarms/calls/messages, wake and thaw/refreeze in R05. Automatic suspend/resuspend is a separate explicit policy decision within this ticket's later work, not a consequence of adding a timer.
@@ -158,6 +181,7 @@ The native/API skills, source/version verification, multiagent implementation an
 
 - Resize, rotate and change scale while the shell, a running app, a newly launched app and a warm-adopted app are present. They agree on usable geometry and effective scale; no app receives a stale adoption snapshot.
 - Move between mixed-DPI displays and hot-unplug an output. All windows remain reachable, preserve focus/drafts/task identity and receive ordered current state rather than late updates for a destroyed output.
+- Specify the generation/sequence boundary between initial snapshot and subscribed updates. Race both paths during adoption/reconnect; a late initial snapshot cannot overwrite newer metrics. Bound/coalesce superseded state without dropping required output/lifecycle transitions.
 - Large text, keyboard appearance and safe-region changes preserve interaction targets. Native pointer/touch coordinates stay aligned with rendered controls.
 - Detach/destroy/rebind a window or restart a runner without dangling subscriptions or another app's metrics. Test Qt/Keel paths actually used by the image.
 - Keep hinge/posture support capability-gated with its own device evidence. Passing a desktop resize test is not a foldable port.
@@ -170,6 +194,8 @@ The native/API skills, source/version verification, multiagent implementation an
 
 **Problem/evidence:** the session's repository-wide `scripts/validate-qml.sh` run reported **405 checked files, 313 warning counts and one error count**. Its unanchored `Error:` match can match the source excerpt `mmscError:` in `apps/settings/pages/MmsDialog.qml`. The script also swallows the `qmllint` status with `|| true`; a missing tool can be misreported as a clean file because its diagnostic does not match that filter. The full Sailfish.Silica, Nemo.Configuration and Sailfish.Share UI stack was unavailable in that validation environment. The result was not a green full-UI run. [Validator][validator-source].
 
+The later complete native toolkit build and 127-check Notes pass are recorded above. They resolve that host suite's earlier import/build blockage and qualify its bounded UI slice; they do not fix `validate-qml.sh`, test the production dconf/share-bus backends or establish a successful mandatory hosted UI job.
+
 Initial PR checks were observed empty, and runs subsequently appeared for #5, including a successful format check and an in-progress CI run. This does **not** establish why any initial run was absent, that workflows are disabled, or that complete native UI CI has passed. Gate the actual emitted jobs and their coverage.
 
 **First implementable slice:** make the validator preflight its selected `qmllint` binary, version and required import/type-information paths; preserve the tool's actual exit/severity outcome. Use supported structured diagnostics where available, or a parser tied to the pinned version's diagnostic format. Define a deliberate warning policy and distinguish tool/setup failure from QML errors. Do not match arbitrary source excerpts as diagnostics or suppress missing imports to obtain green output.
@@ -181,6 +207,7 @@ Initial PR checks were observed empty, and runs subsequently appeared for #5, in
 - Validate all intended shell/app/module roots, not only `apps/`. File paths with spaces and empty/discovered-zero coverage are handled deliberately; report actual checked/skipped counts.
 - CI for PRs targeting `v2` emits a required native UI job using the pinned Qt/Keel build and complete Silica/configuration/share dependencies. It runs registered CTest/Qt Quick suites for changed shell controls and app pages, including Notes editor/task creation/completion/date picker and Hub/cover interactions as applicable.
 - Keep pure logic, real Keel.Actions and actual UI results separate. A synthetic UI toolkit or parser-only pass cannot substitute for the real affected UI suite. Targeted service stubs must be named and must not replace the component being asserted.
+- Exercise the affected real native boundary with malformed input, unavailable/hung providers, cancellation, reconnect and shutdown while work is queued. Record owner-thread responsiveness and resource cleanup; a Promise or asynchronous signature alone is not evidence that blocking work moved off the UI owner.
 - Detect missing/skipped test registration and unexpected zero-test runs. Preserve test logs, dependency versions and the tested tree; require the selected job result before marking a candidate ready. Branch-protection settings must match real emitted job names and the approved repository policy.
 - Run the integrated candidate stack after #4; passing an isolated slice does not establish compatibility with the 548-commit intake. Follow with R05 device interaction for behavior the host cannot validate.
 
@@ -204,7 +231,7 @@ Initial PR checks were observed empty, and runs subsequently appeared for #5, in
 | V2-010 | Semantic activities/private covers | Planned; #5 is prerequisite work | Activity lifecycle/budgets/privacy; R03/R06 |
 | V2-011 | Typed invocation and scoped grants | Planned; #8 is an action consumer | Caller/target death, cancel/timeout/revocation/result-return tests |
 | V2-012 | Keyboard/search/IME/trackpad | Planned | Multilingual composition, collision ownership and focus return |
-| V2-013 | Communication/productivity app UI | Draft Notes slice #8 | R08 actual editor/page suites; complete cross-app/offline journey |
+| V2-013 | Communication/productivity app UI | Draft Notes slice #8; host suite passed | R08 required CI and production backends; complete cross-app/offline journey |
 | V2-014 | Native RN host/service inventory | Planned | Actual Fabric/window/input/lifecycle proof; #1 remains only RFC |
 | V2-015 | Separate native NYC-Tron adapter | Planned | Generic native controls/token/input/accessibility parity |
 | V2-016 | Native package/app compatibility | Planned | Non-premium fixtures; separate authorized commercial-app qualification |
@@ -224,7 +251,7 @@ Initial PR checks were observed empty, and runs subsequently appeared for #5, in
 | V2-030 | Paired-device continuity | Planned | Peer trust/revocation and one real interrupted transfer before remote actions |
 | V2-031 | Credentials/passkeys | Planned | R02/R03 identity foundation; real authenticator/origin/recovery proof |
 | V2-032 | Migration/export/restore | Planned | Category coverage, reversible import and clean-device restore; R01/R02 |
-| V2-033 | Tasks/attachments/provenance | Draft first slice #8 | Real UI and format/downgrade qualification; capture/grants/Calendar/sync remain |
+| V2-033 | Tasks/attachments/provenance | Draft first slice #8; host UI passed | Production storage and format/downgrade qualification; capture/grants/Calendar/sync remain |
 | V2-034 | Secure messaging/voice/video | Planned | Maintained native protocol/SDK decision, verified identity and actual media/encryption evidence |
 | V2-035 | Personal Travel/Bedside/Focus | Planned | Reversible personal preferences, alarm exceptions and time/charging transitions |
 | V2-036 | Keyboard Instant Actions/prediction | Planned | Deterministic visible-target dispatch and protected-field/IME rules; #8 alone is not this surface |
