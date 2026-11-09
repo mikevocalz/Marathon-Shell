@@ -18,6 +18,8 @@ pub mod qobject {
         type QString = cxx_qt_lib::QString;
         include!("cxx-qt-lib/qlist.h");
         type QList_QVariant = cxx_qt_lib::QList<cxx_qt_lib::QVariant>;
+        include!("cxx-qt-lib/qmap.h");
+        type QMap_QString_QVariant = cxx_qt_lib::QMap<cxx_qt_lib::QMapPair_QString_QVariant>;
     }
 
     extern "RustQt" {
@@ -30,6 +32,9 @@ pub mod qobject {
         #[qsignal]
         #[cxx_name = "uninstallFailed"]
         fn uninstall_failed(self: Pin<&mut Self>, app_id: &QString, error: &QString);
+        #[qsignal]
+        #[cxx_name = "uninstallPartial"]
+        fn uninstall_partial(self: Pin<&mut Self>, app_id: &QString, detail: &QString);
         /// Any uninstall, this app's or not.
         #[qsignal]
         #[cxx_name = "appRemoved"]
@@ -45,6 +50,11 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "flatpakApps"]
         fn flatpak_apps(self: &AppInstaller) -> QList_QVariant;
+        /// {available, items: [{id, detail}], error}; failed queries never
+        /// replace the caller's last known pending cleanup list.
+        #[qinvokable]
+        #[cxx_name = "pendingUninstalls"]
+        fn pending_uninstalls(self: &AppInstaller) -> QMap_QString_QVariant;
     }
 
     impl cxx_qt::Threading for AppInstaller {}
@@ -79,7 +89,7 @@ impl cxx_qt::Initialize for AppInstaller {
             },
         );
         relay(
-            qt,
+            qt.clone(),
             STORE,
             "UninstallFailed",
             |mut obj, (id, error): (String, String)| {
@@ -88,10 +98,52 @@ impl cxx_qt::Initialize for AppInstaller {
                 }
             },
         );
+        relay(
+            qt,
+            STORE,
+            "UninstallPartial",
+            |mut obj, (id, detail): (String, String)| {
+                obj.as_mut().rust_mut().removable.remove(&id);
+                let app = QString::from(&id);
+                obj.as_mut().app_removed(&app);
+                if obj.as_mut().rust_mut().pending.remove(&id) {
+                    obj.uninstall_partial(&app, &QString::from(&detail));
+                }
+            },
+        );
     }
 }
 
 impl AppInstaller {
+    #[allow(clippy::unused_self, reason = "a QML invokable")]
+    fn pending_uninstalls(&self) -> QMap<QMapPair_QString_QVariant> {
+        let mut result = QMap::<QMapPair_QString_QVariant>::default();
+        let pending: Option<Vec<(String, String)>> = STORE.ask_now("PendingUninstalls", &());
+        result.insert(
+            QString::from("available"),
+            QVariant::from(&pending.is_some()),
+        );
+        let Some(pending) = pending else {
+            result.insert(
+                QString::from("error"),
+                QVariant::from(&QString::from("Cleanup state unavailable; try again")),
+            );
+            return result;
+        };
+        let mut list = QList::<QVariant>::default();
+        for (id, detail) in pending {
+            let mut map = QMap::<QMapPair_QString_QVariant>::default();
+            map.insert(QString::from("id"), QVariant::from(&QString::from(&id)));
+            map.insert(
+                QString::from("detail"),
+                QVariant::from(&QString::from(&detail)),
+            );
+            list.append(QVariant::from(&map));
+        }
+        result.insert(QString::from("items"), QVariant::from(&list));
+        result
+    }
+
     fn can_uninstall(mut self: Pin<&mut Self>, app_id: &QString) -> bool {
         let id = app_id.to_string();
         if let Some(known) = self.removable.get(&id) {
@@ -119,6 +171,16 @@ impl AppInstaller {
 
     fn uninstall_app(mut self: Pin<&mut Self>, app_id: &QString) {
         let id = app_id.to_string();
+        if self.pending.contains(&id) {
+            return;
+        }
+        if self.pending.len() >= 8 {
+            self.uninstall_failed(
+                app_id,
+                &QString::from("Too many pending uninstall requests; retry shortly"),
+            );
+            return;
+        }
         self.as_mut().rust_mut().pending.insert(id.clone());
         let qt = self.qt_thread();
         io::spawn(async move {

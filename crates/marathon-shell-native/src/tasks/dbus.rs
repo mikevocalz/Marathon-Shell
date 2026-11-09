@@ -324,7 +324,8 @@ impl AppStore1 {
         Ok(marathon_apps::install::can_uninstall(&app_id))
     }
 
-    /// The outcome comes as `UninstallComplete` or `UninstallFailed`.
+    /// The outcome comes as `UninstallComplete`, `UninstallPartial` or
+    /// `UninstallFailed`; acknowledging this request is not completion.
     async fn uninstall(&self, app_id: String, #[zbus(header)] h: Header<'_>) -> fdo::Result<()> {
         system(&h).await?;
         crate::apps::with(move |apps| {
@@ -346,17 +347,33 @@ impl AppStore1 {
             .map(|a| (a.id, a.name))
             .collect())
     }
+
+    /// Removals whose launcher entry may be gone, but filesystem cleanup needs
+    /// a retry. The caller can submit Uninstall again for any listed ID.
+    async fn pending_uninstalls(
+        &self,
+        #[zbus(header)] h: Header<'_>,
+    ) -> fdo::Result<Vec<(String, String)>> {
+        system(&h).await?;
+        blocking::unblock(marathon_apps::install::pending_uninstalls)
+            .await
+            .map_err(fdo::Error::Failed)
+    }
 }
 
 /// An uninstall's outcome, for `AppStore1`'s callers; an empty error is
 /// success.
-pub(crate) fn uninstalled(app_id: &str, error: &str) {
+pub(crate) fn uninstalled(app_id: &str, error: &str, unpublished: bool) {
     if error.is_empty() {
         ipc::signal("AppStore", "UninstallComplete", (app_id.to_owned(),));
     } else {
         ipc::signal(
             "AppStore",
-            "UninstallFailed",
+            if unpublished {
+                "UninstallPartial"
+            } else {
+                "UninstallFailed"
+            },
             (app_id.to_owned(), error.to_owned()),
         );
     }

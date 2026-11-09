@@ -39,6 +39,8 @@ mod ffi {
 pub(crate) struct Runner {
     pub app_id: String,
     pub permissions: Vec<String>,
+    /// Generation selected with these permissions; empty for OS bundles.
+    pub install_root: PathBuf,
     pub requires_qt: Vec<String>,
     /// A spare that will become an app with "storage".
     pub storage_spare: bool,
@@ -99,32 +101,28 @@ use marathon_rt::dirs::home;
 
 use marathon_apps::paths::{system_apps, user_installs};
 
-/// The user installed it; it is not one of Marathon's own apps.
-pub(crate) fn is_user_installed(app_id: &str) -> bool {
-    !marathon_apps::paths::system_app(app_id)
-        .join("manifest.json")
-        .exists()
-        && marathon_apps::paths::receipt(app_id).exists()
-}
-
 #[derive(Default, Clone)]
 struct Manifest {
     requires_qt: Vec<String>,
     chromium_flags: String,
 }
 
-// Manifests don't change while the shell runs.
-fn manifest(app_id: &str) -> Manifest {
-    static CACHE: LazyLock<Mutex<HashMap<String, Manifest>>> = LazyLock::new(Mutex::default);
+// User generations are immutable; key by the same root the runner binds.
+fn manifest(runner: &Runner) -> Manifest {
+    static CACHE: LazyLock<Mutex<HashMap<PathBuf, Manifest>>> = LazyLock::new(Mutex::default);
+    let root = if runner.install_root.as_os_str().is_empty() {
+        system_apps().join(&runner.app_id)
+    } else {
+        runner.install_root.join("files")
+    };
     let mut cache = CACHE.lock().unwrap_or_else(|_| std::process::abort());
     cache
-        .entry(app_id.to_owned())
+        .entry(root.clone())
         .or_insert_with(|| {
-            let json: serde_json::Value =
-                fs::read(system_apps().join(app_id).join("manifest.json"))
-                    .ok()
-                    .and_then(|b| serde_json::from_slice(&b).ok())
-                    .unwrap_or_default();
+            let json: serde_json::Value = fs::read(root.join("manifest.json"))
+                .ok()
+                .and_then(|b| serde_json::from_slice(&b).ok())
+                .unwrap_or_default();
             Manifest {
                 requires_qt: json["requiresQtModules"]
                     .as_array()
@@ -145,10 +143,12 @@ fn manifest(app_id: &str) -> Manifest {
 }
 
 pub(crate) fn uses_webengine(runner: &Runner) -> bool {
-    let Some(app) = app(runner) else { return false };
+    if runner.app_id.is_empty() {
+        return false;
+    }
     let mut modules = runner.requires_qt.clone();
     if modules.is_empty() {
-        modules = manifest(&app.id).requires_qt;
+        modules = manifest(runner).requires_qt;
     }
     modules.iter().any(|m| m == "webengine")
 }
@@ -181,7 +181,7 @@ fn camera_nodes() -> Vec<String> {
 
 fn chromium_flags(app: &App<'_>) -> String {
     var("QTWEBENGINE_CHROMIUM_FLAGS").unwrap_or_else(|| {
-        let flags = manifest(&app.id).chromium_flags;
+        let flags = manifest(app.runner).chromium_flags;
         if !flags.is_empty() {
             flags
         } else if app.runner.gpu_webgl {
@@ -233,6 +233,14 @@ fn variables(runner: &Runner) -> Vec<(&'static str, String)> {
         vars.push(("MESA_LOADER_DRIVER_OVERRIDE", driver));
     }
     let Some(app) = app(runner) else { return vars };
+    if let Some(token) = runner
+        .install_root
+        .file_name()
+        .and_then(|name| name.to_str())
+    {
+        vars.push(("MARATHON_APP_GENERATION_ID", app.id.clone()));
+        vars.push(("MARATHON_APP_GENERATION", token.to_owned()));
+    }
     // A spare learns the scale when it is adopted.
     vars.push(("MARATHON_USER_SCALE", format!("{:.3}", runner.user_scale)));
     for (permission, name) in [
@@ -450,11 +458,8 @@ fn sandbox(runner: &Runner, app: Option<&App<'_>>) -> Vec<String> {
     let display = var_or("MARATHON_WL_SOCKET_NAME", "marathon-wayland-0");
     args.flags(&["--ro-bind", &socket, &format!("{runtime}/{display}")]);
     match app {
-        Some(app) if is_user_installed(&app.id) => {
-            args.bind(
-                "--ro-bind",
-                &user_installs().join(&app.id).to_string_lossy(),
-            );
+        Some(_) if !runner.install_root.as_os_str().is_empty() => {
+            args.bind("--ro-bind", &runner.install_root.to_string_lossy());
         }
         Some(app) if !app.has("system") => {}
         _ => {
@@ -656,5 +661,50 @@ mod tests {
         assert!(command.ends_with(&["/test/runner".into(), "--pool".into()]));
         assert_eq!(sandbox_marker(&spare, &policy).as_deref(), Some("1"));
         Ok(())
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    reason = "fixture creation failures must fail the test"
+)]
+mod generation_tests {
+    use super::*;
+
+    #[test]
+    fn metadata_and_environment_follow_the_selected_generation() {
+        let root = tempfile::tempdir().unwrap();
+        let first = root.path().join("gen-first");
+        let second = root.path().join("gen-second");
+        for (generation, modules, flags) in [
+            (&first, vec!["webengine"], "--first"),
+            (&second, vec![], "--second"),
+        ] {
+            fs::create_dir_all(generation.join("files")).unwrap();
+            fs::write(
+                generation.join("files/manifest.json"),
+                serde_json::to_vec(
+                    &serde_json::json!({"requiresQtModules": modules, "chromiumFlags": flags}),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        }
+        let mut runner = Runner {
+            app_id: "com.example.same".to_owned(),
+            install_root: first.clone(),
+            ..Runner::default()
+        };
+        assert!(uses_webengine(&runner));
+        assert_eq!(manifest(&runner).chromium_flags, "--first");
+        let env = variables(&runner);
+        assert!(env.contains(&("MARATHON_APP_GENERATION_ID", "com.example.same".to_owned())));
+        assert!(env.contains(&("MARATHON_APP_GENERATION", "gen-first".to_owned())));
+        runner.install_root = second;
+        assert!(!uses_webengine(&runner));
+        assert_eq!(manifest(&runner).chromium_flags, "--second");
+        runner.install_root = first;
+        assert_eq!(manifest(&runner).chromium_flags, "--first");
     }
 }

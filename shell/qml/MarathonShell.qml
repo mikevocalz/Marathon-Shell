@@ -1304,6 +1304,8 @@ Item {
                     Tasks.launchApp(typeof app === "string" ? app : app.id);
                 }
                 onUninstallFailed: name => errorToast.show(qsTr("%1 wasn't uninstalled").arg(name), qsTr("Try again from its app info."), "x")
+                onUninstallPartial: (appId, detail) => errorToast.show(qsTr("Cleanup incomplete for %1").arg(appId), detail, "x")
+                onUninstallFailureDetail: (name, detail) => errorToast.show(qsTr("%1 wasn't uninstalled").arg(name), detail, "x")
                 Component.onCompleted: {
                     shell.totalPages = pageView.pageCount;
                 }

@@ -39,6 +39,9 @@ pub struct App {
     /// Installed by the OS, or signed with a system key.
     #[serde(skip)]
     pub is_system: bool,
+    /// Immutable install root selected with the receipt, empty for OS bundles.
+    #[serde(skip)]
+    pub install_root: PathBuf,
 }
 
 impl App {
@@ -81,8 +84,10 @@ struct Receipt {
     permissions: Vec<String>,
 }
 
-fn receipt(app_id: &str) -> Option<Receipt> {
-    let receipt: Receipt = serde_json::from_slice(&fs::read(paths::receipt(app_id)).ok()?).ok()?;
+fn receipt(app_id: &str, root: &Path) -> Option<Receipt> {
+    let receipt: Receipt =
+        serde_json::from_value(crate::transaction::read_json(&root.join("receipt.json")).ok()?)
+            .ok()?;
     (receipt.id == app_id).then_some(receipt)
 }
 
@@ -104,9 +109,11 @@ pub fn system(app_id: &str) -> Option<App> {
 /// permissions are the ones the user approved: the manifest beside the code
 /// is not trusted for them.
 fn user(app_id: &str) -> Option<App> {
-    let receipt = receipt(app_id)?;
-    let mut app = App::read(&paths::files_dir(app_id)).filter(|a| a.id == app_id)?;
+    let root = paths::launch_install(app_id).ok()??;
+    let receipt = receipt(app_id, &root)?;
+    let mut app = App::read(&root.join("files")).filter(|a| a.id == app_id)?;
     app.permissions = receipt.permissions;
+    app.install_root = root;
     app.is_system = is_system_signer(&receipt.signer);
     app.is_protected &= app.is_system;
     Some(app)
@@ -160,7 +167,7 @@ fn choose(system: App, user: Option<App>, image: Option<&str>) -> App {
 /// The app of `app_id`: the OS's, or the user's copy that supersedes it;
 /// the user's for an app the OS doesn't have.
 pub fn find(app_id: &str) -> Option<App> {
-    if app_id.is_empty() {
+    if !crate::transaction::valid_id(app_id) {
         return None;
     }
     if paths::system_app(app_id).join("manifest.json").exists() {
@@ -178,6 +185,7 @@ fn ids(dir: &Path) -> Vec<String> {
         .flatten()
         .filter(|e| e.path().is_dir())
         .filter_map(|e| e.file_name().into_string().ok())
+        .filter(|id| crate::transaction::valid_id(id))
         .collect();
     ids.sort();
     ids

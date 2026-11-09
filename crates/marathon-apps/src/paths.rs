@@ -18,8 +18,8 @@ pub fn system_app(app_id: &str) -> PathBuf {
     system_apps().join(app_id)
 }
 
-/// `<id>/files` is the package as installed, `<id>/receipt.json` what the
-/// installer recorded about it.
+/// `<id>` selects a complete generation under `.generations/<id>`. Each
+/// generation contains `files` and the receipt for exactly those files.
 pub fn user_installs() -> PathBuf {
     dirs::data_dir().unwrap_or_default().join("marathon/apps")
 }
@@ -34,6 +34,34 @@ pub fn files_dir(app_id: &str) -> PathBuf {
 
 pub fn receipt(app_id: &str) -> PathBuf {
     install_dir(app_id).join("receipt.json")
+}
+
+/// Resolve once before reading a manifest and its receipt. Launchers carry this
+/// root with the permissions they selected, so a later update cannot mix them.
+pub fn selected_install(app_id: &str) -> std::io::Result<Option<PathBuf>> {
+    crate::transaction::resolve(&user_installs(), app_id)
+}
+
+/// A runner's selected generation. These variables select only a validated
+/// generation of that same app, never an arbitrary path or another app's code.
+/// They are set for each cold launch, including unsandboxed development runs.
+pub fn launch_install(app_id: &str) -> std::io::Result<Option<PathBuf>> {
+    if std::env::var("MARATHON_APP_GENERATION_ID").as_deref() != Ok(app_id) {
+        return selected_install(app_id);
+    }
+    let token = std::env::var("MARATHON_APP_GENERATION").map_err(std::io::Error::other)?;
+    if !crate::transaction::valid_id(app_id)
+        || !crate::transaction::valid_id(&token)
+        || !token.starts_with("gen-")
+    {
+        return Err(std::io::Error::other("invalid launch generation"));
+    }
+    let root = user_installs()
+        .join(".generations")
+        .join(app_id)
+        .join(token);
+    crate::transaction::directory(&root, false)?;
+    Ok(Some(root))
 }
 
 /// Before installs moved out, the data directory was also the install one.

@@ -632,6 +632,7 @@ impl Tasks {
         sandbox::Runner {
             app_id: app_id.to_owned(),
             permissions: permissions.to_vec(),
+            install_root: std::path::PathBuf::new(),
             requires_qt: Vec::new(),
             storage_spare,
             wayland_socket: String::new(),
@@ -685,15 +686,38 @@ impl Tasks {
             self.as_mut().show(app, &app.kind, -1);
         }
         let mut runner = self.runner(&app.id, &app.permissions, false);
+        runner.install_root = app.install_root.clone();
+        let webengine = sandbox::uses_webengine(&runner);
+        let camera = sandbox::uses_camera(&runner);
         let mut env = sandbox::environment(&runner, &policy);
+        if !runner.install_root.as_os_str().is_empty() {
+            // Keep the catalogue's generation through bwrap/QProcess startup.
+            // The runner validates the token in the app's generation namespace.
+            let Some(token) = runner
+                .install_root
+                .file_name()
+                .and_then(|s| s.to_str())
+                .filter(|token| token.starts_with("gen-"))
+            else {
+                self.as_mut().rust_mut().launching.remove(&app.id);
+                self.app_launch_failed(
+                    &q(&app.id),
+                    &q(&app.name),
+                    &q("Legacy app requires migration and a device restart"),
+                );
+                return false;
+            };
+            env.insert(q("MARATHON_APP_GENERATION_ID"), QVariant::from(&q(&app.id)));
+            env.insert(q("MARATHON_APP_GENERATION"), QVariant::from(&q(token)));
+        }
         // A spare can write every app's data: it takes only Marathon's own,
         // and not WebEngine's, the camera's or a terminal's, whose
         // environment or home is per app.
         let terminal = app.permissions.iter().any(|p| p == "terminal");
         if policy.is_sandboxed()
-            && !sandbox::is_user_installed(&app.id)
-            && !sandbox::uses_webengine(&runner)
-            && !sandbox::uses_camera(&runner)
+            && runner.install_root.as_os_str().is_empty()
+            && !webengine
+            && !camera
             && !terminal
         {
             let storage = app.permissions.iter().any(|p| p == "storage");

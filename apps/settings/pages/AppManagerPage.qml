@@ -13,6 +13,18 @@ Page {
     property var removing: ({})
     // Set by the "appmanager/<appId>" route: that app's page opens over the list.
     property string focusAppId
+    property var pendingUninstalls: []
+    property string cleanupError
+
+    function refreshCleanup() {
+        const result = AppInstaller.pendingUninstalls();
+        if (result.available) {
+            pendingUninstalls = result.items;
+            cleanupError = "";
+        } else {
+            cleanupError = result.error;
+        }
+    }
 
     function showApp(appId) {
         pageStack.push(Qt.resolvedUrl("AppInfoPage.qml"), {
@@ -21,6 +33,8 @@ Page {
     }
 
     onStatusChanged: {
+        if (status === PageStatus.Active)
+            refreshCleanup();
         if (status === PageStatus.Active && focusAppId !== "") {
             const id = focusAppId;
             focusAppId = "";
@@ -59,10 +73,16 @@ Page {
         target: AppInstaller
 
         function onUninstallComplete(appId) {
+            page.refreshCleanup();
             Notices.show(qsTr("%1 uninstalled").arg(page.removing[appId] || appId));
         }
         function onUninstallFailed(appId, error) {
+            page.refreshCleanup();
             Notices.show(qsTr("Couldn't uninstall %1: %2").arg(page.removing[appId] || appId).arg(error));
+        }
+        function onUninstallPartial(appId, detail) {
+            page.refreshCleanup();
+            Notices.show(qsTr("Cleanup incomplete for %1: %2").arg(page.removing[appId] || appId).arg(detail));
         }
     }
 
@@ -110,6 +130,50 @@ Page {
                     canUninstall: Logic.androidRemovable(modelData.pkg) && !modelData.system
                     onUninstallRequested: page.uninstallAndroid(modelData.pkg, modelData.name)
                     onClicked: page.showApp(modelData.id)
+                }
+            }
+
+            SectionHeader {
+                text: qsTr("Pending cleanup")
+                visible: page.pendingUninstalls.length > 0 || page.cleanupError !== ""
+            }
+
+            Label {
+                x: Theme.horizontalPageMargin
+                width: parent.width - 2 * x
+                text: page.cleanupError
+                visible: text !== ""
+                wrapMode: Text.Wrap
+            }
+            Button {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: qsTr("Reload cleanup status")
+                visible: page.cleanupError !== ""
+                onClicked: page.refreshCleanup()
+            }
+
+            Repeater {
+                objectName: "pendingCleanup"
+                model: page.pendingUninstalls
+
+                Column {
+                    id: pendingRow
+                    required property var modelData
+                    width: parent.width
+                    spacing: Theme.paddingMedium
+
+                    Label {
+                        x: Theme.horizontalPageMargin
+                        width: parent.width - 2 * x
+                        text: pendingRow.modelData.id + "\n" + pendingRow.modelData.detail
+                        wrapMode: Text.Wrap
+                    }
+                    Button {
+                        objectName: "retryCleanup-" + pendingRow.modelData.id
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: qsTr("Retry cleanup")
+                        onClicked: page.uninstall(pendingRow.modelData.id, pendingRow.modelData.id)
+                    }
                 }
             }
         }

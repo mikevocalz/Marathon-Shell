@@ -139,6 +139,9 @@ fn fetch_and_install(offer: &Offer, mut on_progress: impl FnMut(i32)) -> io::Res
                     )
                 }
                 install::Refusal::Failed(e) => e,
+                install::Refusal::Committed { plan, detail } => {
+                    format!("{} {} is visible; {detail}", plan.id, plan.version)
+                }
             })
         })
     })();

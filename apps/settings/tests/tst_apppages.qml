@@ -87,6 +87,26 @@ TestCase {
         compare(s.page.removing.notes, "Notes");
     }
 
+    function test_partialUninstallRemainsRetryableAfterAppDisappears() {
+        AppInstaller.pending = [{id: "removed.notes", detail: "Restart the device, then retry cleanup"}];
+        const s = open("appmanager");
+        compare(child(s.page, "pendingCleanup").count, 1);
+        const retry = child(s.page, "retryCleanup-removed.notes");
+        retry.clicked(null);
+        compare(AppInstaller.uninstalled, ["removed.notes"]);
+        AppInstaller.uninstallPartial("removed.notes", "Cache cleanup failed");
+        compare(child(s.page, "pendingCleanup").count, 1);
+        AppInstaller.cleanupAvailable = false;
+        AppInstaller.uninstallFailed("removed.notes", "Cleanup query unavailable");
+        compare(child(s.page, "pendingCleanup").count, 1);
+        verify(s.page.cleanupError !== "");
+        AppInstaller.cleanupAvailable = true;
+        AppInstaller.pending = [];
+        AppInstaller.uninstallPartial("removed.notes", "Filesystem cleanup complete; shared secrets retained");
+        compare(child(s.page, "pendingCleanup").count, 0);
+        compare(s.page.cleanupError, "");
+    }
+
     // Built into the OS image but not protected, like Test Suite.
     function test_builtInAppsOfferNoUninstall() {
         Apps.append({

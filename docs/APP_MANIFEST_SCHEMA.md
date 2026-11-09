@@ -151,12 +151,21 @@ What uninstalling the app does to its data, after Luma's `[lifecycle]` table.
 | `secrets` | `remove` \| `keep` | the app's Secret Service items; declared exactly when the app requests `secret-service` |
 | `userFiles` | `preserve` | files the app wrote to the media folders, which are never deleted with the app; only with `storage` |
 
-Uninstalling acts on it: the install and the cache always go; the data and
-config directories, the dconf keys and the shell settings keys go unless
-`appData` is `keep` (an app that declares nothing loses its data, as on
-Android); media folder files stay. `secrets` is not acted on yet: apps
-reach the Secret Service directly and its items carry no app id, so the
-uninstaller cannot tell an app's passwords from anyone else's.
+Uninstalling first removes the published installation. Code generations and
+writable directories are retained until a later device boot proves that old
+runners are gone. Settings lists pending cleanup even after the app leaves the
+launcher; **Retry cleanup** or `marathon-dev uninstall <id>` resumes the recorded
+operation. Reinstalling that ID is refused until filesystem cleanup finishes.
+
+The cache is removed on that retry. Data and config directories are removed
+unless `appData` is `keep`; media folder files stay. Removing an installed update
+of a bundled system app preserves its writable directories and cache because
+the bundled app still uses them. Shared dconf and shell settings cleanup is
+reported as unsupported when removal was requested. `secrets` is not acted on:
+apps reach the Secret Service directly and its items carry no reliable app id,
+so the uninstaller cannot identify an app's passwords safely. Neither the UI
+nor CLI reports full cleanup for these unsupported categories. See
+[app lifecycle transaction boundaries](v2/APP_LIFECYCLE_TRANSACTIONS.md).
 
 ## Share methods
 
