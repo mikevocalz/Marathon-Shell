@@ -22,6 +22,7 @@
 #include <QElapsedTimer>
 #include <QSet>
 #include <QTimer>
+#include <QVector>
 
 #include <functional>
 
@@ -69,6 +70,12 @@ class WaylandCompositor : public QWaylandCompositor {
     // When this interval's frame latches: the last vblank, plus the phase
     // when frames wait for it (-1: none known).
     qint64 frameLatchUs();
+    // The output's refresh rate, Hz: the scanned-out KMS mode's exact rate
+    // (or MARATHON_OUTPUT_HZ behind a made-up mode) once the first frame has
+    // set the mode, Qt's whole-Hz figure before.
+    qreal outputRefreshHz() const {
+        return m_refreshHz;
+    }
 
     explicit WaylandCompositor(QQuickWindow *window);
     ~WaylandCompositor() override;
@@ -99,9 +106,9 @@ class WaylandCompositor : public QWaylandCompositor {
     Q_INVOKABLE void launchApp(const QString &command, const QVariantMap &env = {});
     Q_INVOKABLE void closeWindow(int surfaceId);
     Q_INVOKABLE void activateSurface(int surfaceId);
-    // Takes the keyboard from a window the shell did not launch (Waydroid's),
-    // so keys reach the shell.
-    void             releaseForeignKeyboard();
+    // Takes the keyboard from the app windows, so keys reach the shell and the
+    // apps are deactivated (a camera stops) while none is in front.
+    void             releaseKeyboard();
     Q_INVOKABLE void nudgeSurface(int surfaceId);
     // A new size for the toplevel, its states kept; nothing is sent if unchanged.
     Q_INVOKABLE void resizeToplevel(QWaylandXdgToplevel *toplevel, const QSize &size);
@@ -116,8 +123,10 @@ class WaylandCompositor : public QWaylandCompositor {
     // The window's xdg surface, as a task's card and app window show it.
     Q_INVOKABLE QObject *shellSurfaceById(int surfaceId);
     Q_INVOKABLE void     setCompositorActive(bool active);
-    Q_INVOKABLE void     setOutputOrientation(const QString &orientation);
-    Q_INVOKABLE void     injectKey(int key, int modifiers, bool pressed);
+    // The app with keyboard focus has text input enabled (it takes text).
+    Q_INVOKABLE bool focusedTextInputEnabled() const;
+    Q_INVOKABLE void setOutputOrientation(const QString &orientation);
+    Q_INVOKABLE void injectKey(int key, int modifiers, bool pressed);
     // System back for a native app's window: dismisses its popup, closes its
     // dialog or sends its toolkit's back key, then emits nativeBackUnhandled
     // if the app showed no change (docs/NATIVE_APP_LIFECYCLE.md).
@@ -171,7 +180,12 @@ class WaylandCompositor : public QWaylandCompositor {
     void systemBackTriggered();
     void nativeBackUnhandled(int surfaceId);
     void systemHomeTriggered();
+    void systemCallTriggered();
+    void systemEndTriggered();
+    void systemSwitcherTriggered();
+    void systemHangupTriggered();
     void userActivity();
+    void keyPressed();
     void nativeTextInputPanelRequested(bool show);
     void textInputHintsChanged();
     void hasIdleInhibitingSurfaceChanged();
@@ -228,6 +242,12 @@ class WaylandCompositor : public QWaylandCompositor {
     // commit (the wlroots#1889-clean path for the mxsfb DSI panel).
     void setDisplayPowerState(bool on);
     bool initAtomicDisplay();
+    // setCompositorActive(false) once the frame on screen is the one the
+    // phone should wake to.
+    void suspendCompositor();
+    // Bumped by every setCompositorActive: a stale deferred suspend sees a
+    // newer value and does nothing.
+    quint64 m_activeSeq = 0;
 
     // Cached DRM handles for the ACTIVE-property display-off path.
     int                                     m_driFd               = -1;
@@ -301,6 +321,11 @@ class WaylandCompositor : public QWaylandCompositor {
     QTimer                  m_gateTimer;
     QTimer                  m_callbackTimer;
     qint64                  nextVblankUs();
+    void                    resolveOutputRefresh();
+    void                    advertiseRefresh();
+    qreal                   m_refreshHz      = 0;
+    qint64                  m_softPeriodUs   = 0; // Without a vblank, frames start this apart.
+    qint64                  m_softFrameUs    = 0;
     bool                    m_hiddenThrottle = true;
     HiddenFrameThrottle     m_frameThrottle;
     QElapsedTimer           m_frameClock;
@@ -322,6 +347,22 @@ class WaylandCompositor : public QWaylandCompositor {
     quint64                                   m_presentSequence = 0;
     Apps                                     *m_apps            = nullptr;
     QHash<QString, QPointer<QWaylandSurface>> m_covers;
+    struct DozeProperty {
+        uint32_t object;
+        uint32_t property;
+        uint64_t value;
+    };
+    struct SimpleDozeState {
+        QVector<DozeProperty> off;
+        QVector<DozeProperty> restore;
+        QVector<uint32_t>     framebuffers;
+        uint32_t              modeBlob = 0;
+    };
+    SimpleDozeState m_simpleDoze;
+    bool            m_simpleDozeDetached = false;
+    bool            m_simpleDrmQualified = false;
+    bool            setSimpleDrmPowerState(bool on);
+    void            releaseSimpleDozeState(SimpleDozeState &state);
 };
 
 #endif

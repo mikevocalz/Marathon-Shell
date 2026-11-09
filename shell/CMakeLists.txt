@@ -329,6 +329,7 @@ qt_add_resources(marathon-shell "shell_images"
     FILES
         resources/images/camera.svg
         resources/images/calendar.svg
+        resources/images/cursor.svg
 )
 # Baked with shaders/build-shaders.sh; the device build roots have no qsb.
 qt_add_resources(marathon-shell "shell_shaders"
@@ -338,6 +339,8 @@ qt_add_resources(marathon-shell "shell_shaders"
         shaders/windowcorner.vert.qsb
         shaders/windowcorner.frag.qsb
         shaders/glassplatter.frag.qsb
+        shaders/nightlight.vert.qsb
+        shaders/nightlight.frag.qsb
 )
 qt_add_resources(marathon-shell "shell_wallpapers"
     PREFIX "/wallpapers"
@@ -386,6 +389,8 @@ qt6_add_qml_module(marathon-shell
         src/services/gesturetracker.h
         src/components/backdropprobe.cpp
         src/components/backdropprobe.h
+        src/components/nightlightitem.cpp
+        src/components/nightlightitem.h
         src/components/windowtexturegeometry.h
         src/components/windowtextureitem.cpp
         src/components/windowtextureitem.h
@@ -453,6 +458,7 @@ find_package(Qt6 REQUIRED COMPONENTS Gui)
 
 # GuiPrivate is Qt-internal; only link it when enabled and available.
 if(TARGET Qt6::GuiPrivate)
+    target_sources(marathon-shell PRIVATE src/services/trackpadinput.h src/services/trackpadinput.cpp)
     target_link_libraries(marathon-shell PRIVATE Qt6::GuiPrivate)
     target_compile_definitions(marathon-shell PRIVATE MARATHON_HAVE_QT_GUI_PRIVATE=1)
 else()

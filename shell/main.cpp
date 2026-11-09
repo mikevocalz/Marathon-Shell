@@ -1,6 +1,7 @@
 #include <cmath>
 #include <QClipboard>
 #include <QGuiApplication>
+#include <QStyleHints>
 #include <QScreen>
 #include <QQmlApplicationEngine>
 #include <QQuickWindow>
@@ -47,6 +48,7 @@
 #include "marathon-shell-native/src/ipc.cxxqt.h"
 #include "marathon-shell-native/src/alarms.cxxqt.h"
 #include "src/services/gesturetracker.h"
+#include "src/components/nightlightitem.h"
 #include "src/components/windowtextureitem.h"
 #include "src/components/backdropprobe.h"
 #include "src/services/waketouchfilter.h"
@@ -80,6 +82,9 @@
 #include "src/wayland/waylandcompositormanager.h"
 #include "src/managers/marathoninputmethodengine.h"
 #include "src/managers/cursormanager.h"
+#if MARATHON_HAVE_QT_GUI_PRIVATE
+#include "src/services/trackpadinput.h"
+#endif
 #include "src/components/svgimageprovider.h"
 
 #include "marathon-shell-native/src/mpris.cxxqt.h"
@@ -480,9 +485,10 @@ int main(int argc, char *argv[]) {
 
     // Touch comes from Qt's evdevtouch, read on its own thread with the
     // device's parameters; 71-marathon-touch.rules hides touchscreens from
-    // libinput, which eglfs reads on the GUI thread.
-    const bool evdevTouch =
-        qEnvironmentVariable("QT_QPA_PLATFORM").startsWith(QLatin1String("eglfs")) &&
+    // libinput, which the EGLFS and LinuxFB backends read on the GUI thread.
+    const QString qpaPlatform = qEnvironmentVariable("QT_QPA_PLATFORM");
+    const bool    evdevTouch  = (qpaPlatform.startsWith(QLatin1String("eglfs")) ||
+                                 qpaPlatform.startsWith(QLatin1String("linuxfb"))) &&
         !qEnvironmentVariableIsSet("QT_QPA_GENERIC_PLUGINS");
     QStringList touchSpec;
     if (evdevTouch) {
@@ -506,12 +512,29 @@ int main(int argc, char *argv[]) {
     QGuiApplication app(argc, argv);
     startupMark("application");
     qunsetenv("QT_IM_MODULES");
+    // Qt Quick steps animations by a frame of the screen's rate each frame.
+    // Where that rate is made up and the panel's is given, step by the clock.
+    if (const qreal panelHz = qEnvironmentVariable("MARATHON_OUTPUT_HZ").toDouble(); panelHz > 0 &&
+        qAbs(panelHz - QGuiApplication::primaryScreen()->refreshRate()) > 0.5 &&
+        !qEnvironmentVariableIsSet("QSG_USE_SIMPLE_ANIMATION_DRIVER"))
+        qputenv("QSG_USE_SIMPLE_ANIMATION_DRIVER", "1");
     if (evdevTouch) {
 #ifdef MARATHON_HAVE_INPUT_SUPPORT
         startTouchInput(touchSpec.join(QLatin1Char(':')));
 #else
         qunsetenv("QT_QPA_GENERIC_PLUGINS");
 #endif
+    }
+    // Qt's 10 px drag slop and 800 ms hold ignore density: 10 px is 0.86 mm
+    // at 295 dpi, inside a resting finger's wobble. Android's touch slop
+    // (8 dp) and long press, in the panel's real pixels.
+    {
+        const marathon::device::Profile dp  = marathon::device::profile();
+        const qreal                     dpi = dp.panel_dpi > 0 ?
+            dp.panel_dpi :
+            QGuiApplication::primaryScreen()->physicalDotsPerInch();
+        QGuiApplication::styleHints()->setStartDragDistance(qMax(10, qRound(8 * dpi / 160)));
+        QGuiApplication::styleHints()->setMousePressAndHoldInterval(500);
     }
 
     // MSAA gate. Mesa hides etnaviv MSAA behind ETNA_DEBUG=msaa_4x since 22.3.0
@@ -729,6 +752,7 @@ int main(int argc, char *argv[]) {
     qmlRegisterType<FileChooserModel>("MarathonOS.Shell", 1, 0, "FileChooserModel");
     qmlRegisterType<WindowTextureItem>("MarathonOS.Shell", 1, 0, "WindowTextureItem");
     qmlRegisterType<BackdropProbe>("MarathonOS.Shell", 1, 0, "BackdropProbe");
+    qmlRegisterType<NightLightItem>("MarathonOS.Shell", 1, 0, "NightLight");
 
     auto *sessionStore = new Session();
     sessionStore->setParent(&app);
@@ -877,7 +901,7 @@ int main(int argc, char *argv[]) {
         qInfo() << "[Profiler] App System initialized:" << timer.elapsed() << "ms";
     }
 
-    createObject<MarathonInputMethodEngine>(ctx, "InputMethodEngine", &app);
+    createObject<MarathonInputMethodEngine>(ctx, "InputMethodEngine", settingsManager, &app);
     qInfo() << "Input Method Engine initialized";
 
     auto *remoteTextInput = new RemoteTextInput();
@@ -934,6 +958,8 @@ int main(int argc, char *argv[]) {
         {"rotationLocked", &marathon::Display::rotationLockedChanged},
         {"nightLightEnabled", &marathon::Display::nightLightEnabledChanged},
         {"nightLightTemperature", &marathon::Display::nightLightTemperatureChanged},
+        {"nightLightFrom", &marathon::Display::nightLightFromChanged},
+        {"nightLightTo", &marathon::Display::nightLightToChanged},
         {"nightLightSchedule", &marathon::Display::nightLightScheduleChanged},
         {"learnedCurve", &marathon::Display::learnedCurveChanged},
     };
@@ -989,6 +1015,9 @@ int main(int argc, char *argv[]) {
     auto *locationManager = new Location();
     locationManager->setParent(&app);
     ctx->setContextProperty("LocationManager", locationManager);
+    locationManager->setEnabled(settingsManager->getLocationEnabled());
+    QObject::connect(settingsManager, &marathon::Settings::locationEnabledChanged, locationManager,
+                     [=] { locationManager->setEnabled(settingsManager->getLocationEnabled()); });
     // Never starts location itself: with Location off there is no fix and the zone stays.
     const auto automaticTimeZone = [=] {
         if (!settingsManager->getAutomaticTimeZone() || !locationManager->getActive() ||
@@ -1225,6 +1254,20 @@ int main(int argc, char *argv[]) {
                                                           weather);
 
     createObject<CursorManager>(ctx, "CursorManager", &app);
+    // Started at boot: Plymouth's last frame is still on screen, and the
+    // shell's first frame carries the splash on (MarathonShell.qml).
+    {
+        QFile      uptime(QStringLiteral("/proc/uptime"));
+        const bool atBoot = uptime.open(QIODevice::ReadOnly) &&
+            uptime.readAll().split(' ').value(0).toDouble() < 300;
+        ctx->setContextProperty("MarathonBootHandover",
+                                atBoot &&
+                                    QFile::exists(QStringLiteral(
+                                        "/usr/share/plymouth/themes/marathon/marathon-logo.png")));
+    }
+#if MARATHON_HAVE_QT_GUI_PRIVATE
+    createObject<TrackpadInput>(ctx, "TrackpadInput", &app);
+#endif
     if (debugEnabled || profileMode) {
         qInfo() << "[Profiler] Hardware Managers initialized:" << timer.elapsed() << "ms";
     }
@@ -1385,7 +1428,14 @@ int main(int argc, char *argv[]) {
         QObject::connect(tasks, &Tasks::foregroundAppIdChanged, &app, [=] {
             WaylandCompositor *compositor = compositorManager->compositor();
             if (tasks->getForegroundAppId().isEmpty() && compositor)
-                compositor->releaseForeignKeyboard();
+                compositor->releaseKeyboard();
+        });
+        // Nor while the screen is off: the lock screen only comes up at the
+        // wake, and until then the app in front would turn its camera back on.
+        QObject::connect(display, &marathon::Display::screenOnChanged, &app, [=] {
+            WaylandCompositor *compositor = compositorManager->compositor();
+            if (!display->getScreenOn() && compositor)
+                compositor->releaseKeyboard();
         });
 #endif
         auto *fileChooser = new FileChooser();
@@ -1462,10 +1512,15 @@ int main(int argc, char *argv[]) {
             if (auto *win = qobject_cast<QQuickWindow *>(root)) {
                 auto *resampler = new TouchResampler(win, win->contentItem());
 #ifdef HAVE_WAYLAND
-                resampler->setVblankClock([compositorManager]() -> qint64 {
-                    WaylandCompositor *compositor = compositorManager->compositor();
-                    return compositor ? compositor->frameLatchUs() : -1;
-                });
+                resampler->setVblankClock(
+                    [compositorManager]() -> qint64 {
+                        WaylandCompositor *compositor = compositorManager->compositor();
+                        return compositor ? compositor->frameLatchUs() : -1;
+                    },
+                    [compositorManager]() -> qreal {
+                        WaylandCompositor *compositor = compositorManager->compositor();
+                        return compositor ? compositor->outputRefreshHz() : 0;
+                    });
 #else
                 Q_UNUSED(resampler);
 #endif
@@ -1495,12 +1550,38 @@ int main(int argc, char *argv[]) {
 
         const bool        filterMobile = settingsManager->getFilterMobileFriendlyApps();
 
+        auto             *userAppsDebounce = new QTimer(&app);
+        userAppsDebounce->setSingleShot(true);
+        userAppsDebounce->setInterval(500);
+
+        // Android writes an app's icon after its entry, so a scan that
+        // found an icon missing watches for it.
+        auto      *iconWatcher       = new QFileSystemWatcher(&app);
+        const auto watchMissingIcons = [iconWatcher, userAppsDebounce](const QVariantList &apps) {
+            bool appeared = false;
+            for (const QVariant &v : apps) {
+                const QString icon = v.toMap().value(QStringLiteral("missingIcon")).toString();
+                if (icon.isEmpty())
+                    continue;
+                const QString dir = QFileInfo(icon).absolutePath();
+                if (!iconWatcher->directories().contains(dir))
+                    iconWatcher->addPath(dir);
+                appeared = appeared || QFileInfo::exists(icon);
+            }
+            // Written between the scan and the watch.
+            if (appeared)
+                userAppsDebounce->start();
+        };
+        QObject::connect(iconWatcher, &QFileSystemWatcher::directoryChanged, userAppsDebounce,
+                         qOverload<>(&QTimer::start));
+
 #ifdef HAVE_QT_CONCURRENT
         auto *watcher = new QFutureWatcher<QVariantList>(&app);
         QObject::connect(watcher, &QFutureWatcher<QVariantList>::finished, &app,
-                         [watcher, appModel]() {
+                         [watcher, appModel, watchMissingIcons]() {
                              const QVariantList nativeApps = watcher->result();
                              appModel->addApps(nativeApps);
+                             watchMissingIcons(nativeApps);
                              watcher->deleteLater();
                          });
 
@@ -1511,6 +1592,7 @@ int main(int argc, char *argv[]) {
 #else
         const QVariantList nativeApps = marathon::desktop::scan(searchPaths, filterMobile);
         appModel->addApps(nativeApps);
+        watchMissingIcons(nativeApps);
 #endif
 
         // Rescans parse every entry on the pool (Waydroid rewrites its
@@ -1544,12 +1626,14 @@ int main(int argc, char *argv[]) {
             }
             appModel->addApps(apps);
         };
-        const auto rescanDesktopApps = [scanDesktopApps, replaceApps, settingsManager, searchPaths,
+        const auto rescanDesktopApps = [scanDesktopApps, replaceApps, watchMissingIcons,
+                                        settingsManager, searchPaths,
                                         generation = std::make_shared<int>(0)]() {
             scanDesktopApps(generation, searchPaths, settingsManager->getFilterMobileFriendlyApps(),
-                            [replaceApps](const QVariantList &apps) {
+                            [replaceApps, watchMissingIcons](const QVariantList &apps) {
                                 replaceApps(apps,
                                             {QStringLiteral("native"), QStringLiteral("flatpak")});
+                                watchMissingIcons(apps);
                             });
         };
         // "Hide desktop apps" applies as soon as it is switched.
@@ -1559,10 +1643,7 @@ int main(int argc, char *argv[]) {
         // Waydroid writes and removes its apps' entries here while it runs.
         const QString userApps = QDir::homePath() + QStringLiteral("/.local/share/applications");
         QDir().mkpath(userApps);
-        auto *userAppsWatcher  = new QFileSystemWatcher({userApps}, &app);
-        auto *userAppsDebounce = new QTimer(&app);
-        userAppsDebounce->setSingleShot(true);
-        userAppsDebounce->setInterval(500);
+        auto *userAppsWatcher = new QFileSystemWatcher({userApps}, &app);
         QObject::connect(userAppsWatcher, &QFileSystemWatcher::directoryChanged, userAppsDebounce,
                          qOverload<>(&QTimer::start));
         QObject::connect(userAppsDebounce, &QTimer::timeout, &app, rescanDesktopApps);

@@ -27,6 +27,22 @@ const ANDROID_HANDOFF_GRACE: Duration = Duration::from_secs(45);
 /// A second tap within this of the first starts no second copy.
 const LAUNCH_HOLD: Duration = Duration::from_secs(10);
 
+/// A Flatpak left on its toolkit's own colours: no generated gtk.css or KDE
+/// palette, no KDE platform theme, libadwaita's own accent. The portal still
+/// gives it the light or dark scheme.
+const UNTHEMED_FLATPAK: &str = "flatpak run --nofilesystem=xdg-config/gtk-4.0 \
+    --nofilesystem=xdg-config/kdeglobals --nofilesystem=xdg-data/color-schemes \
+    --unset-env=QT_QPA_PLATFORMTHEME --env=ADW_DEBUG_ACCENT_COLOR=blue ";
+
+/// Android desktop files are rewritten during a session cutover. The
+/// catalogue may still hold the old launcher until Shell restarts.
+fn android_exec(app: &App) -> String {
+    desktop_entry(&app.id)
+        .map(|entry| entry.exec)
+        .filter(|command| !command.is_empty())
+        .unwrap_or_else(|| app.exec.clone())
+}
+
 pub(super) fn is_android_app_id(app_id: &str) -> bool {
     app_ids::android_package(app_id).is_some_and(|package| package.contains('.'))
 }
@@ -459,6 +475,15 @@ impl Tasks {
             self.as_mut().open(&app, true);
             self.as_mut().show(&app, &task.kind, task.surface_id);
             self.as_mut().rust_mut().launching.remove(&app.id);
+            // An Android card can outlive its app (force-stopped under
+            // another app's prompt); only Android knows whether to front
+            // the task or start the app, and its window takes the card.
+            if is_android_app_id(&app.id) {
+                let exec = android_exec(&app);
+                if !exec.is_empty() {
+                    self.as_mut().spawn_requested(&q(&exec), &Map::default());
+                }
+            }
             self.launched(&app);
             return true;
         }
@@ -510,13 +535,10 @@ impl Tasks {
             self.as_mut().open(app, false);
             self.as_mut().show(app, "native", -1);
         }
-        // Android desktop files are rewritten during a session cutover. The
-        // catalogue may still hold the old launcher until Shell restarts.
         let exec = if is_android_app_id(&app.id) {
-            desktop_entry(&app.id)
-                .map(|entry| entry.exec)
-                .filter(|command| !command.is_empty())
-                .unwrap_or_else(|| app.exec.clone())
+            android_exec(app)
+        } else if app.kind == "flatpak" && !crate::settings::themed(&app.id) {
+            app.exec.replacen("flatpak run ", UNTHEMED_FLATPAK, 1)
         } else {
             app.exec.clone()
         };
@@ -646,10 +668,13 @@ impl Tasks {
         }
         let mut runner = self.runner(&app.id, &app.permissions, false);
         let webengine = sandbox::uses_webengine(&runner);
+        let camera = sandbox::uses_camera(&runner);
         let mut env = sandbox::environment(&runner);
         // A spare can write every app's data: it takes only Marathon's own,
-        // and not WebEngine's, whose environment is per app.
-        if !sandbox::is_user_installed(&app.id) && !webengine {
+        // and not WebEngine's, the camera's or a terminal's, whose
+        // environment or home is per app.
+        let terminal = app.permissions.iter().any(|p| p == "terminal");
+        if !sandbox::is_user_installed(&app.id) && !webengine && !camera && !terminal {
             let storage = app.permissions.iter().any(|p| p == "storage");
             let launch = Launch {
                 app_id: app.id.clone(),
@@ -796,6 +821,10 @@ impl Tasks {
                 }
             });
         }
+        // The app runs on in a newer launch, whose card this exit is not.
+        if replacement_active {
+            return;
+        }
         // Exited before any window: a launcher, unless no window comes.
         if !self.windows.contains_key(&launch.app_id) && self.task(&launch.app_id).is_none() {
             let app_id = launch.app_id.clone();
@@ -810,7 +839,10 @@ impl Tasks {
                     .is_some_and(|l| l.pid == pid)
                 {
                     obj.as_mut().rust_mut().exited_launches.remove(&app_id);
-                    obj.finish_exit(&app_id);
+                    // Closed from the switcher and opened again meanwhile.
+                    if !obj.active_by_pid.values().any(|l| l.app_id == app_id) {
+                        obj.finish_exit(&app_id);
+                    }
                 }
             });
             return;

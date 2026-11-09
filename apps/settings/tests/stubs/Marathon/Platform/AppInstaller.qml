@@ -19,4 +19,16 @@ QtObject {
     function uninstallApp(appId) {
         uninstalled = uninstalled.concat([appId]);
     }
+    function flatpakApps() {
+        return [
+            {
+                id: "org.kde.kweather",
+                name: "KWeather"
+            },
+            {
+                id: "org.gnome.Calculator",
+                name: "Calculator"
+            }
+        ];
+    }
 }
