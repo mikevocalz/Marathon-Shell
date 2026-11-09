@@ -5,6 +5,15 @@ enable_testing()
 
 find_package(Qt6 REQUIRED COMPONENTS Test Core DBus Gui Network Qml)
 
+# The real Rust/CXX-Qt installer must stay responsive while AppStore1 is stalled.
+find_program(DBUS_RUN_SESSION dbus-run-session REQUIRED)
+add_executable(test_core_appinstaller test_appinstaller.cpp)
+set_target_properties(test_core_appinstaller PROPERTIES AUTOMOC ON)
+target_link_libraries(test_core_appinstaller Qt6::Test Qt6::Core Qt6::DBus Qt6::Gui marathon_app_native)
+add_test(NAME Core_AppInstaller
+    COMMAND ${DBUS_RUN_SESSION} -- $<TARGET_FILE:test_core_appinstaller>)
+set_tests_properties(Core_AppInstaller PROPERTIES TIMEOUT 90)
+
 # Shell bounds and scale follow the window through resize and lifetime changes.
 add_executable(test_core_screenmetrics
     test_screenmetrics.cpp
