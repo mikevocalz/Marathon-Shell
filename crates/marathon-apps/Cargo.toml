@@ -10,6 +10,7 @@ description = "Marathon's apps: manifests, packages, signatures, the catalogue, 
 clap = { version = "4.6.7", features = ["derive"] }
 dirs = "7.0.0"
 jsonschema = { version = "0.60.2", default-features = false }
+keel-actions-schema = { path = "../keel-actions-schema" }
 libc = "0.2.191"
 marathon-permissions = { path = "../marathon-permissions" }
 minisign = "0.10.0"

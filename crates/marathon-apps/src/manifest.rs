@@ -16,6 +16,16 @@ use crate::permissions::permissions;
 pub const SCHEMA: &str = include_str!("../../../schemas/marathon-app-manifest-v1.schema.json");
 const MARATHON_DBUS_PREFIX: &str = "org.marathonos";
 
+// The generator reads only OS-installed apps. Reject a user install at the
+// same boundary as lint until activation and removal own its schedules.
+pub(crate) fn check_third_party_background(manifest: &Value) -> Result<(), &'static str> {
+    match manifest.get("backgroundTasks") {
+        None => Ok(()),
+        Some(Value::Array(tasks)) if tasks.is_empty() => Ok(()),
+        Some(_) => Err("Scheduled background tasks currently require OS installation; third-party task registration is not supported"),
+    }
+}
+
 fn validator() -> &'static jsonschema::Validator {
     static VALIDATOR: OnceLock<jsonschema::Validator> = OnceLock::new();
     VALIDATOR.get_or_init(|| {
@@ -106,6 +116,33 @@ impl Lint {
             );
         }
         self.permissions(manifest, system_app);
+        self.background_tasks(manifest, system_app);
+    }
+
+    fn background_tasks(&mut self, manifest: &Value, system_app: bool) {
+        if !system_app {
+            if let Err(message) = check_third_party_background(manifest) {
+                self.error("background-tasks", "/backgroundTasks", message);
+            }
+        }
+        let mut ids = BTreeSet::new();
+        for (index, task) in manifest
+            .get("backgroundTasks")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .enumerate()
+        {
+            if let Some(id) = task.get("id").and_then(Value::as_str) {
+                if !ids.insert(id) {
+                    self.error(
+                        "background-task",
+                        &format!("/backgroundTasks/{index}/id"),
+                        format!("task {id:?} is declared twice"),
+                    );
+                }
+            }
+        }
     }
 
     fn permissions(&mut self, manifest: &Value, system_app: bool) {
@@ -191,15 +228,24 @@ impl Lint {
         capture(r"install_keel_actions\(\s*[^\s)]+\s+([^\s)]+)", &text)
     }
 
-    fn keel_actions(&mut self, dir: &Path, id: &str, declared: Option<String>) {
+    fn keel_actions(&mut self, dir: &Path, id: &str, declared: Option<String>, manifest: &Value) {
         let file = declared.unwrap_or_else(|| "keel-actions.json".to_owned());
+        let tasks = manifest.get("backgroundTasks").and_then(Value::as_array);
         let Ok(text) = fs::read_to_string(dir.join(&file)) else {
+            if tasks.is_some_and(|tasks| !tasks.is_empty()) {
+                self.error(
+                    "background-action",
+                    &file,
+                    "background tasks need an installed Keel Actions manifest",
+                );
+            }
             return;
         };
         let expected = format!("{MARATHON_DBUS_PREFIX}.{id}");
-        let app_id = serde_json::from_str::<Value>(&text)
-            .ok()
-            .and_then(|v| v.get("appId").and_then(Value::as_str).map(str::to_owned))
+        let actions: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
+        let app_id = actions
+            .get("appId")
+            .and_then(Value::as_str)
             .unwrap_or_default();
         if app_id != expected {
             self.error(
@@ -207,6 +253,35 @@ impl Lint {
                 &file,
                 format!("appId is \"{app_id}\"; the app's D-Bus name is {expected}"),
             );
+        }
+        for (index, task) in tasks.into_iter().flatten().enumerate() {
+            let Some(action) = task.get("action").and_then(Value::as_str) else {
+                continue;
+            };
+            let mut matching = actions
+                .get("tools")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter(|tool| tool["_meta"]["org.shipwright.keel/action"] == action);
+            let eligible = matching.next().is_some_and(|tool| {
+                matches!(
+                    tool["_meta"].get("org.shipwright.keel/confirm"),
+                    None | Some(Value::Bool(false))
+                ) && tool["inputSchema"]["type"] == "object"
+                    && keel_actions_schema::validate::validate(
+                        &tool["inputSchema"],
+                        &serde_json::json!({}),
+                    )
+                    .is_ok()
+            }) && matching.next().is_none();
+            if !eligible {
+                self.error(
+                    "background-action",
+                    &format!("/backgroundTasks/{index}/action"),
+                    format!("{action:?} must be declared once in {file}, accept empty arguments, and require no confirmation"),
+                );
+            }
         }
     }
 
@@ -315,7 +390,7 @@ fn lint_tree(dir: &Path, system_app: bool, lint: &mut Lint) -> Option<String> {
     lint.tested_on(dir, &manifest);
     let id = manifest.get("id").and_then(Value::as_str)?.to_owned();
     let keel = lint.cmake(dir, &id);
-    lint.keel_actions(dir, &id, keel);
+    lint.keel_actions(dir, &id, keel, &manifest);
     Some(id)
 }
 
@@ -434,6 +509,40 @@ mod tests {
     #[test]
     fn a_complete_manifest_passes() {
         assert_eq!(lint_manifest(&manifest(), THIRD_PARTY), Vec::new());
+    }
+
+    #[test]
+    fn lint_accepts_the_generator_contract_fixtures() {
+        let cases: Vec<Value> = serde_json::from_str(include_str!(
+            "../../marathon-background/tests/fixtures/background-contract.json"
+        ))
+        .unwrap();
+        for case in cases {
+            let mut value = without(manifest(), "permissionReasons");
+            value["permissions"] = case["permissions"].clone();
+            value["backgroundTasks"] = case["tasks"].clone();
+            let findings = lint_manifest(&value, SYSTEM);
+            assert_eq!(
+                findings.is_empty(),
+                case["valid"].as_bool().unwrap(),
+                "{}: {findings:?}",
+                case["name"]
+            );
+        }
+    }
+
+    #[test]
+    fn third_party_scheduling_reports_the_missing_support() {
+        let mut value = manifest();
+        value["backgroundTasks"] =
+            json!([{ "id": "sync", "action": "notes.sync", "intervalMinutes": 60 }]);
+        assert_eq!(
+            rules(&lint_manifest(&value, THIRD_PARTY)),
+            [("background-tasks", "/backgroundTasks")]
+        );
+        assert_eq!(lint_manifest(&value, SYSTEM), Vec::new());
+        value["backgroundTasks"] = json!([]);
+        assert_eq!(lint_manifest(&value, THIRD_PARTY), Vec::new());
     }
 
     #[test]
@@ -586,6 +695,50 @@ mod tests {
         assert_eq!(
             lint_dir(&root.path().join("com.example.notes"), THIRD_PARTY),
             Vec::new()
+        );
+    }
+
+    #[test]
+    fn background_actions_must_be_usable_without_a_person() {
+        let mut value = manifest();
+        value["backgroundTasks"] =
+            json!([{ "id": "sync", "action": "notes.sync", "intervalMinutes": 60 }]);
+        let root = app(&value);
+        let dir = root.path().join("com.example.notes");
+        assert_eq!(
+            rules(&lint_dir(&dir, SYSTEM)),
+            [("background-action", "keel-actions.json")]
+        );
+        let action = json!({
+            "_meta": {"org.shipwright.keel/action": "notes.sync", "org.shipwright.keel/confirm": false},
+            "inputSchema": {"type": "object", "properties": {}, "additionalProperties": false}
+        });
+        let mut actions = json!({ "appId": "org.marathonos.com.example.notes", "tools": [action] });
+        write(&dir, "keel-actions.json", &actions.to_string());
+        assert_eq!(lint_dir(&dir, SYSTEM), Vec::new());
+
+        for confirmation in [json!(true), json!("false"), Value::Null] {
+            actions["tools"][0]["_meta"]["org.shipwright.keel/confirm"] = confirmation;
+            write(&dir, "keel-actions.json", &actions.to_string());
+            assert_eq!(
+                rules(&lint_dir(&dir, SYSTEM)),
+                [("background-action", "/backgroundTasks/0/action")]
+            );
+        }
+        actions["tools"][0]["_meta"]["org.shipwright.keel/confirm"] = json!(false);
+        actions["tools"][0]["inputSchema"]["required"] = json!(["account"]);
+        write(&dir, "keel-actions.json", &actions.to_string());
+        assert_eq!(
+            rules(&lint_dir(&dir, SYSTEM)),
+            [("background-action", "/backgroundTasks/0/action")]
+        );
+        actions["tools"][0]["inputSchema"]["required"] = json!([]);
+        let duplicate = actions["tools"][0].clone();
+        actions["tools"].as_array_mut().unwrap().push(duplicate);
+        write(&dir, "keel-actions.json", &actions.to_string());
+        assert_eq!(
+            rules(&lint_dir(&dir, SYSTEM)),
+            [("background-action", "/backgroundTasks/0/action")]
         );
     }
 
