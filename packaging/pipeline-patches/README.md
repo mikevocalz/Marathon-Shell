@@ -9,7 +9,7 @@ patched tree is left alone if its log contains the newest patch's subject.
 The tree it produces (`~/.cache/marathon-build/duranium/` by default) is
 generated. To change duranium, add the next numbered patch here.
 
-There are 50 patches. **There is no 0011**: it vendored a loose
+There are 58 patches. **There is no 0011**: it vendored a loose
 `StoreApp.qml` copy and was removed by 0019.
 
 | # | Subject | What it is for |
@@ -64,5 +64,20 @@ There are 50 patches. **There is no 0011**: it vendored a loose
 | 0049 | feat(hackberrypi): Deckard owns Android, Waydroid leaves the image | The HackberryPi image installs `deckard` and `deckard-images` in place of `waydroid` and `waydroid-systemd`: Android's images ship in `/usr/share/deckard/images`, and nothing downloads them on the device. The base postinst's Waydroid block (0043, 0045, 0046) goes, since Deckard's own LXC template has `cgroup:rw` and both hooks. |
 | 0050 | feat(ssh): remote login only in developer images, by key | No root password or baked key in images for other people; `MARATHON_DEV_SSH_KEY` gives the builder key-only access. |
 | 0051 | fix(resolved): no LLMNR | Shared networks cannot answer lookups through LLMNR; mDNS stays. |
+| 0052 | fix(base): preserve migrated user settings and authorized keys | See below. |
+| 0053 | feat(zinwa-q25): build the Q25 root as one ext4 partition | `zinwa-q25` is not bootable and lays out `mkosi.repart.root-only`, a 5 GiB ext4 root the phone's carrier boots as a file (`q25.rootfs_file=`); `/etc` stays populated; the base adds `deckard` and `deckard-images`; `build-image.py` syncs every `device-*` aport, so `device-zinwa-q25`'s deviceinfo resolves. Built by `scripts/build-zinwa-q25-image.sh`. |
+| 0054 | fix(build): developer images get their SSH key | `build-image.py` passes `MARATHON_DEV_SSH_KEY` with `--environment`, as 0039 does for the layout; through `PassEnvironment` alone it never reached the postinst, so 0050's key and sshd were missing. |
+| 0055 | feat(zinwa-q25): make the Q25 initramfs in the root's /boot | `mkosi.finalize` runs mkinitfs in the Q25 root, as for the Pi and the Librem 5, so `/boot/initramfs` matches the root's kernel modules and device packages; `scripts/q25/q25-userdata-image.sh` copies it to the phone's ESP. |
+| 0056 | fix(finalize): no root password outside QEMU | `mkosi.finalize` sets root's password field to `*` on every device but QEMU, whose serial harness logs in with 0001's known `marathon` hash; `*` keeps developer images' key login, which sshd without UsePAM refuses for a `!` account. |
+| 0057 | feat(hackberrypi): its own image id, so its own update feed | `build-image.py` names the image after `MARATHON_IMAGE_DEVICE` when set, and `mkosi.finalize` writes it as `IMAGE_ID`; `scripts/build-image.sh` sets `hackberrypi-cm5` for a Pi 5 build with the HackberryPi overlay, so a plain Pi 5 and a HackberryPi never share an update feed. |
+| 0058 | fix(zinwa-q25): an 8 GiB root, so the release fits | `mkosi.repart.root-only/11-root.conf` ships the Q25 root at 8 GiB instead of 5: the release no longer fit (mkfs.ext4 ran out of room copying it in). The phone grows the image file at first boot (`q25-root-grow`). |
+| 0059 | fix(finalize): name the OS Marathon in os-release | `mkosi.finalize` sets `NAME` and `PRETTY_NAME` to Marathon OS: `postmarketos-release` now calls the OS Nura, and Settings showed that as the system name. `ID` stays. |
 
 `scripts/check-patch-numbers.sh` lists duplicate numbers and gaps.
+
+0052 preserves migrated home configuration and authorized keys. Regression checks
+run the generated seeder and real tmpfiles against existing/fresh homes:
+
+```sh
+python3 scripts/qemu/test_userconfig_seed.py --postinst "$MARATHON_BUILD_DIR/duranium/mkosi.images/base/mkosi.postinst" -v
+```

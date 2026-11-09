@@ -1,0 +1,37 @@
+# Q25 Panfrost render path: prepares the GPU (the kernel's panfrost) and
+# selects the GPU session.
+pkgname=q25-gpu-render
+pkgver=7.0.0
+pkgrel=13
+pkgdesc="Q25 accepted guarded Panfrost390MHz runtime-PM render path"
+url="https://github.com/patrickjquinn/Marathon-Shell"
+arch="aarch64"
+license="GPL-2.0-only AND MIT"
+options="!check !strip !tracedeps"
+depends="kmod linux-zinwa-q25>=7.0.0-r39 mesa=26.2.6-r100 mesa-dri-gallium=26.2.6-r100"
+install="$pkgname.post-install $pkgname.post-upgrade"
+source="q25-gpu-prepare q25-gpu-prepare.service 80-q25-gpu-prepare.conf
+ q25-shell-session.gpu GPU-SHA256SUMS eglfs-kms.json 60-q25-display.rules
+ GPU-SOURCE-PROVENANCE.json"
+package() {
+    local private="$pkgdir/usr/lib/q25-gpu"
+    install -d "$private"
+    install -Dm644 "$srcdir/GPU-SHA256SUMS" "$private/SHA256SUMS"
+    install -Dm755 "$srcdir/q25-gpu-prepare" "$pkgdir/usr/libexec/marathon/q25-gpu-prepare"
+    install -Dm755 "$srcdir/q25-shell-session.gpu" "$pkgdir/usr/libexec/marathon/q25-shell-session.gpu"
+    install -Dm644 "$srcdir/q25-gpu-prepare.service" "$pkgdir/usr/lib/systemd/system/q25-gpu-prepare.service"
+    install -Dm644 "$srcdir/80-q25-gpu-prepare.conf" "$pkgdir/usr/lib/systemd/system/greetd.service.d/80-q25-gpu-prepare.conf"
+    install -Dm644 "$srcdir/eglfs-kms.json" "$pkgdir/etc/q25/eglfs-kms.json"
+    install -Dm644 "$srcdir/60-q25-display.rules" "$pkgdir/usr/lib/udev/rules.d/60-q25-display.rules"
+    install -Dm644 "$srcdir/GPU-SOURCE-PROVENANCE.json" "$pkgdir/usr/share/doc/$pkgname/GPU-SOURCE-PROVENANCE.json"
+}
+sha512sums="
+fcde8b89877a4ebbaff46024df5a6497de34b9a83002da52540c33c61108282a25cca5f2c5b5ac402eaa93ca76dea03c0f6a057023606cef206a951367b1b3f0  q25-gpu-prepare
+e10c853645bc8f2af481b2936c0aad4e60e214460e685deae8a39fc96882da2927097eb07941fbf06909eb72bd95543c529bb431c61d378722770097d609ea8d  q25-gpu-prepare.service
+1e8c28c7b0353b3af4f8085d9e28064fa3e8eae8ebe93ea3db33c19fb6102de7a990343906846dbc13d833ad94153b396941e0585f378acec70554a691118152  80-q25-gpu-prepare.conf
+4143c72167c4ecc915f04c8c9ee870219602f35c60e1dbfb98034db4bd49ca43969aedf2cb75626132afac354996010b04064b30ff215094c4ee6a4618bef19b  q25-shell-session.gpu
+73b2155c1cc8b8539ae2c13505598399ae94ee644689118e9771490a4c505072abc4991d4d56bf4e3a37c449693dd328eae85aeb9d365668db4e984405a8a131  GPU-SHA256SUMS
+942a1d15b357c459e78aa068230257fce0d708ce56fec0d8195e1e577a0a0ffe122a7f83fc09ce96716ac28cae5bb46835bdb6a3c587ef2ee9a386ffda87a83b  eglfs-kms.json
+e1be53628f247c11aa3861db0fa221c9d4fac685af09ea768f0116c78808bac1cefd999c7d199c5aa7deaad9c66d4e85a319b37b1f4a802143b64bdf735ced34  GPU-SOURCE-PROVENANCE.json
+336e0fb1bcd990b2d0db648281afd6b0d5ee15da842e48a38f6267bd74a86982861019c43174223f29124744380830aa72c9f6c16c91049944e8813eb74dce1b  60-q25-display.rules
+"

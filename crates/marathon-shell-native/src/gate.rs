@@ -276,7 +276,7 @@ mod tests {
     #[test]
     fn a_service_updated_while_running_is_still_its_executable() {
         let dir = tempfile::tempdir().unwrap();
-        let exe = dir.path().join("daemon");
+        let exe = dir.path().join("sleep");
         fs::copy("/bin/sleep", &exe).unwrap();
         let mut child = std::process::Command::new(&exe).arg("5").spawn().unwrap();
         // An update unlinks the old file and puts a new one at the same path.

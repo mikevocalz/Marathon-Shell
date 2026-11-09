@@ -556,7 +556,10 @@ Page {
                             Image {
                                 anchors.fill: parent
                                 source: Texts.imageUrl(shot.modelData)
+                                // Both sides: decoded to cover the tile, not
+                                // to its width and then scaled up.
                                 sourceSize.width: width
+                                sourceSize.height: height
                                 fillMode: Image.PreserveAspectCrop
                                 verticalAlignment: Image.AlignTop
                                 asynchronous: true

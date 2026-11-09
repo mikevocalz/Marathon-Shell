@@ -105,6 +105,13 @@ fn read_tasks(sources: &Sources, app_dir: &Path) -> Option<Vec<Task>> {
         log(&format!("{}: {message}", manifest_path.display()));
     }
     let app_id = tasks.first().map(|t| t.app_id.clone())?;
+    if app_dir.file_name().and_then(|name| name.to_str()) != Some(app_id.as_str()) {
+        log(&format!(
+            "{}: app id {app_id:?} does not match its install directory",
+            manifest_path.display()
+        ));
+        return None;
+    }
     let keel_path = sources
         .keel_actions
         .join(format!("org.marathonos.{app_id}.json"));
@@ -113,7 +120,7 @@ fn read_tasks(sources: &Sources, app_dir: &Path) -> Option<Vec<Task>> {
         tasks
             .into_iter()
             .filter(|t| {
-                let declared = task::keel_declares(&keel, &t.action);
+                let declared = task::keel_declares(&keel, &app_id, &t.action);
                 if !declared {
                     log(&format!(
                         "{app_id}: task {:?} names action {:?}, which {} does not declare as unattended",
@@ -164,10 +171,14 @@ pub fn generate(sources: &Sources, out: &Path) -> io::Result<usize> {
 mod tests {
     use super::*;
 
-    const KEEL: &str = r#"{"tools": [{"_meta": {"org.shipwright.keel/action": "mail.sync"}}]}"#;
+    const KEEL: &str = r#"{"appId": "org.marathonos.email", "tools": [{
+        "_meta": {"org.shipwright.keel/action": "mail.sync"},
+        "inputSchema": {"type": "object", "properties": {}}}]}"#;
 
     fn task(json: &str) -> Task {
-        let manifest = format!(r#"{{"id": "email", "name": "Mail", "backgroundTasks": [{json}]}}"#);
+        let manifest = format!(
+            r#"{{"id": "email", "name": "Mail", "permissions": ["network"], "backgroundTasks": [{json}]}}"#
+        );
         task::parse(&manifest).unwrap().0.remove(0)
     }
 
@@ -326,5 +337,57 @@ mod tests {
             helper: Path::new("/h"),
         };
         assert_eq!(generate(&sources, root.path()).unwrap(), 0);
+    }
+
+    #[test]
+    fn duplicate_task_ids_generate_no_units() {
+        let root = tempfile::tempdir().unwrap();
+        let apps = root.path().join("apps");
+        let keel = root.path().join("keel");
+        let out = root.path().join("out");
+        fs::create_dir(&out).unwrap();
+        install(
+            &apps,
+            &keel,
+            "email",
+            r#"{"id": "email", "name": "Mail", "backgroundTasks": [
+                {"id": "sync", "action": "mail.sync", "intervalMinutes": 60},
+                {"id": "sync", "action": "mail.sync", "intervalMinutes": 1440, "wake": true},
+                {"id": "other", "action": "mail.sync", "intervalMinutes": 60}]}"#,
+            Some(KEEL),
+        );
+        let sources = Sources {
+            apps: &apps,
+            keel_actions: &keel,
+            helper: Path::new("/usr/libexec/marathon-background"),
+        };
+        assert_eq!(generate(&sources, &out).unwrap(), 0);
+        assert_eq!(fs::read_dir(&out).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn an_app_cannot_schedule_another_apps_actions() {
+        let root = tempfile::tempdir().unwrap();
+        let apps = root.path().join("apps");
+        let keel = root.path().join("keel");
+        let out = root.path().join("out");
+        fs::create_dir(&out).unwrap();
+        install(
+            &apps,
+            &keel,
+            "notes",
+            r#"{"id": "email", "name": "Mail", "backgroundTasks": [
+                {"id": "sync", "action": "mail.sync", "intervalMinutes": 60}]}"#,
+            None,
+        );
+        fs::create_dir_all(&keel).unwrap();
+        fs::write(keel.join("org.marathonos.email.json"), KEEL).unwrap();
+        let sources = Sources {
+            apps: &apps,
+            keel_actions: &keel,
+            helper: Path::new("/usr/libexec/marathon-background"),
+        };
+        assert_eq!(generate(&sources, &out).unwrap(), 0);
+        assert_eq!(fs::read_dir(&out).unwrap().count(), 0);
     }
 }

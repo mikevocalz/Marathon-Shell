@@ -102,8 +102,11 @@ TestCase {
         compare(weather.description, "");
         verify(!weather.checked);
         tap(weather);
-        compare(Permissions.calls[Permissions.calls.length - 1], ["weather", "location", true]);
+        compare(Permissions.calls[Permissions.calls.length - 1], ["weather", "location", true, true]);
         tryVerify(() => child(loc.app.pageStack.currentPage, "app-weather").checked);
+        tap(child(loc.app.pageStack.currentPage, "app-weather"));
+        compare(Permissions.calls[Permissions.calls.length - 1], ["weather", "location", false, true]);
+        tryVerify(() => !child(loc.app.pageStack.currentPage, "app-weather").checked);
         verify(child(loc.app.pageStack.currentPage, "noApps") !== null);
     }
 

@@ -3,6 +3,7 @@
 #include "src/wayland/nativeinput.h"
 
 #include <QTouchEvent>
+#include <QWheelEvent>
 #include <QWaylandCompositor>
 #include <QWaylandSeat>
 #include <QWaylandXdgShell>
@@ -73,6 +74,16 @@ void NativeSurfaceItem::touchUngrabEvent() {
     releasePointer();
 }
 
+// Wheel axis events go to the pointer's surface; nothing may have entered
+// this one yet (the trackpad scrolls without moving the pointer).
+void NativeSurfaceItem::wheelEvent(QWheelEvent *event) {
+    QWaylandSeat *seat = compositor() ? compositor()->defaultSeat() : nullptr;
+    if (seat && inputEventsEnabled() && seat->mouseFocus() != view() &&
+        inputRegionContains(event->position()))
+        sendMouseMoveEvent(event->position(), seat);
+    QWaylandQuickShellSurfaceItem::wheelEvent(event);
+}
+
 void NativeSurfaceItem::releasePointer() {
     if (m_pointerTouchId < 0)
         return;
@@ -89,6 +100,12 @@ void NativeSurfaceItem::setupShellSurface() {
     auto *xdgSurface = qobject_cast<QWaylandXdgSurface *>(shellSurface());
     if (!xdgSurface)
         return;
+    // Qt's integration drags and resizes the window when a client asks
+    // (GTK does from its header bar); phone windows stay where they are.
+    if (QWaylandXdgToplevel *toplevel = xdgSurface->toplevel()) {
+        disconnect(toplevel, &QWaylandXdgToplevel::startMove, nullptr, nullptr);
+        disconnect(toplevel, &QWaylandXdgToplevel::startResize, nullptr, nullptr);
+    }
     if (QWaylandXdgPopup *popup = xdgSurface->popup())
         attachPopup(popup);
 

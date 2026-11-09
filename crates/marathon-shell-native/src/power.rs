@@ -97,6 +97,14 @@ pub mod qobject {
         #[qsignal]
         #[cxx_name = "powerKeyReleased"]
         fn power_key_released(self: Pin<&mut Self>, device: &QString);
+        /// "volumeUp", "volumeDown" or "assist", read like the power key so
+        /// it works whichever window has focus.
+        #[qsignal]
+        #[cxx_name = "sideKeyPressed"]
+        fn side_key_pressed(self: Pin<&mut Self>, key: &QString);
+        #[qsignal]
+        #[cxx_name = "sideKeyReleased"]
+        fn side_key_released(self: Pin<&mut Self>, key: &QString);
         /// Whether systemd took the wake-up `setWakeTimer` asked for.
         #[qsignal]
         #[cxx_name = "wakeTimerSet"]
@@ -157,6 +165,9 @@ pub mod qobject {
 
 use qobject::Power;
 
+#[path = "battery_measurement.rs"]
+mod measurement;
+
 #[allow(clippy::struct_excessive_bools, reason = "the QML properties")]
 pub struct PowerRust {
     battery_level: i32,
@@ -182,7 +193,7 @@ pub struct PowerRust {
 impl Default for PowerRust {
     fn default() -> Self {
         Self {
-            battery_level: 100,
+            battery_level: -1,
             warning_level: 0,
             is_charging: false,
             is_plugged_in: true,
@@ -357,6 +368,12 @@ impl Power {
     }
 
     fn perform_critical_power_action(&self) {
+        if !measurement::known(self.battery_level) || !measurement::critical_actions_allowed() {
+            return log::warn(
+                "power",
+                "critical action refused: battery percentage unavailable or experimental",
+            );
+        }
         let action = self.critical_action.to_string().to_ascii_lowercase();
         log::warn("power", format_args!("critical battery: {action}"));
         self.act(match action.as_str() {
@@ -371,6 +388,14 @@ impl Power {
     /// action at `UPower`'s critical level; a charger resets both.
     fn warn_battery(mut self: Pin<&mut Self>) {
         let (level, warning) = (self.battery_level, self.warning_level);
+        if !measurement::known(level) {
+            self.as_mut().rust_mut().warned_at = 100;
+            if self.shutdown_armed {
+                self.as_mut().rust_mut().shutdown_armed = false;
+                self.emergency_shutdown_disarmed();
+            }
+            return;
+        }
         if self.is_charging || warning < 4 {
             if self.shutdown_armed {
                 self.as_mut().rust_mut().shutdown_armed = false;
@@ -403,7 +428,7 @@ impl Power {
             &QString::from(icon),
             haptic,
         );
-        if warning >= 4 && !self.shutdown_armed {
+        if measurement::can_arm_shutdown(level, warning, self.is_charging) && !self.shutdown_armed {
             self.as_mut().rust_mut().shutdown_armed = true;
             self.emergency_shutdown_armed(10);
         }
@@ -484,6 +509,9 @@ fn battery_warning(
     warned_at: i32,
     critical_action: &str,
 ) -> Option<Warning> {
+    if !measurement::known(level) {
+        return None;
+    }
     let warn = |at, title, body, icon, haptic| {
         Some(Warning {
             at,
@@ -533,13 +561,37 @@ fn battery_warning(
     }
 }
 
-/// Reads every input device with a power key on a thread of its own: the
-/// key wakes the screen, so it never waits behind other I/O.
+/// The side keys besides power, by the name `sideKeyPressed` gives them.
+fn side_key(code: KeyCode) -> Option<&'static str> {
+    match code {
+        KeyCode::KEY_VOLUMEUP => Some("volumeUp"),
+        KeyCode::KEY_VOLUMEDOWN => Some("volumeDown"),
+        KeyCode::KEY_ASSISTANT => Some("assist"),
+        _ => None,
+    }
+}
+
+/// Reads every input device with a power or side key on a thread of its
+/// own: the power key wakes the screen, so it never waits behind other I/O.
 fn watch_power_keys(qt: Qt) {
     let found = std::thread::Builder::new().name("marathon-keys".into()).spawn(move || {
-        let keys = evdev::enumerate().filter(|(_, d)| d.supported_keys().is_some_and(|k| k.contains(KeyCode::KEY_POWER)));
+        let trackpad = evdev::enumerate().any(|(_, d)| {
+            d.name().is_some_and(|n| n.contains("trackpad"))
+                && d.supported_relative_axes().is_some_and(|r| r.contains(evdev::RelativeAxisCode::REL_X))
+        });
+        if trackpad {
+            HAS_TRACKPAD.store(true, std::sync::atomic::Ordering::Relaxed);
+            state_changed();
+        }
+        let keys = evdev::enumerate().filter(|(_, d)| {
+            d.supported_keys().is_some_and(|k| k.iter().any(|c| c == KeyCode::KEY_POWER || side_key(c).is_some()))
+        });
         let mut watched = 0;
         for (path, mut device) in keys {
+            if device.supported_keys().is_some_and(|k| k.contains(KeyCode::KEY_ASSISTANT)) {
+                HAS_ASSIST_KEY.store(true, std::sync::atomic::Ordering::Relaxed);
+                state_changed();
+            }
             let name = format!("{} ({})", device.name().unwrap_or("?"), path.display());
             let qt = qt.clone();
             let read = move || loop {
@@ -548,7 +600,10 @@ fn watch_power_keys(qt: Qt) {
                     Err(e) => return log::warn("power", format_args!("{name}: {e}")),
                 };
                 for event in events {
-                    if let EventSummary::Key(_, KeyCode::KEY_POWER, value @ 0..=1) = event.destructure() {
+                    let EventSummary::Key(_, code, value @ 0..=1) = event.destructure() else {
+                        continue;
+                    };
+                    if code == KeyCode::KEY_POWER {
                         let device = QString::from(name.as_str());
                         qt.queue(move |obj| {
                             if value == 1 {
@@ -558,16 +613,26 @@ fn watch_power_keys(qt: Qt) {
                             }
                         })
                         .ok();
+                    } else if let Some(key) = side_key(code) {
+                        qt.queue(move |obj| {
+                            let key = QString::from(key);
+                            if value == 1 {
+                                obj.side_key_pressed(&key);
+                            } else {
+                                obj.side_key_released(&key);
+                            }
+                        })
+                        .ok();
                     }
                 }
             };
-            match std::thread::Builder::new().name("marathon-powerkey".into()).spawn(read) {
+            match std::thread::Builder::new().name("marathon-keys".into()).spawn(read) {
                 Ok(_) => watched += 1,
-                Err(e) => log::warn("power", format_args!("cannot read a power key: {e}")),
+                Err(e) => log::warn("power", format_args!("cannot read the keys of {}: {e}", path.display())),
             }
         }
         if watched == 0 {
-            log::warn("power", "no input device has a power key the shell can read; the power button will not wake the display");
+            log::warn("power", "no input device has a power or side key the shell can read; the power button will not wake the display");
         }
     });
     if let Err(e) = found {
@@ -578,36 +643,47 @@ fn watch_power_keys(qt: Qt) {
 /// `UPower`'s `DisplayDevice`, as its properties last said.
 #[derive(Clone, Copy, Default)]
 struct Battery {
-    percentage: f64,
+    percentage: Option<f64>,
+    percentage_available: bool,
     state: u32,
     warning: u32,
     time_to_empty: i64,
     time_to_full: i64,
+    /// `UPower`'s `OnBattery`, from the line power: on a charger a full
+    /// battery's gauge can swing between charging and discharging.
+    #[allow(clippy::struct_field_names, reason = "UPower's OnBattery")]
+    on_battery: Option<bool>,
 }
 
 impl Battery {
     // UPower's states: 1 charging, 2 discharging, 4 fully charged,
     // 5 pending charge, 6 pending discharge.
     fn level(self) -> i32 {
-        // A percentage is 0 to 100, so the cast cannot truncate.
-        #[allow(clippy::cast_possible_truncation, reason = "a percentage, 0 to 100")]
-        let level = self.percentage.round().clamp(0.0, 100.0) as i32;
-        level
+        measurement::level(self.percentage, self.percentage_available)
     }
 
     fn is_charging(self) -> bool {
-        matches!(self.state, 1 | 5)
+        match self.on_battery {
+            Some(on) => !on && self.state != 4 && self.level() < 100,
+            None => matches!(self.state, 1 | 5),
+        }
     }
 
     fn is_plugged_in(self) -> bool {
-        matches!(self.state, 1 | 4 | 5)
+        self.on_battery
+            .map_or(matches!(self.state, 1 | 4 | 5), |on| !on)
     }
 
     fn estimated_minutes(self) -> i32 {
-        let seconds = match self.state {
-            2 | 6 => self.time_to_empty,
-            1 | 5 => self.time_to_full,
-            _ => 0,
+        if !measurement::known(self.level()) {
+            return -1;
+        }
+        let seconds = if self.is_charging() {
+            self.time_to_full
+        } else if !self.is_plugged_in() && matches!(self.state, 2 | 6) {
+            self.time_to_empty
+        } else {
+            0
         };
         if seconds > 0 {
             i32::try_from(seconds / 60).unwrap_or(i32::MAX)
@@ -616,15 +692,29 @@ impl Battery {
         }
     }
 
+    // Invalidated values are unavailable until UPower sends a fresh value.
+    fn invalidate(&mut self, name: &str) {
+        match name {
+            "Percentage" => self.percentage = None,
+            "TimeToEmpty" => self.time_to_empty = 0,
+            "TimeToFull" => self.time_to_full = 0,
+            "State" => self.state = 0,
+            "WarningLevel" => self.warning = 0,
+            "OnBattery" => self.on_battery = None,
+            _ => {}
+        }
+    }
+
     fn set(&mut self, name: &str, value: &Value<'_>) {
         match name {
-            "Percentage" => self.percentage = value.downcast_ref().unwrap_or(self.percentage),
+            "Percentage" => self.percentage = value.downcast_ref().ok(),
             "State" => self.state = value.downcast_ref().unwrap_or(self.state),
             "WarningLevel" => self.warning = value.downcast_ref().unwrap_or(self.warning),
             "TimeToEmpty" => {
                 self.time_to_empty = value.downcast_ref().unwrap_or(self.time_to_empty);
             }
             "TimeToFull" => self.time_to_full = value.downcast_ref().unwrap_or(self.time_to_full),
+            "OnBattery" => self.on_battery = value.downcast_ref().ok(),
             _ => {}
         }
     }
@@ -664,9 +754,12 @@ pub(crate) trait Logind {
 )]
 trait UPower {
     fn get_critical_action(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn on_battery(&self) -> zbus::Result<bool>;
 }
 
 const UPOWER: &str = "org.freedesktop.UPower";
+const UPOWER_PATH: &str = "/org/freedesktop/UPower";
 const DISPLAY_DEVICE: &str = "/org/freedesktop/UPower/devices/DisplayDevice";
 const DEVICE: &str = "org.freedesktop.UPower.Device";
 const PROFILES: &str = "org.freedesktop.UPower.PowerProfiles";
@@ -681,7 +774,7 @@ enum Event {
     Command(Command),
     Closed,
     Sleep(bool),
-    Battery(Vec<(String, OwnedValue)>),
+    Battery(Vec<(String, OwnedValue)>, Vec<String>),
     Profile(Option<String>),
 }
 
@@ -734,7 +827,8 @@ async fn run(qt: Qt, commands: Receiver<Command>) {
         .map(Event::Command)
         .chain(stream::once(Event::Closed))
         .or(actor.sleep_events().await)
-        .or(actor.battery_events().await)
+        .or(actor.battery_events(DISPLAY_DEVICE, DEVICE).await)
+        .or(actor.battery_events(UPOWER_PATH, UPOWER).await)
         .or(actor.profile_events().await);
     let mut events = std::pin::pin!(events);
     while let Some(event) = events.next().await {
@@ -742,10 +836,15 @@ async fn run(qt: Qt, commands: Receiver<Command>) {
             Event::Command(command) => actor.handle(&qt, command).await,
             Event::Closed => break,
             Event::Sleep(before) => actor.on_sleep(&qt, before).await,
-            Event::Battery(changed) => {
+            Event::Battery(changed, invalidated) => {
                 for (name, value) in &changed {
                     actor.battery.set(name, value);
                 }
+                for name in &invalidated {
+                    actor.battery.invalidate(name);
+                }
+                actor.battery.percentage_available =
+                    measurement::available(std::path::Path::new("/sys/class/power_supply"));
                 let battery = actor.battery;
                 qt.queue(move |obj| obj.apply_battery(battery)).ok();
             }
@@ -927,7 +1026,7 @@ impl Actor {
         }
     }
 
-    // A host without a battery reads as plugged in at 100%.
+    // An unavailable percentage stays unknown; charging state remains independent.
     async fn read_battery(&mut self, qt: &Qt) {
         let Some(props) = self.properties(UPOWER, DISPLAY_DEVICE).await else {
             return;
@@ -940,6 +1039,11 @@ impl Actor {
                 for (name, value) in &all {
                     self.battery.set(name, value);
                 }
+                if let Ok(upower) = UPowerProxy::new(&self.bus).await {
+                    self.battery.on_battery = upower.on_battery().await.ok();
+                }
+                self.battery.percentage_available =
+                    measurement::available(std::path::Path::new("/sys/class/power_supply"));
                 let battery = self.battery;
                 qt.queue(move |obj| obj.apply_battery(battery)).ok();
             }
@@ -990,20 +1094,33 @@ impl Actor {
         }
     }
 
-    async fn battery_events(&self) -> stream::Boxed<Event> {
-        let Some(props) = self.properties(UPOWER, DISPLAY_DEVICE).await else {
+    /// The battery's properties, or the daemon's (`OnBattery`), as they change.
+    async fn battery_events(
+        &self,
+        path: &'static str,
+        interface: &'static str,
+    ) -> stream::Boxed<Event> {
+        let Some(props) = self.properties(UPOWER, path).await else {
             return stream::empty().boxed();
         };
         match props.receive_properties_changed().await {
             Ok(s) => s
-                .filter_map(|signal| {
+                .filter_map(move |signal| {
                     let args = signal.args().ok()?;
+                    if args.interface_name().as_str() != interface {
+                        return None;
+                    }
                     let changed = args
                         .changed_properties()
                         .iter()
                         .filter_map(|(k, v)| Some(((*k).to_owned(), v.try_to_owned().ok()?)))
                         .collect();
-                    Some(Event::Battery(changed))
+                    let invalidated = args
+                        .invalidated_properties()
+                        .iter()
+                        .map(|name| (*name).to_owned())
+                        .collect();
+                    Some(Event::Battery(changed, invalidated))
                 })
                 .boxed(),
             Err(_) => stream::empty().boxed(),
@@ -1070,7 +1187,7 @@ fn write(path: &str, value: &str) -> bool {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, reason = "tests")]
 mod tests {
-    use super::{is_background_wake, Battery};
+    use super::{battery_warning, is_background_wake, measurement, Battery, Value};
 
     #[test]
     fn each_battery_threshold_warns_once_on_the_way_down() {
@@ -1137,11 +1254,13 @@ mod tests {
     #[test]
     fn the_battery_reads_as_upower_states() {
         let charging = Battery {
-            percentage: 54.6,
+            percentage: Some(54.6),
+            percentage_available: true,
             state: 1,
             warning: 1,
             time_to_empty: 0,
             time_to_full: 1800,
+            on_battery: None,
         };
         assert_eq!(charging.level(), 55);
         assert!(charging.is_charging() && charging.is_plugged_in());
@@ -1159,10 +1278,113 @@ mod tests {
         };
         assert!(!draining.is_plugged_in());
         assert_eq!(draining.estimated_minutes(), 120);
+        let swinging_at_full = Battery {
+            percentage: Some(100.0),
+            on_battery: Some(false),
+            ..draining
+        };
+        assert!(!swinging_at_full.is_charging() && swinging_at_full.is_plugged_in());
+        assert_eq!(swinging_at_full.estimated_minutes(), -1);
+        let topping_up = Battery {
+            on_battery: Some(false),
+            ..draining
+        };
+        assert!(topping_up.is_charging() && topping_up.is_plugged_in());
+    }
+    #[test]
+    fn invalidated_percentage_disarms_until_a_fresh_measurement() {
+        let mut battery = Battery {
+            percentage: Some(0.0),
+            percentage_available: true,
+            state: 2,
+            warning: 4,
+            time_to_empty: 600,
+            ..Battery::default()
+        };
+        assert!(measurement::can_arm_shutdown(
+            battery.level(),
+            battery.warning,
+            false
+        ));
+        battery.invalidate("Percentage");
+        assert_eq!(battery.level(), -1);
+        assert_eq!(battery.estimated_minutes(), -1);
+        assert!(!measurement::can_arm_shutdown(
+            battery.level(),
+            battery.warning,
+            false
+        ));
+        for percentage in [0.0, 100.0] {
+            battery.set("Percentage", &Value::from(percentage));
+            assert_eq!(battery.level(), if percentage == 0.0 { 0 } else { 100 });
+        }
+        battery.percentage_available = false;
+        assert_eq!(battery.level(), -1);
+    }
+
+    #[test]
+    fn invalidated_times_do_not_reappear_after_state_changes() {
+        let mut battery = Battery {
+            percentage: Some(50.0),
+            percentage_available: true,
+            state: 2,
+            time_to_empty: 3600,
+            time_to_full: 1800,
+            ..Battery::default()
+        };
+        assert_eq!(battery.estimated_minutes(), 60);
+        battery.invalidate("TimeToEmpty");
+        assert_eq!(battery.estimated_minutes(), -1);
+        battery.state = 1;
+        assert_eq!(battery.estimated_minutes(), 30);
+        battery.invalidate("TimeToFull");
+        assert_eq!(battery.estimated_minutes(), -1);
+        battery.state = 2;
+        assert_eq!(battery.estimated_minutes(), -1);
+        battery.set("TimeToEmpty", &Value::from(120_i64));
+        assert_eq!(battery.estimated_minutes(), 2);
+        assert_eq!(battery.level(), 50);
+    }
+
+    #[test]
+    fn invalidated_state_and_warning_clear_cached_decisions() {
+        let mut battery = Battery {
+            percentage: Some(50.0),
+            percentage_available: true,
+            state: 1,
+            warning: 4,
+            time_to_full: 1800,
+            ..Battery::default()
+        };
+        battery.invalidate("UnrelatedProperty");
+        assert_eq!(battery.level(), 50);
+        assert!(battery.is_charging());
+        battery.invalidate("State");
+        battery.invalidate("WarningLevel");
+        assert!(!battery.is_charging());
+        assert!(!battery.is_plugged_in());
+        assert_eq!(battery.estimated_minutes(), -1);
+        assert_eq!(battery.warning, 0);
+        assert!(!measurement::can_arm_shutdown(
+            battery.level(),
+            battery.warning,
+            false
+        ));
+    }
+
+    #[test]
+    fn unknown_percentage_never_warns_even_at_upower_critical() {
+        for warning in 0..=10 {
+            assert!(battery_warning(-1, warning, 100, "PowerOff").is_none());
+        }
     }
 }
 
 static POWER: OnceLock<cxx_qt::CxxQtThread<Power>> = OnceLock::new();
+// An input device has KEY_ASSISTANT: Settings offers the key's actions.
+static HAS_ASSIST_KEY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+// The keyboard has a trackpad: Settings offers its modes.
+static HAS_TRACKPAD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 // ScheduleWake calls, answered once systemd has their timer.
 static WAKES: LazyLock<Mutex<HashMap<String, Vec<Sender<bool>>>>> = LazyLock::new(Mutex::default);
 
@@ -1187,6 +1409,14 @@ fn state(power: &Power) -> State {
         (
             "powerProfilesSupported".to_owned(),
             value(power.power_profiles_supported),
+        ),
+        (
+            "hasAssistKey".to_owned(),
+            value(HAS_ASSIST_KEY.load(std::sync::atomic::Ordering::Relaxed)),
+        ),
+        (
+            "hasTrackpad".to_owned(),
+            value(HAS_TRACKPAD.load(std::sync::atomic::Ordering::Relaxed)),
         ),
     ])
 }
