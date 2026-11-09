@@ -1,25 +1,81 @@
 # Open work and native API audit
 
-Fork snapshot: **November 9, 2026, 14:55 UTC**; upstream tracker refresh:
+Original fork snapshot: **November 9, 2026, 14:55 UTC**; upstream tracker refresh:
 **15:15 UTC**. Source baseline:
 [PR #9 at `8e9e0892f646d3e11fd581367d148d7f063d7dc7`][baseline].
 This inventory covers every open pull request in
 [`mikevocalz/Marathon-Shell`][repo], the eight local remediation tickets,
 and all 37 approved 2.0 work packages. It is an evidence record, not a release
-approval. Later code changes need their own candidate validation.
+approval. The dated integration follow-up below records subsequent work;
+the original exact-head table remains historical evidence.
 
-## Current repository state
+## Integration follow-up — November 9, 2026
 
-The native GitHub API reports **11 open PRs**. PRs **#1–#9 are drafts**;
+All eleven PRs now have an integration disposition in the
+[overlap table](#integration-and-overlap). The candidate retains the #4–#8
+foundation and adds the reviewed #1 RFC, repaired #2 overview, #3 Hub triage,
+#10 passive inspection utility and #11 visual research. The overview feature
+and tests are integrated, and its [dated UX research](UX_RESEARCH_2026-11-07.md)
+is preserved with a historical/current-scope note. Its external references
+were not reverified during intake. #1 and #11 remain documentation
+contributions; #10 remains inspection-only.
+
+The latest hosted head checked at **15:51 UTC** was
+[`1241537cdb17e3beb7523eb94c81ad829d062fe6`][rust-head], containing the Rust/API
+repairs but preceding those later feature/document integrations.
+[Format](https://github.com/mikevocalz/Marathon-Shell/actions/runs/42646605377)
+and commit-subject checks passed. Its
+[native UI job](https://github.com/mikevocalz/Marathon-Shell/actions/runs/42646605430/job/129261419895)
+passed **7/7 required CTests**. The
+[full build/test job](https://github.com/mikevocalz/Marathon-Shell/actions/runs/42646605430/job/129261420304)
+was still running at that check, so its private-bus `Core_AppInstaller`
+execution was not yet established. This hosted result does not validate the
+later combined candidate.
+
+The combined local candidate subsequently passed **10/10 required native UI
+CTests in 64.15 seconds**, using Qt 6.11.3 and pinned real Keel. The added
+suites cover Hub (31 behavior functions / 33 total results), OverviewGrid
+(10 behavior/data rows / 12 total) and TaskSwitcher (10 behavior functions /
+12 total). Settings AppPages passed 26 behavior functions / 28 total results, and
+PermissionPages passed 5 behavior functions / 7 total results. All had zero
+failures and skips. Setup/cleanup results and overlapping runs are not
+additional independent behavior checks. The overview helper is registered
+both as a shell QML resource and as an imported JavaScript file excluded
+from `qmldir` entries. The required gate now registers both overview suites
+and Hub alongside its existing coverage.
+
+The delivered runtime slices are concrete source changes:
+
+| Delivered slice | Source and verification boundary | Remaining acceptance |
+|---|---|---|
+| Warm-runner admission and rollback | [Pool](../../crates/marathon-shell-native/src/tasks/pool.rs) bounds nonblocking pipe admission, preserves the calling thread's SIGPIPE state, retires failed spares and cleans only their exact PID/instance authority and listener. Native pipe/signal and launch regressions passed. | App-specific session-bus mediation, narrower mounts/networking and generation-bound authority remain R03. |
+| Pending replacement survives an old process exit | [Launch handling](../../crates/marathon-shell-native/src/tasks/launch.rs) preserves a same-app pending replacement after old PID/listener cleanup. [Real Tasks tests](../../tests/core/test_taskslaunch.cpp) pass three behavior rows, including successful replacement, failed start and an unrelated pending app. | The delayed launcher-exit branch is source-reviewed; actual child/Wayland transport and broader launch readiness remain separate gates. |
+| Three cached asynchronous AppInstaller queries and one bulk capability call | [Client/query state](../../crates/marathon-app-native/src/store.rs) and [AppStore1](../../crates/marathon-shell-native/src/tasks/dbus.rs) replace all three synchronous store reads, retain data on errors, coalesce refreshes, discard stale results and use a 15-second client deadline. Capability reads use one authorized request bounded to 1,024 IDs. Real Settings journeys passed; the generated-client [bus test](../../tests/core/test_appinstaller.cpp) compiled/linked and is required in full CI. | Hosted private-bus execution was pending at 15:51; actual service policy, reconnect, mutation correlation and shared secret/settings cleanup remain R02/R03/R08. |
+| Explicit asynchronous admission failure | [Runtime I/O](../../crates/marathon-rt/src/io.rs) reports executor-thread creation failure; store queries surface it and uninstall releases its pending admission. | Other platform calls and subscription/reconnect lifetimes still need their own migration and acceptance. |
+| Persistent Settings permission intent | [AppInfoPage](../../apps/settings/pages/AppInfoPage.qml) and [PermissionAppsPage](../../apps/settings/pages/PermissionAppsPage.qml) pass the real four-argument API with `remember=true`. Generated declarations, stricter fixtures, both native page suites and the existing backend persistence case were checked. | Complete permission revocation, app-generation identity and live bus/restart journeys remain R02/R03. |
+| Background claims released on unregister | [Lifecycle](../../crates/marathon-shell-native/src/tasks/lifecycle.rs) revokes the app's claims at actual unregister, preserves owner/category counting and never reuses a session handle; exhaustion returns `LimitsExceeded`. Five native resource-core cases passed. | A pre-authorized request already queued after exit, generation identity, active-claim/deadline bounds and installed scheduling remain R03/R06. |
+
+These are delivered bounded slices. **R01–R08 and all 37 work packages remain
+open until their complete acceptance is met.** The local UI gate uses explicit
+shell/platform service fixtures; native begin/end model-reset dispatch, live
+Wayland cover content, real providers, production storage and physical devices
+retain separate evidence requirements. See [native validation](NATIVE_VALIDATION.md),
+the [Rust/API inventory](RUST_API_AUDIT.md) and
+[AppInstaller contract](APP_INSTALLER_API.md) for the detailed records.
+No PR was merged and neither `main` nor `v2` was changed by this integration.
+
+## Repository state at the original 14:55 UTC snapshot
+
+At the original snapshot, the native GitHub API reported **11 open PRs**. PRs **#1–#9 are drafts**;
 **#10 and #11 are non-drafts**. All remain open and unmerged. The repository
 reports `has_issues: false`; listing open issues returns the same 11 PR
 entries and **zero standalone issues**. No issue-creation attempt was made
 during this audit. The earlier HTTP 410 observation remains historical
 evidence in [the remediation queue](REMEDIATION_QUEUE.md).
 
-The checked branch heads are `main` at
+The checked base branch heads were `main` at
 `c2c1b2fe32aeaa51edf75a45045cbfbbc08c4ac5` and `v2` at
-`bc39c23cac18221df21e410a45f8cc72d0ae9824`. GitHub reports every PR
+`bc39c23cac18221df21e410a45f8cc72d0ae9824`. At 14:55, GitHub reported every PR
 mergeable with a clean merge state against its own base. Both base branches
 report `protected: false`. These observations do not prove that the open
 PRs can be merged together safely or that their feature acceptance is met.
@@ -32,10 +88,11 @@ runtime or a supported phone.
 
 ## Every open PR and its exact hosted evidence
 
-The head link in each row names the full inspected commit. The CI API
+This table preserves the **original 14:55 UTC snapshot**. The head link in
+each row names the full inspected commit. The CI API
 returned that exact `head_sha`; the build logs, job results and format
 workflow were inspected independently of the PR body. All listed CI and
-format runs completed successfully. CTest totals are registered suites,
+format runs completed successfully at those inspected heads. CTest totals are registered suites,
 not counts of independent unit assertions.
 
 | PR and contribution | State / base | Inspected head | CI run / passed CTests | Format run |
@@ -52,7 +109,7 @@ not counts of independent unit assertions.
 | [#10: passive Passport inspection][pr10] | Non-draft / `v2` | [`e971e4cc`](https://github.com/mikevocalz/Marathon-Shell/commit/e971e4ccab65c896509d172d54bc6c9ea048a598) | [42618587542](https://github.com/mikevocalz/Marathon-Shell/actions/runs/42618587542): 44/44 | [42618587615](https://github.com/mikevocalz/Marathon-Shell/actions/runs/42618587615) |
 | [#11: visual/TAT research][pr11] | Non-draft / `v2` | [`95b78f47`](https://github.com/mikevocalz/Marathon-Shell/commit/95b78f47761a7eb0ef473093b0887ecc925491e2) | [42626410421](https://github.com/mikevocalz/Marathon-Shell/actions/runs/42626410421): 43/43 | [42626410388](https://github.com/mikevocalz/Marathon-Shell/actions/runs/42626410388) |
 
-### What these green checks do and do not establish
+### What the original green checks establish
 
 Every build job reported **five documented inner Rust/Qt skips** accepted
 by the existing skip audit. That audit does not enumerate Python unittest
@@ -80,48 +137,48 @@ production dconf, external sharing, the full compositor, all shell/app
 suites, or full-source QML warnings. See
 [native validation](NATIVE_VALIDATION.md).
 
-### Review and description reconciliation
+### Review and description reconciliation at 14:55 UTC
 
 There are no inline review threads, no outstanding requested reviewers,
 and no `CHANGES_REQUESTED` review submissions on any of the 11 PRs.
 This is absence of recorded requests, not evidence of human approval.
 
 - #2 retains a [formatting bot comment](https://github.com/mikevocalz/Marathon-Shell/pull/2#issuecomment-6738781093)
-  from an older run. Its current format run above passes.
+  from an older run. Its inspected format run above passed.
 - #10 has only a [Devin monitoring comment](https://github.com/mikevocalz/Marathon-Shell/pull/10#issuecomment-6738494411).
   Its body still calls the final build pending; the exact-head run above
   completed successfully and includes `Passport_Inspection`.
 - #11 has a no-findings Devin comment review and a
   [Codex no-findings summary](https://github.com/mikevocalz/Marathon-Shell/pull/11#issuecomment-6739156426)
   for earlier commit `4ba95c0210df1e7a635e7c4369cf2e7f3c7b66ee`.
-  They do not review the current head or establish security approval.
+  They do not review the inspected head or establish security approval.
 
 ## Integration and overlap
 
 The complete Git trees at all 11 heads were compared with #9; none of the
-API tree responses was truncated. The current tips of #4–#8 diverge from
+API tree responses was truncated. The inspected tips of #4–#8 diverged from
 #9 because later validation fixes were carried on their own branches.
 A different commit ID therefore does not prove missing behavior, and
 reapplying every branch would duplicate shared fixes.
 
-| PR | Relationship to #9 at the audited head | Work still needed |
+| PR | Relationship to #9 at the original audited head | November 9 integration disposition and remaining acceptance |
 |---|---|---|
-| #1 | The RFC file is absent from #9; its base remains `main`. | Review the proposed native host/runner contract explicitly under V2-014–017. No runtime is implemented by the RFC or its CI repairs. |
-| #2 | `OverviewGrid.js`, its two overview/task-switcher test files and UX research are absent; task-switcher and shell registration files differ. | Integrate the actual geometry/interaction slice, reconcile upstream task roles and run its real native UI suite. Test task insertion/removal, page anchoring, resize and interruptions. |
-| #3 | Its `MarathonHub.qml` and `tst_hub.qml` blobs differ from #9. | Integrate unread/source-filter behavior with current Hub state, then add the actual suite to required native coverage. Account-level provider triage remains separate. |
-| #4 | The upstream intake is already in #9 with subsequent integration changes; no still-existing #4 changed file is absent. | Review migrations and integrated image/device behavior. Do not revert newer lifecycle, launcher, CI or Settings changes to make blobs equal. |
-| #5 | The parser/schema/generator/fixture contract is present; installer/lock/docs differ because #9 extends them. | R06 installed scheduling, revocation/removal, real Mail action and power qualification. Keep unsupported third-party declarations refused. |
-| #6 | All eight planning documents exist; README/queue have newer integrated content. | Preserve scope and acceptance, refresh evidence without closing packages from documentation. |
-| #7 | ScreenMetrics source/header, Constants and registered native tests match; shell wiring contains later integrated changes. | R07 propagation to cold, warm and already-running apps; real display/DPR hotplug. |
-| #8 | All twelve Notes implementation/test/action-manifest paths changed by #8 are byte-identical in #9. | Production storage, downgrade/restore, reminders, capture/grants, Calendar and sync remain unfinished. |
-| #9 | Selected source baseline for the next reliability repairs. | Continue R01–R04/R08 boundaries and qualify the combined image. Green checks do not close any whole R ticket. |
-| #10 | Its three `tools/passport/` files and test registration are not integrated. | Review/integrate the inspection-only utility independently if selected. Passive IORegistry/ELF evidence is not a Passport bootloader, Linux port or recovery path. |
-| #11 | The two research documents are absent; README/UI_SPEC differ. | Reconcile documentation with current tokens and scope. Implemented theme/accessibility/motion work still belongs to V2-003/005/006/028. |
+| #1 | The RFC was absent; its PR base remains `main`. | [RFC 0013](../rfcs/0013-react-native-client-contract.md) is integrated with a current manifest/runner/security applicability review. It remains documentation; V2-014–017 runtime and client qualification are open. |
+| #2 | OverviewGrid, the two overview suites and UX research were absent. | [Adaptive overview](../../shell/qml/components/MarathonTaskSwitcher.qml), [geometry](../../shell/qml/core/OverviewGrid.js), both [native](../../tests/ui/tst_taskswitcher.qml) [suites](../../tests/ui/tst_overviewgrid.qml) and [dated research](UX_RESEARCH_2026-11-07.md) are integrated. Stable task-ID anchoring repairs earlier-card removal, same-count reorder, model replacement and off-screen reveal; original failures and corrected passes were observed. Full native model-reset dispatch, Wayland content, input/accessibility and device acceptance remain open. |
+| #3 | Hub and test blobs differed from #9. | [Hub](../../shell/qml/components/MarathonHub.qml) unread/source-filter composition and [its suite](../../tests/ui/tst_hub.qml) are integrated, preserving current roles, peek and backdrop behavior. Hub joins the required native gate. Account/provider triage remains separate. |
+| #4 | The upstream intake was already present with later integration changes; no still-existing #4 changed file was absent. | Retained in the candidate without reverting newer lifecycle, launcher, CI or Settings source. Image, migration and device qualification remain open. |
+| #5 | Parser/schema/generator/fixture contracts were present; installer/lock/docs had newer integration changes. | Retained declaration contract and unsupported third-party refusal. Installed scheduling, revocation/removal, real Mail actions and power qualification remain R06. |
+| #6 | All eight planning documents existed; README/queue already had newer integrated content. | Retained approved scope and acceptance; this follow-up refreshes delivered-slice evidence while keeping every whole package open. |
+| #7 | ScreenMetrics source/header, Constants and registered tests matched; shell wiring had later changes. | Retained live shell metrics. Cold/warm/running-app propagation and real display/DPR hotplug remain R07. |
+| #8 | All twelve changed Notes implementation/test/action-manifest paths were byte-identical in #9. | Retained durable Notes task slice and native gate. Production storage, downgrade/restore, reminders, capture/grants, Calendar and sync remain unfinished. |
+| #9 | Selected reliability baseline for this audit. | The bounded runtime repairs above are delivered; local combined native UI coverage is 10/10. Final combined-head hosted validation, the full R01–R08 contracts and image/device acceptance remain open. |
+| #10 | Three inspection-tool files and their registration were absent. | [Passport utility](../../tools/passport/README.md) and CTest registration are integrated, with sanitized malformed parser/tree errors. Twenty-five Python checks and one CTest passed locally. Passive IORegistry/offline ELF inspection establishes no bootloader, Linux port or recovery capability. |
+| #11 | Two research documents were absent; README/UI_SPEC differed. | [Visual research](VISUAL_REFRESH_RESEARCH_2026-11-09.md) and [design influences](DESIGN_INFLUENCES.md) are integrated with current-scope links. They are documentation; implemented theme, accessibility and motion acceptance remains V2-003/005/006/028. |
 
 Historical native failures and upstream fixes must keep their original
 attribution. In particular, the terminal translation labels, known-skip
 manifest, audio fixture cache initialization and Clippy assertion repairs
-already have current passing evidence. They are not new failures to fix
+already had passing evidence at the original snapshot. They are not new failures to fix
 again. Do not close or merge overlapping PRs solely from this inventory;
 review the resulting combined source and its evidence first.
 
@@ -156,8 +213,8 @@ either issue or submit any upstream change.
 ## Concrete native API repairs identified in the baseline
 
 These are source findings at `8e9e0892`, independent of hosted success.
-Implementation and validation are tracked separately; this audit does
-not report the following repairs as delivered.
+The delivered follow-up above supersedes their original repair status; the
+pinned defect descriptions and repair contracts below preserve provenance.
 
 | Boundary | Verified defect / consequence | Smallest useful repair and required regression |
 |---|---|---|
@@ -171,9 +228,9 @@ the real Settings
 [`tst_apppages.qml`](../../apps/settings/tests/tst_apppages.qml) and
 [`tst_permissionpages.qml`](../../apps/settings/tests/tst_permissionpages.qml),
 and [`tests/native-ui/CMakeLists.txt`](../../tests/native-ui/CMakeLists.txt).
-At the audited baseline, the required gate selects AppPages but not
-PermissionPages; the latter needs explicit candidate coverage for a
-permission-page repair. A fixture with the wrong native arity cannot
+At the audited baseline, the required gate selected AppPages but not
+PermissionPages. The delivered permission repair added PermissionPages to
+the required gate; the combined follow-up now selects ten CTests. A fixture with the wrong native arity cannot
 establish that the real call succeeds.
 
 The [API-design skill][api-skill] and
@@ -194,13 +251,13 @@ a provider, image or device.
 | Ticket | Implementable native work | Closing evidence still outside the current green runs |
 |---|---|---|
 | R01: atomic replacement | Continue generation retention/recovery review, disk-byte limits and coordinated cleanup; retain existing process-death/fault tests. | Real runner use through update, legacy migration, full-disk and power-interruption/reboot qualification on the selected image/filesystem. |
-| R02: truthful removal and owned secrets | Async cleanup state; shared settings ownership; trusted two-app secret ownership/migration and grant revocation. | Production Secret Service/dconf, active-writer quiescence, restart/retry and backup/downgrade behavior. A label supplied by an app is not ownership. |
-| R03: IPC and warm pool | Failed-adoption cleanup first; app-specific bus mediation, generation-bound identity and narrowed mounts/network permissions. | Real two-app denial matrix through cold/warm launch, activation, owner replacement, revocation and reconnect. |
+| R02: truthful removal and owned secrets | Async cleanup state is delivered. Continue shared settings ownership, trusted two-app secret ownership/migration and grant revocation. | Production Secret Service/dconf, active-writer quiescence, restart/retry and backup/downgrade behavior. A label supplied by an app is not ownership. |
+| R03: IPC and warm pool | Failed-adoption cleanup, pending-replacement protection and permission intent are delivered. Continue app-specific bus mediation, generation-bound identity and narrowed mounts/network permissions. | Real two-app denial matrix through cold/warm launch, activation, owner replacement, revocation and reconnect. |
 | R04: accessible confinement | Select supported AT interfaces; implement a trusted, scoped accessibility broker and real app journey. | Actual assistive-technology interaction, keyboard/focus recovery and negative cross-app text/privacy tests. Labels or an unrestricted bus are insufficient. |
 | R05: device/recovery matrix | Prepare reproducible image manifest, journeys, failure ledger and artifact schema. | Selected SKU/carrier communications, wake/power/media/GNSS, encryption, OTA/recovery and input results. No hardware results were produced by this audit. |
-| R06: installed background work | One authoritative registration lifecycle tied to committed packages, bounded execution/cancellation and a real inspected Mail action. | Actual systemd execution, controlled supported accounts, offline/credential recovery and device wake/power behavior. |
+| R06: installed background work | Unregister now revokes app claims. Continue authoritative installed scheduling tied to committed packages, bounded execution/cancellation and a real inspected Mail action. | Actual systemd execution, controlled supported accounts, offline/credential recovery and device wake/power behavior. |
 | R07: live display contract | Versioned initial snapshot plus ordered subscribed updates, logical/physical scale distinction and owned cleanup for running/cold/warm paths. | Native process propagation and real mixed-DPI/hotplug/focus journey. Desktop resize is not foldable support. |
-| R08: truthful native validation | Integrate #2/#3 into required real-native coverage; align fixtures with generated APIs; continue warning cleanup and broader app suites. | Exact combined-head CI, production backends, compositor interaction and device UX. Missing optional suites must remain visible. |
+| R08: truthful native validation | Ten required native CTests and corrected generated-API fixtures are delivered. Obtain final combined-head CI, continue full-source warning cleanup and expand app/provider coverage. | Exact combined-head CI, production backends, compositor interaction and device UX. Missing optional suites must remain visible. |
 
 ## All 37 approved packages: next gate
 
@@ -212,9 +269,9 @@ the acceptance and dependency graph in [BACKLOG.md](BACKLOG.md) and the
 |---|---|---|
 | V2-001 | Integrated upstream baseline and required native gate in #9. | Reproducible combined image, selected device matrix; R05/R08. |
 | V2-002 | #7 shell metrics; define the full viewport/safe-region contract. | R07 app propagation, input and observed device capabilities. |
-| V2-003 | Reconcile #11 research with actual semantic tokens/icons/states. | Native theme parity, contrast, large text and reduced modes. |
+| V2-003 | #11 research is integrated; implement semantic token/icon/state parity. | Native theme parity, contrast, large text and reduced modes. |
 | V2-004 | Define Flow/Peek gesture ownership and interruption state. | Cancel/reverse/call/lock/rotation preserves focus and drafts. |
-| V2-005 | Integrate #2/#3 and expand actual native suites. | Adaptive Home/Covers/Hub/Quick Controls interaction and accessibility. |
+| V2-005 | #2 adaptive overview and #3 unread Hub slices are delivered with required native suites. | Adaptive Home/Covers/Hub/Quick Controls interaction and accessibility. |
 | V2-006 | R04 AT mediation plus keyboard/focus/control roles. | Real assistive-technology journeys; no essential gesture-only task. |
 | V2-007 | Stable conversation/account/source identities and provider capabilities. | Contract tests and explicitly supported providers. |
 | V2-008 | Native communication adapters using V2-007 identities. | Controlled accounts plus current cellular matrix; R05. |
@@ -223,16 +280,16 @@ the acceptance and dependency graph in [BACKLOG.md](BACKLOG.md) and the
 | V2-011 | Typed invocation/results and narrow grants with owned cancellation. | Caller/target death, revocation, timeout and actual dispatch. |
 | V2-012 | Keyboard/search/IME/trackpad ownership and focus return. | Multilingual composition, shortcut collisions and real inputs. |
 | V2-013 | #8 Notes slice; integrate communication app journeys. | Real providers, offline behavior, storage and complete native UI. |
-| V2-014 | Review #1 RFC against current APIs; implement native RN host separately. | Actual Fabric/window/input/lifecycle proof; no RFC-only completion. |
+| V2-014 | #1 RFC and current-API applicability review are delivered; implement the native RN host separately. | Actual Fabric/window/input/lifecycle proof; no RFC-only completion. |
 | V2-015 | Separate native NYC-Tron adapter and token contract. | Real native controls, focus, input and accessibility parity. |
 | V2-016 | Generic native package compatibility fixtures. | Concrete package build/install behavior; licensed Forge app validation stays separate. |
 | V2-017 | Signed non-premium sample/template on #9 lifecycle foundation. | Clean install/update/permission change/restart/uninstall on target. |
 | V2-018 | Split-screen/task-pair state and constraints after display contract. | Resize/restore keeps work and focus; R07. |
 | V2-019 | External-display lifecycle and reachable-window recovery. | Mixed-DPI movement and physical hotplug; R07. |
 | V2-020 | Narrow drag/drop grants and pointer/pen capability model. | Keyboard equivalent and actual supported device transfers/input. |
-| V2-021 | Core-app/settings/onboarding slices with explicit error states. | App/device/accessibility matrix, alarm and quiet-mode behavior. |
+| V2-021 | Settings asynchronous store states and persistent permission intent are delivered; extend other core-app/onboarding journeys. | App/device/accessibility matrix, alarm and quiet-mode behavior. |
 | V2-022 | Selected-context Pilot actions with visible targets/results. | Explicit outbound confirmation, permission checks and hostile-input tests. |
-| V2-023 | #9 launch policy plus the three bounded API repairs above. | Complete R02/R03/R04 identity, IPC, secret, pool and AT boundaries. |
+| V2-023 | #9 launch policy plus the delivered pool, replacement, query, permission and claim repairs above. | Complete R02/R03/R04 identity, IPC, secret, pool and AT boundaries. |
 | V2-024 | Truthful encryption status and recovery/boot assessment. | Enrollment failure, actual encrypted categories and recoverability. |
 | V2-025 | Build device journey harness around actual native services. | Telephony/media/power/sensors and wake results per SKU; R05/R06. |
 | V2-026 | #9 atomic app transactions; OS update/recovery qualification. | Signature/full-disk/interruption/failed-boot and migration evidence. |
@@ -255,7 +312,7 @@ Linux/Wayland has QNX execution or real-time guarantees.
 
 ## Audit method and limits
 
-This pass used the native GitHub API for repository metadata, all open
+The original source audit used the native GitHub API for repository metadata, all open
 PRs, detailed PR state, review submissions/threads, comments, changed-file
 lists, complete Git trees, compare metadata, exact-head workflow runs,
 jobs and decoded logs. No PR was merged, closed, retargeted or marked
@@ -263,11 +320,13 @@ ready, and no review comment or issue was posted.
 
 Source findings were checked against the pinned tree. Documentation
 verification checks local links, package/ticket coverage and the diff.
-The hosted runs above predate this documentation change and do not test
-subsequent code edits. Independent native code review and new candidate
-test evidence must accompany the next implementation.
+The integration follow-up adds independent native review and local candidate
+results. Each hosted checkpoint applies only to its named head; later source
+and documentation changes require a new exact-head result. The final combined
+head must retain the explicit service-fixture, provider and device limits.
 
 [repo]: https://github.com/mikevocalz/Marathon-Shell
+[rust-head]: https://github.com/mikevocalz/Marathon-Shell/commit/1241537cdb17e3beb7523eb94c81ad829d062fe6
 [baseline]: https://github.com/mikevocalz/Marathon-Shell/commit/8e9e0892f646d3e11fd581367d148d7f063d7dc7
 [pr1]: https://github.com/mikevocalz/Marathon-Shell/pull/1
 [pr2]: https://github.com/mikevocalz/Marathon-Shell/pull/2
