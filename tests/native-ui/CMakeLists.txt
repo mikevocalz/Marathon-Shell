@@ -8,7 +8,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 else()
     set(_native_required_default OFF)
 endif()
-option(MARATHON_REQUIRE_NATIVE_UI_TESTS "Require real Keel Notes and Settings AppPages UI" ${_native_required_default})
+option(MARATHON_REQUIRE_NATIVE_UI_TESTS "Require real Notes, Settings AppPages and shell PageViewHub UI" ${_native_required_default})
 set(MARATHON_SOURCE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 find_package(Python3 COMPONENTS Interpreter QUIET)
 set(KEEL_QML "$ENV{KEEL_QML}" CACHE PATH "Real Keel build/install QML directory")
@@ -55,7 +55,7 @@ if(_missing)
     if(MARATHON_REQUIRE_NATIVE_UI_TESTS)
         message(FATAL_ERROR "Required native UI gate cannot run; missing: ${_missing}. Set KEEL_QML and QMLTESTRUNNER to real Qt 6/Keel builds.")
     endif()
-    message(STATUS "Native Notes/Settings AppPages gate NOT REGISTERED in this optional developer build; missing: ${_missing}. Use MARATHON_REQUIRE_NATIVE_UI_TESTS=ON for required coverage.")
+    message(STATUS "Focused native UI gate NOT REGISTERED in this optional developer build; missing: ${_missing}. Use MARATHON_REQUIRE_NATIVE_UI_TESTS=ON for required coverage.")
 else()
     add_test(NAME NativeUI_Toolkit COMMAND "${Python3_EXECUTABLE}"
         "${MARATHON_SOURCE_ROOT}/scripts/ci/run-qml-suite.py"
@@ -83,7 +83,19 @@ else()
         -input "${MARATHON_SOURCE_ROOT}/apps/settings/tests/tst_apppages.qml")
     set_tests_properties(Qml_settings_AppPages PROPERTIES LABELS "native-ui-required"
         FIXTURES_REQUIRED NativeKeel TIMEOUT 180 ENVIRONMENT "QML_XHR_ALLOW_FILE_READ=1")
-    message(STATUS "Required native UI scope: toolkit + complete Notes suite + Settings AppPages; broader app/platform suites remain separate")
+    # PageViewHub covers the launcher's accepted/partial/failed uninstall UI.
+    # Its real component imports QtWayland.Compositor; this is not a server or
+    # task-card rendering test. The existing shell-service doubles stay local.
+    add_test(NAME Qml_shell_PageViewHub COMMAND "${Python3_EXECUTABLE}"
+        "${MARATHON_SOURCE_ROOT}/scripts/ci/run-qml-suite.py"
+        --report "${CMAKE_CURRENT_BINARY_DIR}/reports/pageviewhub.xml" --
+        "${QMLTESTRUNNER}" -import "${KEEL_QML}"
+        -import "${MARATHON_SOURCE_ROOT}/marathon-silica"
+        -import "${MARATHON_SOURCE_ROOT}/tests/ui/stubs"
+        -input "${MARATHON_SOURCE_ROOT}/tests/ui/tst_pageviewhub.qml")
+    set_tests_properties(Qml_shell_PageViewHub PROPERTIES LABELS "native-ui-required"
+        FIXTURES_REQUIRED NativeKeel TIMEOUT 180)
+    message(STATUS "Required native UI scope: toolkit + complete Notes + Settings AppPages + shell PageViewHub; broader suites remain separate")
 endif()
 
 if(Python3_Interpreter_FOUND)

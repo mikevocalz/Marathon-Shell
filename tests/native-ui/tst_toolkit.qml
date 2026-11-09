@@ -1,5 +1,6 @@
 import QtQuick 6.0
 import QtTest 1.3
+import QtWayland.Compositor
 import Sailfish.Silica 1.0
 import Keel 1.0
 import Keel.Actions 1.0

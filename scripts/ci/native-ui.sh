@@ -1,12 +1,12 @@
 #!/bin/sh
-# Required Notes/Tasks and Settings AppPages UI, using the APK's Keel source pin.
+# Required Notes, Settings AppPages and shell PageViewHub UI with the APK Keel pin.
 # Reproduce with the alpine:edge container invocation in .github/workflows/ci.yml.
 set -eu
 
 if [ "${1:-}" != --build ]; then
     apk add --no-cache build-base cmake samurai pkgconf git python3 cargo \
         qt6-qtbase-dev qt6-qtbase-private-dev qt6-qtdeclarative-dev \
-        qt6-qtdeclarative-private-dev qt6-qtsvg-dev libxkbcommon-dev dbus
+        qt6-qtdeclarative-private-dev qt6-qtsvg-dev qt6-qtwayland-dev libxkbcommon-dev dbus
     adduser -D ci
     cp -a /src /home/ci/src
     chown -R ci:ci /home/ci/src

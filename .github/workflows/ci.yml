@@ -19,8 +19,9 @@ concurrency:
 # marathon-shell apk is built on (release.yml), with Qt 6.11.
 #
 # The separate native-ui job builds the pinned real Keel plugins and requires
-# complete Notes/Tasks plus Settings AppPages coverage. Broader suites, compositor loading, and
-# device mlite/dconf remain outside that focused gate. Alpine also has no busctl,
+# complete Notes/Tasks, Settings AppPages and shell PageViewHub coverage. Broader
+# suites, compositor server operation, and device mlite/dconf remain outside
+# that focused gate. Alpine also has no busctl,
 # so Shell_KeelActivation is not registered in the shell build job.
 
 jobs:
@@ -44,7 +45,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-      - name: Require real Keel Notes and Settings UI with validator contracts
+      - name: Require native app and launcher UI with validator contracts
         run: |
           docker run --rm -v "$GITHUB_WORKSPACE:/src:ro" docker.io/library/alpine:edge \
             /src/scripts/ci/native-ui.sh

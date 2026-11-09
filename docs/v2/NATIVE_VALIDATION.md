@@ -6,13 +6,14 @@ The `native-ui` job in `.github/workflows/ci.yml` now runs a required, bounded
 native gate. It builds the real Keel source pinned by
 `packaging/packages/keel-silica/APKBUILD`, verifies the checked-out commit, builds
 its Silica, Actions, Share and Configuration plugins against the job's Qt, and
-runs these five CTests:
+runs these six CTests:
 
 | CTest | Required evidence |
 | --- | --- |
-| `NativeUI_Toolkit` | Qt 6 imports and instantiates real Silica and Configuration; imports real Keel.Actions and Sailfish.Share |
+| `NativeUI_Toolkit` | Qt 6 imports and instantiates real Silica and Configuration; imports real Keel.Actions, Sailfish.Share and QtWayland.Compositor |
 | `Qml_apps_notes_tests` | The complete existing Notes/Tasks UI, actions and persistence suite through its original `run.sh` |
 | `Qml_settings_AppPages` | The actual Settings AppPages suite, including the installer change's pending-cleanup retry UI; other Settings pages remain separate |
+| `Qml_shell_PageViewHub` | The actual launcher PageViewHub test, including accepted, partial and failed uninstall outcomes; broader shell UI remains separate |
 | `Lint_QmlValidator` | 12 executable contract tests, using real `qmllint` for QML behavior |
 | `NativeUI_GateContract` | 8 contract tests: real Qt pass/failure/skip/empty execution, missing tooling, required/optional dependency configuration, and the CMake lint target |
 
@@ -22,8 +23,9 @@ Silica, Actions, Share and Configuration are the actual native plugins. It runs
 offscreen with Qt's software renderer. The CI job supplies a session bus with
 `dbus-run-session`.
 
-Required configuration fails if the runner, Python, or any required module is
-missing. Import/plugin failures fail the toolkit fixture before Notes runs.
+Required configuration fails if the runner, Python, or required Keel module
+entries are missing. Import/plugin failures, including a missing real
+QtWayland.Compositor module, fail the toolkit fixture before the UI suites run.
 The result wrapper checks Qt's JUnit report, requires a Qt 6 runtime and at least
 one `test_` function/data row, and fails on skips, assertions, process failures,
 missing reports or malformed reports. Setup/cleanup alone is zero coverage.
@@ -45,9 +47,12 @@ ctest --test-dir build-native-ui -L native-ui-required \
 ```
 
 The reports under `build-native-ui/reports/` are `toolkit.xml`, `notes.xml`,
-and `settings-apppages.xml`. The
+`settings-apppages.xml`, and `pageviewhub.xml`. The
 container workflow is reproducible with the invocation in `ci.yml` and
-`scripts/ci/native-ui.sh`.
+`scripts/ci/native-ui.sh`. The native CI container installs Alpine
+`qt6-qtwayland-dev` for the real QtWayland.Compositor module. If that matching
+Qt module lives in a separate SDK prefix locally, supply its QML root with
+`QML_IMPORT_PATH` and its native libraries through the platform library path.
 
 ## Strict source validation
 
@@ -94,7 +99,7 @@ cleanup remains a separate requirement before claiming the whole tree clean.
 ## Verified evidence and limits
 
 On the combined implementation base
-`14b70b8f19ecabd2f5d71ccfca8b5e4418788e53`, with these gate changes, the five
+`14b70b8f19ecabd2f5d71ccfca8b5e4418788e53`, with these gate changes, the six
 required CTests pass against official Qt **6.11.3** and unmodified Keel
 **0df499bf34e02cec7f571853cbf5a4323dc1609e**. Notes reports **127 passed,
 0 failed, 0 skipped**: **115** test functions/data rows plus setup/cleanup.
@@ -102,7 +107,15 @@ The toolkit probe reports two actual test functions plus setup/cleanup.
 Settings AppPages reports 22 total results on that base. With the accompanying
 installer changes, its independently run native suite reports **23 passed,
 0 failed, 0 skipped** (21 actual test functions/data rows), including retry
-after removal, partial cleanup, and removal of the completed cleanup row.
+after removal, partial cleanup, preserving the retry row when its status query
+fails, and removal of the completed cleanup row.
+The focused PageViewHub suite also runs against the real Qt **6.11.3**
+WaylandCompositor addon and real system Wayland server library. Its baseline
+contains one behavior plus setup/cleanup; with the installer changes it
+reports **6 passed, 0 failed, 0 skipped** (four behaviors), including accepted
+requests, partial cleanup and asynchronous failure. Existing nested
+TaskSwitcher fixture-role and `HAVE_WAYLAND` warnings remain visible; this does
+not certify task-card rendering or a functioning compositor server.
 The 12 validator and 8 gate-contract regressions exercise their failure paths
 as well as success. Test reachability and shell/Python syntax checks pass.
 
@@ -126,7 +139,7 @@ missing native modules rather than demonstrated product bugs:
 | Suite | Passed / failed | Observed boundary |
 | --- | --- | --- |
 | Marathon.Silica | 159 / 2 | Fling-stop interaction and dialog frost assertions |
-| Shell UI | 547 / 9 | Broader shell assertions; outside this required Notes/Settings slice |
+| Shell UI | 547 / 9 | Broad partial-host baseline; only changed PageViewHub is now required |
 | Browser | 86 / 0 | Host run passed |
 | Calculator | 76 / 2 | Native Nemo.Ngf plugin not built |
 | Calendar | 60 / 0 | Host run passed |
@@ -153,6 +166,7 @@ dependencies and assertion failures remain R08 follow-up work.
 - [Qt qmllint: JSON, warning limits, import paths and generated type information](https://doc.qt.io/qt-6/qtqml-tooling-qmllint.html)
 - [Qt Quick Test: test functions, input paths, imports and offscreen execution](https://doc.qt.io/qt-6/qtquicktest-index.html)
 - [Qt Test output formats and invocation](https://doc.qt.io/qt-6/qtest-overview.html)
+- [Alpine Qt Wayland development package and compositor module](https://pkgs.alpinelinux.org/package/edge/community/aarch64/qt6-qtwayland-dev)
 - [Alpine Qt declarative development package contents](https://pkgs.alpinelinux.org/contents?name=qt6-qtdeclarative-dev&repo=community&branch=edge&arch=aarch64)
 
 The implementations were also checked against the installed tools'
