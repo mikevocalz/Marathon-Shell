@@ -14,6 +14,12 @@ add_test(NAME Core_AppInstaller
     COMMAND ${DBUS_RUN_SESSION} -- $<TARGET_FILE:test_core_appinstaller>)
 set_tests_properties(Core_AppInstaller PROPERTIES TIMEOUT 90)
 
+add_executable(test_core_taskslaunch test_taskslaunch.cpp)
+set_target_properties(test_core_taskslaunch PROPERTIES AUTOMOC ON)
+target_link_libraries(test_core_taskslaunch Qt6::Test marathon_shell_native)
+add_test(NAME Core_TasksLaunch COMMAND test_core_taskslaunch)
+set_tests_properties(Core_TasksLaunch PROPERTIES TIMEOUT 60)
+
 # Shell bounds and scale follow the window through resize and lifetime changes.
 add_executable(test_core_screenmetrics
     test_screenmetrics.cpp

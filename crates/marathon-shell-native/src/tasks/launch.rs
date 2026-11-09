@@ -290,6 +290,13 @@ impl Tasks {
         self.app_to_pid.get(app_id).copied().unwrap_or(-1)
     }
 
+    fn has_app_launch(&self, app_id: &str) -> bool {
+        self.pending_launches
+            .values()
+            .chain(self.active_by_pid.values())
+            .any(|launch| launch.app_id == app_id)
+    }
+
     pub(super) fn pid_for_app_id(&self, app_id: &QString) -> i64 {
         self.pid_for(&app_id.to_string())
     }
@@ -936,8 +943,9 @@ impl Tasks {
                 }
             });
         }
-        // The app runs on in a newer launch, whose card this exit is not.
-        if replacement_active {
+        // An accepted replacement owns the placeholder and lifecycle even
+        // before its process reports appLaunched.
+        if self.has_app_launch(&launch.app_id) {
             return;
         }
         // Exited before any window: a launcher, unless no window comes.
@@ -955,7 +963,7 @@ impl Tasks {
                 {
                     obj.as_mut().rust_mut().exited_launches.remove(&app_id);
                     // Closed from the switcher and opened again meanwhile.
-                    if !obj.active_by_pid.values().any(|l| l.app_id == app_id) {
+                    if !obj.has_app_launch(&app_id) {
                         obj.finish_exit(&app_id);
                     }
                 }
