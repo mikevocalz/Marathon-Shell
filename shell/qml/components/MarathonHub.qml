@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import MarathonOS.Shell 1.0
 import QtQuick
 import QtQml.Models
+import QtQuick.Layouts
 import Sailfish.Silica 1.0 as Silica
 import Marathon.Silica 1.0 as Silica
 import "../core/Agenda.js" as Agenda
@@ -277,6 +278,7 @@ Rectangle {
             }
 
             Repeater {
+                objectName: "hubAgendaEntries"
                 model: hub.agenda
 
                 Item {
@@ -284,32 +286,47 @@ Rectangle {
 
                     required property var modelData
 
+                    objectName: "hubAgendaEntry"
                     width: header.width
-                    height: entryTitle.height + Silica.Theme.paddingSmall * 2
+                    height: agendaText.implicitHeight + Silica.Theme.paddingSmall * 2
 
                     Rectangle {
                         width: Math.max(2, Math.round(Silica.Theme.paddingSmall / 3))
                         height: parent.height
                         color: Silica.Theme.highlightColor
                     }
-                    Silica.Label {
-                        id: entryTime
+                    GridLayout {
+                        id: agendaText
 
                         x: Silica.Theme.paddingMedium
-                        width: Silica.Theme.itemSizeLarge
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: entry.modelData.allDay ? qsTr("All day") : hub.agendaTime(entry.modelData.time)
-                        color: Silica.Theme.secondaryColor
-                        font.pixelSize: Silica.Theme.fontSizeExtraSmall
-                    }
-                    Silica.Label {
-                        id: entryTitle
+                        y: Silica.Theme.paddingSmall
+                        width: parent.width - x
+                        // Keep both fields readable when the clock's suffix,
+                        // translation or text size leaves no room beside it.
+                        columns: entryTime.implicitWidth + columnSpacing + entryTitle.implicitWidth <= width ? 2 : 1
+                        columnSpacing: Silica.Theme.paddingMedium
+                        rowSpacing: Silica.Theme.paddingSmall
 
-                        anchors.left: entryTime.right
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: entry.modelData.title
-                        truncationMode: Silica.TruncationMode.Fade
+                        Silica.Label {
+                            id: entryTime
+
+                            objectName: "hubAgendaTime"
+                            Layout.minimumWidth: 0
+                            Layout.fillWidth: agendaText.columns === 1
+                            text: entry.modelData.allDay ? qsTr("All day") : hub.agendaTime(entry.modelData.time)
+                            color: Silica.Theme.secondaryColor
+                            font.pixelSize: Silica.Theme.fontSizeExtraSmall
+                            wrapMode: Text.Wrap
+                        }
+                        Silica.Label {
+                            id: entryTitle
+
+                            objectName: "hubAgendaTitle"
+                            Layout.minimumWidth: 0
+                            Layout.fillWidth: true
+                            text: entry.modelData.title
+                            wrapMode: Text.Wrap
+                        }
                     }
                 }
             }
