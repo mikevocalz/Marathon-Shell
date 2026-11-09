@@ -1,6 +1,7 @@
 # Open work and native API audit
 
-Snapshot: **November 9, 2026, 14:55 UTC**. Source baseline:
+Fork snapshot: **November 9, 2026, 14:55 UTC**; upstream tracker refresh:
+**15:15 UTC**. Source baseline:
 [PR #9 at `8e9e0892f646d3e11fd581367d148d7f063d7dc7`][baseline].
 This inventory covers every open pull request in
 [`mikevocalz/Marathon-Shell`][repo], the eight local remediation tickets,
@@ -123,6 +124,34 @@ manifest, audio fixture cache initialization and Clippy assertion repairs
 already have current passing evidence. They are not new failures to fix
 again. Do not close or merge overlapping PRs solely from this inventory;
 review the resulting combined source and its evidence first.
+
+## Upstream tracker refresh
+
+The five adjacent repositories from the [v1 audit](V1_GAP_AUDIT.md) were
+queried again through their native GitHub open-issues endpoints at 15:15
+UTC. The rows below supersede that earlier document's issue-state snapshot,
+while preserving its source findings and acceptance requirements.
+
+| Repository | Current open items | Disposition for the 2.0 programme |
+|---|---|---|
+| [patrickjquinn/Marathon-Shell](https://github.com/patrickjquinn/Marathon-Shell) | Issue [#45: Nightshade/Bedside](https://github.com/patrickjquinn/Marathon-Shell/issues/45); PR [#53: Q25 front/rear cameras](https://github.com/patrickjquinn/Marathon-Shell/pull/53) and [#54: Jolla Camera lifecycle](https://github.com/patrickjquinn/Marathon-Shell/pull/54) | Nightshade maps to personal V2-035. Reconcile camera code with the imported upstream source; qualify actual capture/audio/permissions/lifecycle on the selected hardware under R05/V2-025. An open PR is not evidence that its code is wholly absent from the newer intake. |
+| [MarathonOS/Marathon-Image](https://github.com/MarathonOS/Marathon-Image) | Issue [#3: mesa-vdpau-gallium dependency](https://github.com/MarathonOS/Marathon-Image/issues/3); PRs [#2: Poco F1 configuration](https://github.com/MarathonOS/Marathon-Image/pull/2), [#4: README](https://github.com/MarathonOS/Marathon-Image/pull/4), [#5: APKBUILD](https://github.com/MarathonOS/Marathon-Image/pull/5), [#6: APKBUILD](https://github.com/MarathonOS/Marathon-Image/pull/6), [#7: README](https://github.com/MarathonOS/Marathon-Image/pull/7) | Repository metadata still reports archived. Preserve these as historical packaging/device evidence; validate applicability against the active image pipeline. They do not establish a current Poco F1 port or a current dependency failure. |
+| [MarathonOS/marathon-zinwa-q25](https://github.com/MarathonOS/marathon-zinwa-q25) | Zero open issue/PR entries | Keep current Q25 source/image/device evidence separate from this empty board. |
+| [patrickjquinn/Marathon-Deckard](https://github.com/patrickjquinn/Marathon-Deckard) | Zero open issue/PR entries | V2-027 compatibility and lifecycle acceptance still apply. |
+| [patrickjquinn/shipwright-open](https://github.com/patrickjquinn/shipwright-open) | Zero open issue/PR entries | Pin and validate the actual toolkit/image dependencies; an empty tracker is not a test result. |
+
+Two previously open upstream Shell issues are now closed with GitHub
+state reason `completed`:
+
+- [#50: QEMU Maps WebEngine crash](https://github.com/patrickjquinn/Marathon-Shell/issues/50),
+  closed **2026-11-09 10:45:41 UTC**.
+- [#44: security hardening](https://github.com/patrickjquinn/Marathon-Shell/issues/44),
+  closed **2026-11-09 10:45:53 UTC**.
+
+Those tracker transitions are not new graphics/security validation. Keep
+the applicable Maps/rendering and R02–R04 boundary tests, exact source/image
+revisions and remaining hardware qualifications. This audit did not close
+either issue or submit any upstream change.
 
 ## Concrete native API repairs identified in the baseline
 
