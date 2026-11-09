@@ -901,6 +901,81 @@ TestCase {
         compare(NotificationService.clicked, [5]);
     }
 
+    function test_captureRowLabelRemainsReadable_data() {
+        return [
+            {
+                tag: "normal",
+                width: 540,
+                scale: 1
+            },
+            {
+                tag: "narrow",
+                width: 320,
+                scale: 1
+            },
+            {
+                tag: "narrow-large",
+                width: 320,
+                scale: 1.5
+            },
+            {
+                tag: "narrow-huge",
+                width: 320,
+                scale: 2
+            }
+        ];
+    }
+
+    function test_captureRowLabelRemainsReadable(data) {
+        hubWindow.width = data.width;
+        Keel.Ambience.applyForwarded("/desktop/sailfish/silica/font_size_multiplier=" + data.scale);
+        addNotification(51, "mail");
+        NotificationService.setProperty(0, "body", "Please review the longer document and confirm the time before Friday's meeting.");
+        addNotification(52, "mail");
+        tryVerify(() => row(0) && row(1));
+        const first = row(0);
+        first.actions = [
+            {
+                key: "archive",
+                label: "Archive"
+            },
+            {
+                key: "reply",
+                label: "Reply"
+            }
+        ];
+        const list = findChild(hub, "hubList");
+        waitForPolish(list);
+        list.positionViewAtIndex(0, ListView.Beginning);
+        waitForRendering(hub);
+        const action = findChild(first, "hubRowCreateTask");
+        const label = findChild(first, "hubRowCreateTaskLabel");
+        compare(label.text, "Create task");
+        compare(label.truncated, false);
+        compare(label.elide, Text.ElideNone);
+        compare(label.font.pixelSize, Silica.Theme.fontSizeSmall);
+        verify(label.contentWidth <= label.width + 1, "The full label must fit without horizontal clipping");
+        verify(label.contentHeight <= label.height + 1, "Every wrapped line must fit vertically");
+        verify(action.height >= Silica.Theme.itemSizeExtraSmall);
+        const bounds = action.mapToItem(first, 0, 0, action.width, action.height);
+        verify(bounds.x >= 0 && bounds.x + bounds.width <= first.width + 1);
+        verify(bounds.y >= 0 && bounds.y + bounds.height <= first.height + 1);
+        const avatar = findChild(first, "hubRowAvatar");
+        const avatarBounds = avatar.mapToItem(first, 0, 0, avatar.width, avatar.height);
+        verify(avatarBounds.y + avatarBounds.height <= bounds.y, "Capture must stay below the avatar body");
+        const provider = findChild(first, "hubRowActions");
+        const providerBounds = provider.mapToItem(first, 0, 0, provider.width, provider.height);
+        verify(providerBounds.y + providerBounds.height <= bounds.y, "Provider actions remain separate");
+        verify(row(1).y >= first.y + first.height - 0.5, "The following notification must clear the capture action");
+        mouseClick(findChild(provider, "notificationAction-archive"));
+        compare(NotificationService.triggered, ["51:archive"]);
+        mouseClick(action);
+        tryCompare(findChild(hub, "hubTaskCapture"), "open", true);
+        compare(NotificationService.triggered, ["51:archive"]);
+        compare(NotificationService.clicked, []);
+        compare(NotificationService.read, []);
+    }
+
     // A row that arrives with buttons while the Hub is open pushes the rows
     // below it clear of them, also when its app brings the filter chips.
     function test_aNewRowMakesRoomForItsButtons() {

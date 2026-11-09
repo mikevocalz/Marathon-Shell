@@ -47,7 +47,9 @@ FocusScope {
         running: area.pressed
     }
     property real collapse: 1
-    readonly property real fullHeight: Math.max(Silica.Theme.itemSizeLarge, textColumn.implicitHeight + Silica.Theme.paddingLarge * 2)
+    readonly property bool showCapture: canCreateTask && !replying
+    readonly property real bodyHeight: Math.max(Silica.Theme.itemSizeLarge, avatar.height + Silica.Theme.paddingLarge * 2, textColumn.implicitHeight + Silica.Theme.paddingLarge * 2)
+    readonly property real fullHeight: bodyHeight + (showCapture ? captureAction.height + textColumn.spacing : 0)
 
     signal activated
     signal actionInvoked(string key)
@@ -121,6 +123,12 @@ FocusScope {
             color: row.down ? Silica.Theme.rgba(Silica.Theme.highlightBackgroundColor, Silica.Theme.highlightBackgroundOpacity) : "transparent"
         }
 
+        Item {
+            id: bodyBounds
+            width: parent.width
+            height: row.bodyHeight
+        }
+
         // A lit glass mark for what is new.
         Silica.GlassItem {
             objectName: "hubRowUnread"
@@ -134,12 +142,13 @@ FocusScope {
 
         Rectangle {
             id: avatar
+            objectName: "hubRowAvatar"
             width: Silica.Theme.iconSizeMedium
             height: width
             radius: width / 2
             anchors.left: parent.left
             anchors.leftMargin: Silica.Theme.horizontalPageMargin
-            anchors.verticalCenter: parent.verticalCenter
+            anchors.verticalCenter: bodyBounds.verticalCenter
             // Read rows step back, as BB10's monochrome icons did.
             opacity: row.unread || row.ongoing ? 1 : 0.55
             color: "transparent"
@@ -182,7 +191,7 @@ FocusScope {
             anchors.leftMargin: Silica.Theme.paddingLarge
             anchors.right: parent.right
             anchors.rightMargin: Silica.Theme.horizontalPageMargin
-            anchors.verticalCenter: parent.verticalCenter
+            anchors.verticalCenter: bodyBounds.verticalCenter
             spacing: Math.round(Silica.Theme.paddingSmall / 2)
 
             Item {
@@ -299,17 +308,6 @@ FocusScope {
                 }
             }
 
-            // A Hub operation, separate from the provider's advertised actions.
-            Silica.Button {
-                objectName: "hubRowCreateTask"
-                anchors.right: parent.right
-                text: qsTr("Create task")
-                preferredWidth: Silica.Theme.buttonWidthExtraSmall
-                width: Math.min(preferredWidth, parent.width)
-                visible: row.canCreateTask && !row.replying
-                onClicked: row.createTaskRequested()
-            }
-
             Row {
                 width: parent.width
                 spacing: Silica.Theme.paddingSmall
@@ -340,6 +338,37 @@ FocusScope {
                     enabled: replyField.text.trim().length > 0
                     onClicked: row.sendReply()
                 }
+            }
+        }
+
+        // The Hub action gets the full row width when text grows, independently
+        // of the provider actions and avatar. Native Button's label cannot wrap.
+        Silica.BackgroundItem {
+            id: captureAction
+            objectName: "hubRowCreateTask"
+            anchors.right: parent.right
+            anchors.rightMargin: Silica.Theme.horizontalPageMargin
+            y: row.bodyHeight - Silica.Theme.paddingLarge + textColumn.spacing
+            implicitWidth: captureLabel.implicitWidth + Silica.Theme.paddingMedium * 2
+            width: Math.min(implicitWidth, Math.max(0, row.width - Silica.Theme.horizontalPageMargin * 2))
+            height: Math.max(Silica.Theme.itemSizeExtraSmall, captureLabel.implicitHeight + Silica.Theme.paddingMedium * 2)
+            visible: row.showCapture
+            Accessible.role: Accessible.Button
+            Accessible.name: captureLabel.text
+            onClicked: row.createTaskRequested()
+
+            Silica.Label {
+                id: captureLabel
+                objectName: "hubRowCreateTaskLabel"
+                anchors.centerIn: parent
+                width: Math.max(0, captureAction.width - Silica.Theme.paddingMedium * 2)
+                text: qsTr("Create task")
+                textFormat: Text.PlainText
+                color: Silica.Theme.highlightColor
+                font.pixelSize: Silica.Theme.fontSizeSmall
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap
+                truncationMode: Silica.TruncationMode.None
             }
         }
     }
