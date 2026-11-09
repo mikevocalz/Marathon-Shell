@@ -220,6 +220,7 @@ set(QML_FILES
     qml/core/Clock.js
     qml/core/Scales.js
     qml/core/LauncherGrid.js
+    qml/core/OverviewGrid.js
 )
 
 set(JSON_FILES
@@ -289,7 +290,7 @@ foreach(singleton_file ${SINGLETON_FILES})
     )
 endforeach()
 # Imported by path; a qmldir entry makes the module ambiguous.
-set_source_files_properties(qml/ui/PhosphorGlyphs.js qml/core/Agenda.js qml/core/LauncherGrid.js
+set_source_files_properties(qml/ui/PhosphorGlyphs.js qml/core/Agenda.js qml/core/LauncherGrid.js qml/core/OverviewGrid.js
     qml/core/BatteryWarning.js qml/core/Weather.js qml/core/Clock.js qml/core/Scales.js PROPERTIES
     QT_QML_SKIP_QMLDIR_ENTRY TRUE
 )

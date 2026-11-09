@@ -1,9 +1,11 @@
 pragma Singleton
-import QtQml
+import QtQml.Models
 
-QtObject {
+ListModel {
+    readonly property int taskCount: count
     property bool androidStarting: false
     property var secureApps: []
+    signal appRegistered(string appId)
     signal appUnregistered(string appId)
     signal appCommand(string appId, string command)
     function setCoverVisible(appId, visible) {
