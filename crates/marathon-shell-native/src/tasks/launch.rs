@@ -706,6 +706,15 @@ impl Tasks {
         app: &App,
         policy: &sandbox::LaunchPolicy,
     ) -> Result<(sandbox::Runner, Map), &'static str> {
+        if !policy.is_sandboxed() {
+            log::warn(
+                "tasks",
+                format_args!(
+                    "launching {} without confinement: MARATHON_DISABLE_SANDBOX=1 was explicitly set",
+                    app.id
+                ),
+            );
+        }
         let mut runner = self.runner(&app.id, &app.permissions, false);
         runner.install_root.clone_from(&app.install_root);
         if !runner.install_root.as_os_str().is_empty() {
@@ -730,15 +739,6 @@ impl Tasks {
                 return false;
             }
         };
-        if !policy.is_sandboxed() {
-            log::warn(
-                "tasks",
-                format_args!(
-                    "launching {} without confinement: MARATHON_DISABLE_SANDBOX=1 was explicitly set",
-                    app.id
-                ),
-            );
-        }
         let (mut runner, mut env) = match self.runner_for_app(app, &policy) {
             Ok(prepared) => prepared,
             Err(error) => {
