@@ -233,6 +233,52 @@ TestCase {
         compare(pushed(app, 3).noteId, 4);
     }
 
+    function test_newTaskPulleyCreatesTaskNote() {
+        const app = makeApp([], "/tasks");
+        const tasks = pushed(app, 2);
+        findChild(tasks, "newTaskItem").clicked();
+        const editor = pushed(app, 3);
+        verify(editor.taskRequested);
+        findChild(editor, "bodyField").text = "Buy milk";
+        editor.commit();
+        compare(app.notes.length, 1);
+        compare(app.notes[0].task, {
+            completed: false
+        });
+        app.pageStack.pop(undefined, PageStackAction.Immediate);
+        pushed(app, 2);
+        compare(findChild(tasks, "tasksView").count, 1);
+    }
+
+    function test_taskNoteCompletesWithoutCheckingItsChecklist() {
+        const app = makeApp([note(4, {
+                title: "Plan trip",
+                content: "Plan trip\n- [ ] book ferry",
+                task: {
+                    completed: false,
+                    dueDate: "2026-12-10"
+                },
+                source: {
+                    kind: "message",
+                    appId: "org.marathonos.messages",
+                    itemId: "m:4",
+                    label: "Travel ideas"
+                }
+            })], "/tasks");
+        const tasks = pushed(app, 2);
+        const list = findChild(tasks, "tasksView");
+        compare(list.count, 2);
+        const sw = findChild(delegateAt(list, 0), "taskSwitch");
+        compare(sw.description, "Due 2026-12-10");
+        mouseClick(sw);
+        tryVerify(() => app.notes[0].task.completed);
+        compare(app.notes[0].content, "Plan trip\n- [ ] book ferry");
+        compare(app.notes[0].source.itemId, "m:4");
+        mouseClick(findChild(delegateAt(list, 1), "taskSwitch"));
+        tryVerify(() => app.notes[0].content === "Plan trip\n- [x] book ferry");
+        verify(app.notes[0].task.completed);
+    }
+
     function test_coverNewNote() {
         const app = makeApp([]);
         app.newNote();
