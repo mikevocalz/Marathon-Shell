@@ -21,6 +21,12 @@ The product should make it unusually easy to read, reply, capture, search and re
 - [QNX reference crosswalk](QNX_REFERENCE_CROSSWALK.md): verified 6.3 manuals, current QNX 8 checks and concrete lifecycle/recovery lessons for the existing Linux-native repairs and separate RNQNX plans.
 - [App lifecycle transactions](APP_LIFECYCLE_TRANSACTIONS.md): generation publication, legacy migration, running-code retention, truthful uninstall outcomes and retry boundaries in draft #9.
 - [Native validation gate](NATIVE_VALIDATION.md): the required real Qt/Keel suites, strict QML validator, reproducible commands and exact limits of the host evidence.
+- [Rust architecture and API audit](RUST_API_AUDIT.md): all 28 main workspace crates, separate native app workspaces, real Qt/D-Bus boundaries and remaining ownership work.
+- [AppInstaller API](APP_INSTALLER_API.md): asynchronous refresh, cached state, explicit errors and bulk capability discovery for Settings.
+- [Open-work audit](OPEN_WORK_AUDIT.md): every open PR and approved package, source integration and exact evidence boundaries.
+- [Native UX research](UX_RESEARCH_2026-11-07.md): the historical navigation/adaptive-overview brief and its current applicability.
+- [Managed external-client RFC](../rfcs/0013-react-native-client-contract.md): the proposed native lifecycle/package contract for independently built clients; documentation, not a new runtime.
+- [Passport inspection tools](../../tools/passport/README.md): passive host inventory and bounded offline ELF inspection; no device-port or bootability claim.
 
 ## Approved 2.0 scope
 

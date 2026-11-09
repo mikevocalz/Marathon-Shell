@@ -127,7 +127,8 @@ QML service-fixture tests cover different boundaries.
    read and one coalesced successor serialize completion; a superseded reply
    is discarded before publication. A stale response cannot overwrite a newer refresh;
    a missing service is not an empty catalogue. Read-only refresh can retry
-   safely without replaying an uninstall mutation. Runtime repair `3b93c28`
+   safely without replaying an uninstall mutation. Runtime repair
+   [`46cb5697`](https://github.com/mikevocalz/Marathon-Shell/commit/46cb569722a41c6887fe8a37ca17439596a3f5b3)
    adds `io::try_spawn`, so owned operations can report executor-start failure
    instead of leaving pending state behind after a dropped future.
 
@@ -179,6 +180,18 @@ that the app parsed the message, loaded QML or presented its first frame.
 The existing request UUID, selected immutable app generation and explicit
 sandbox policy are useful foundations. They do not supply generation-bound
 D-Bus authority or narrower warm-pool mounts by themselves.
+
+A second replacement race was reproduced through the actual generated
+`Tasks` object: an old process could exit while the replacement remained in
+`pending_launches`, before `appLaunched` moved it to `active_by_pid`. Cleanup
+previously protected only active replacements and removed the pending task's
+placeholder/lifecycle. Both pending and active attempts now retain ownership
+after exact old-PID/listener cleanup. The replacement can then either map its
+window or fail and clean up exactly once. The real `Core_TasksLaunch` test
+failed both replacement rows before the fix; replacement success, failure and
+an unrelated pending-app control all pass afterward. The delayed 30-second
+cleanup branch shares the guard but was source-reviewed rather than waited
+out in that test.
 
 ### Journey 4: an app exits while it holds background work
 
