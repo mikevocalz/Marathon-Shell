@@ -85,8 +85,8 @@ Page {
             objectName: "placeholder"
             x: view.originX
             enabled: page.shown.length === 0
-            text: page.scope.length === 0 ? qsTr("No notes") : qsTr("No matching notes")
-            hintText: page.scope.length === 0 ? qsTr("Pull down to add one") : qsTr("Try a different word")
+            text: page.store.storageProtected ? qsTr("Notes need recovery") : page.scope.length === 0 ? qsTr("No notes") : qsTr("No matching notes")
+            hintText: page.store.storageProtected ? qsTr("Open Recovery to copy the original data") : page.scope.length === 0 ? qsTr("Pull down to add one") : qsTr("Try a different word")
         }
 
         delegate: ListItem {
@@ -101,7 +101,13 @@ Page {
                 MenuItem {
                     objectName: "pinItem"
                     text: item.modelData.pinned ? qsTr("Unpin") : qsTr("Pin to top")
-                    onClicked: page.store.save(Store.setPinned(page.store.notes, item.modelData.id, !item.modelData.pinned))
+                    onClicked: {
+                        try {
+                            page.store.save(Store.setPinned(page.store.notes, item.modelData.id, !item.modelData.pinned));
+                        } catch (error) {
+                            Notices.show(qsTr("The note could not be changed. Try again."));
+                        }
+                    }
                 }
                 MenuItem {
                     objectName: "deleteItem"
@@ -113,8 +119,13 @@ Page {
                         item.remorseDelete(function () {
                             if (workspace)
                                 workspace.removeNote(noteId);
-                            else
-                                store.save(Store.remove(store.notes, noteId));
+                            else {
+                                try {
+                                    store.save(Store.remove(store.notes, noteId));
+                                } catch (error) {
+                                    Notices.show(qsTr("The note could not be deleted. Try again."));
+                                }
+                            }
                         });
                     }
                 }

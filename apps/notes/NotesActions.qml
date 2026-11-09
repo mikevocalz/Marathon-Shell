@@ -27,6 +27,55 @@ Item {
     }
 
     KeelAction {
+        name: "notes.open"
+        title: qsTr("Open note")
+        description: "Open an existing note by its persistent id and request application activation. Any pending draft must be recorded first. Fails if the note is missing or the draft cannot be recorded."
+        idempotent: true
+        parameters: [
+            KeelParam {
+                name: "id"
+                type: "integer"
+                minimum: 1
+                maximum: 2147483647
+                required: true
+            }
+        ]
+        returns: KeelResult {
+            type: "object"
+            KeelParam {
+                name: "id"
+                type: "integer"
+                minimum: 1
+                maximum: 2147483647
+                required: true
+            }
+        }
+        onInvoked: (args, call) => {
+            if (root.store.storageProtected) {
+                call.fail("Failed", "Stored notes need recovery before a note can be opened");
+                return;
+            }
+            if (!root.store.notes.some(note => note.id === args.id)) {
+                call.fail("InvalidArguments", "There is no note with that id");
+                return;
+            }
+            try {
+                root.store.openNote(args.id);
+                const shown = KeelActions.invoke("app.show", {});
+                if (!shown.succeeded) {
+                    call.fail("Failed", shown.errorMessage);
+                    return;
+                }
+                call.reply({
+                    id: args.id
+                });
+            } catch (error) {
+                call.fail("Failed", error.message);
+            }
+        }
+    }
+
+    KeelAction {
         name: "notes.create"
         title: qsTr("Create note")
         description: "Create a note in Marathon Notes. The title becomes the note's first line, followed by the body. Returns the new note's id."
@@ -121,6 +170,10 @@ Item {
             }
         }
         onInvoked: (args, call) => {
+            if (root.store.storageProtected) {
+                call.fail("Failed", "Stored notes need recovery before they can be searched");
+                return;
+            }
             const found = Store.sorted(Store.search(root.store.notes, args.query));
             call.reply(found.slice(0, args.limit || 10).map(root.summary));
         }

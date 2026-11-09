@@ -82,8 +82,13 @@ Page {
                 onClicked: {
                     if (page.workspace)
                         page.workspace.toggleTask(item.modelData);
-                    else
-                        page.store.save(item.modelData.kind === "task" ? Store.setTaskCompleted(page.store.notes, item.modelData.noteId, !item.modelData.checked, Date.now()) : Store.toggleTask(page.store.notes, item.modelData.noteId, item.modelData.line, Date.now()));
+                    else {
+                        try {
+                            page.store.save(item.modelData.kind === "task" ? Store.setTaskCompleted(page.store.notes, item.modelData.noteId, !item.modelData.checked, Date.now()) : Store.toggleTask(page.store.notes, item.modelData.noteId, item.modelData.line, Date.now()));
+                        } catch (error) {
+                            Notices.show(qsTr("The task could not be changed. Try again."));
+                        }
+                    }
                 }
                 onPressAndHold: item.openMenu()
             }

@@ -121,6 +121,24 @@ TestCase {
         compare(call.result.result[0].body.length, 2000);
     }
 
+    function test_createTaskCapturesNotificationSnapshot() {
+        const source = {
+            kind: "notification",
+            appId: "org.marathonos.hub",
+            itemId: "notification:42:1730000000",
+            label: "Messages notification"
+        };
+        const call = KeelActions.invoke("tasks.create", {
+            title: "Reply later",
+            source: source
+        });
+        verify(call.succeeded, call.errorMessage);
+        compare(store.notes[0].source, source);
+        const listed = KeelActions.invoke("tasks.list", {});
+        verify(listed.succeeded, listed.errorMessage);
+        compare(listed.result.result[0].source, source);
+    }
+
     function test_createTaskCapturesOpaqueSourceAndDueDate() {
         const source = {
             kind: "message",

@@ -83,6 +83,52 @@
     },
     {
       "_meta": {
+        "org.shipwright.keel/action": "notes.open",
+        "org.shipwright.keel/confirm": false,
+        "org.shipwright.keel/result": "object",
+        "org.shipwright.keel/sensitive": false,
+        "org.shipwright.keel/timeoutMs": 25000
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Open an existing note by its persistent id and request application activation. Any pending draft must be recorded first. Fails if the note is missing or the draft cannot be recorded.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "maximum": 2147483647,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "name": "org.marathonos.notes/notes.open",
+      "outputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "maximum": 2147483647,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "title": "Open note"
+    },
+    {
+      "_meta": {
         "org.shipwright.keel/action": "notes.search",
         "org.shipwright.keel/confirm": false,
         "org.shipwright.keel/result": "wrapped",
@@ -207,6 +253,7 @@
               "kind": {
                 "enum": [
                   "message",
+                  "notification",
                   "file",
                   "event",
                   "link"
@@ -324,6 +371,7 @@
                     "kind": {
                       "enum": [
                         "message",
+                        "notification",
                         "file",
                         "event",
                         "link"

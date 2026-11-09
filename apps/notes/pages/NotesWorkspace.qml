@@ -38,18 +38,18 @@ Page {
     }
 
     function commitEditor() {
-        if (currentEditor)
-            currentEditor.commit();
+        return !currentEditor || currentEditor.commit();
     }
 
     // Changing notes replaces the editor; resizing keeps its native page
     // container, text selection and pending autosave.
     function openNote(noteId) {
+        if (!commitEditor())
+            return null;
         if (currentEditor && currentEditor.noteId === noteId) {
             editorStack.pop(currentEditor, PageStackAction.Immediate);
             return currentEditor;
         }
-        commitEditor();
         const properties = {
             store: root.store,
             noteId: noteId
@@ -59,7 +59,8 @@ Page {
     }
 
     function newNote(taskRequested = false) {
-        commitEditor();
+        if (!commitEditor())
+            return null;
         const properties = {
             store: root.store,
             taskRequested: taskRequested
@@ -69,37 +70,51 @@ Page {
     }
 
     function closeEditor() {
-        commitEditor();
+        if (!commitEditor())
+            return false;
         if (editorStack.depth > 1)
             editorStack.pop(_emptyDetail, PageStackAction.Immediate);
+        return true;
     }
 
     function removeNote(noteId) {
-        store.save(Store.remove(store.notes, noteId));
+        try {
+            store.save(Store.remove(store.notes, noteId));
+        } catch (error) {
+            Notices.show(qsTr("The note could not be deleted. Try again."));
+            return false;
+        }
         if (currentEditor && currentEditor.noteId === noteId) {
             currentEditor.discarded = true;
             closeEditor();
         }
+        return true;
     }
 
     function toggleTask(task) {
-        commitEditor();
+        if (!commitEditor())
+            return;
         const now = Date.now();
-        store.save(task.kind === "task" ? Store.setTaskCompleted(store.notes, task.noteId, !task.checked, now) : Store.toggleTask(store.notes, task.noteId, task.line, now));
+        try {
+            store.save(task.kind === "task" ? Store.setTaskCompleted(store.notes, task.noteId, !task.checked, now) : Store.toggleTask(store.notes, task.noteId, task.line, now));
+        } catch (error) {
+            Notices.show(qsTr("The task could not be changed. Try again."));
+            return;
+        }
         if (task.kind === "checklist" && currentEditor && currentEditor.noteId === task.noteId)
             currentEditor.refreshBodyFromStore();
     }
 
     function showNotes() {
-        if (!isWide)
-            closeEditor();
+        if (!isWide && !closeEditor())
+            return;
         collectionStack.pop(_notesPage, PageStackAction.Immediate);
         collectionPage.forceActiveFocus();
     }
 
     function showTasks() {
-        if (!isWide)
-            closeEditor();
+        if (!isWide && !closeEditor())
+            return;
         if (!(collectionPage instanceof TasksPage)) {
             collectionStack.pop(_notesPage, PageStackAction.Immediate);
             collectionStack.push(Qt.resolvedUrl("TasksPage.qml"), {
@@ -111,8 +126,8 @@ Page {
     }
 
     function showFolders() {
-        if (!isWide)
-            closeEditor();
+        if (!isWide && !closeEditor())
+            return;
         if (!(collectionPage instanceof FoldersPage)) {
             collectionStack.pop(_notesPage, PageStackAction.Immediate);
             collectionStack.push(Qt.resolvedUrl("FoldersPage.qml"), {
@@ -124,8 +139,8 @@ Page {
     }
 
     function openFolder(tag) {
-        if (!isWide)
-            closeEditor();
+        if (!isWide && !closeEditor())
+            return;
         collectionStack.push(Qt.resolvedUrl("NotesPage.qml"), {
             store: root.store,
             workspace: root,
@@ -135,6 +150,8 @@ Page {
 
     function handleBack() {
         if (editorStack.depth > 1) {
+            if (editorStack.currentPage === currentEditor && !commitEditor())
+                return true;
             editorStack.pop();
             return true;
         }
@@ -143,6 +160,14 @@ Page {
             return true;
         }
         return false;
+    }
+
+    function showRecovery() {
+        const stack = currentEditor ? editorStack : collectionStack;
+        stack.push(Qt.resolvedUrl("NotesRecoveryDialog.qml"), {
+            store: root.store,
+            workspace: root
+        });
     }
 
     Component.onCompleted: {
@@ -230,11 +255,24 @@ Page {
         }
     }
 
+    ValueButton {
+        id: recoveryStatus
+
+        objectName: "recoveryStatus"
+        anchors.top: navigation.bottom
+        width: parent.width
+        height: visible ? contentHeight : 0
+        visible: root.store.storageProtected || root.store.storageError !== "" || root.store.pendingShares.length > 0
+        label: qsTr("Recovery")
+        value: root.store.storageProtected ? qsTr("Original data kept") : root.store.pendingShares.length > 0 ? qsTr("Shared text waiting") : qsTr("Action failed")
+        onClicked: root.showRecovery()
+    }
+
     Item {
         id: collectionPane
 
         anchors {
-            top: navigation.bottom
+            top: recoveryStatus.bottom
             topMargin: Theme.paddingMedium
             bottom: parent.bottom
             left: parent.left

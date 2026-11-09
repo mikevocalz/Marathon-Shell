@@ -53,7 +53,7 @@ Item {
                 KeelParam {
                     name: "kind"
                     type: "string"
-                    values: ["message", "file", "event", "link"]
+                    values: ["message", "notification", "file", "event", "link"]
                     required: true
                 }
                 KeelParam {
@@ -160,7 +160,7 @@ Item {
                 KeelParam {
                     name: "kind"
                     type: "string"
-                    values: ["message", "file", "event", "link"]
+                    values: ["message", "notification", "file", "event", "link"]
                     required: true
                 }
                 KeelParam {
@@ -185,6 +185,10 @@ Item {
             }
         }
         onInvoked: (args, call) => {
+            if (root.store.storageProtected) {
+                call.fail("Failed", "Stored notes need recovery before tasks can be listed");
+                return;
+            }
             const found = root.store.notes.filter(n => n.task && (args.includeCompleted !== false || !n.task.completed));
             call.reply(Store.sorted(found).slice(0, args.limit || 50).map(root.summary));
         }
@@ -209,13 +213,21 @@ Item {
             }
         ]
         onInvoked: (args, call) => {
+            if (root.store.storageProtected) {
+                call.fail("Failed", "Stored notes need recovery before a task can be changed");
+                return;
+            }
             const note = root.store.notes.find(n => n.id === args.id);
             if (!note || !note.task) {
                 call.fail("InvalidArguments", "There is no task with that id");
                 return;
             }
-            root.store.save(Store.setTaskCompleted(root.store.notes, args.id, args.completed, Date.now()));
-            call.reply({});
+            try {
+                root.store.save(Store.setTaskCompleted(root.store.notes, args.id, args.completed, Date.now()));
+                call.reply({});
+            } catch (error) {
+                call.fail("Failed", error.message);
+            }
         }
     }
 }
