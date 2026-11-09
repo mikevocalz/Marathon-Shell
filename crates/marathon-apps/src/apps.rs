@@ -165,10 +165,14 @@ fn choose(system: App, user: Option<App>, image: Option<&str>) -> App {
 }
 
 /// The app of `app_id`: the OS's, or the user's copy that supersedes it;
-/// the user's for an app the OS doesn't have.
+/// the user's for an app the OS doesn't have. A runner's explicit selection
+/// resolves only that generation, never a catalogue fallback with other code.
 pub fn find(app_id: &str) -> Option<App> {
     if !crate::transaction::valid_id(app_id) {
         return None;
+    }
+    if std::env::var("MARATHON_APP_GENERATION_ID").as_deref() == Ok(app_id) {
+        return user(app_id);
     }
     if paths::system_app(app_id).join("manifest.json").exists() {
         let system = system(app_id).filter(|a| a.id == app_id)?;

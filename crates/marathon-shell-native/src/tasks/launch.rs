@@ -717,10 +717,6 @@ impl Tasks {
                 ),
             );
         }
-        if !self.background_launches.contains(&app.id) {
-            self.as_mut().open(app, false);
-            self.as_mut().show(app, &app.kind, -1);
-        }
         let mut runner = self.runner(&app.id, &app.permissions, false);
         runner.install_root = app.install_root.clone();
         let webengine = sandbox::uses_webengine(&runner);
@@ -745,6 +741,10 @@ impl Tasks {
             };
             env.insert(q("MARATHON_APP_GENERATION_ID"), QVariant::from(&q(&app.id)));
             env.insert(q("MARATHON_APP_GENERATION"), QVariant::from(&q(token)));
+        }
+        if !self.background_launches.contains(&app.id) {
+            self.as_mut().open(app, false);
+            self.as_mut().show(app, &app.kind, -1);
         }
         // A spare can write every app's data: it takes only Marathon's own,
         // and not WebEngine's, the camera's or a terminal's, whose

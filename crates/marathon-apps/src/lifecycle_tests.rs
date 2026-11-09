@@ -107,6 +107,26 @@ fn journey_worker() {
         assert_eq!(fs::read_to_string(app.path.join("main.qml")).unwrap(), "1");
         return;
     }
+    if mode == "signed_snapshot" {
+        let app = apps::find(ID).unwrap();
+        assert_eq!(app.version, "2");
+        assert!(app.is_system);
+        assert!(!app.install_root.as_os_str().is_empty());
+        return;
+    }
+    if mode == "invalid_snapshot" || mode == "catalogue_fallback" {
+        if mode == "invalid_snapshot" {
+            assert!(apps::find(ID).is_none());
+        } else {
+            let app = apps::find(ID).unwrap();
+            assert_eq!(app.version, "1");
+            assert!(app.install_root.as_os_str().is_empty());
+        }
+        let app = apps::scan().into_iter().find(|app| app.id == ID).unwrap();
+        assert_eq!(app.version, "1");
+        assert!(app.install_root.as_os_str().is_empty());
+        return;
+    }
     let fixture = tempfile::tempdir().unwrap();
     let package = fixture.path().join("source");
     source(&package, "1", mode == "keep", &[]);
@@ -288,7 +308,40 @@ fn signed(package: &Path, first: &apps::App) {
     signature::sign(&archive, &secret).unwrap();
     let plan = install::install_package(&archive, &[]).unwrap();
     assert_eq!(plan.signer, signer);
-    assert_eq!(apps::find(ID).unwrap().version, "2");
+    let second = apps::find(ID).unwrap();
+    assert_eq!(second.version, "2");
+    let token = second.install_root.file_name().unwrap();
+    // A launch snapshot stays on its selected code even if the catalogue's
+    // preferred OS version changes before the runner resolves it.
+    source(&paths::system_app(ID), "3", false, &[]);
+    assert_eq!(apps::find(ID).unwrap().version, "3");
+    assert!(child("signed_snapshot")
+        .env("MARATHON_APP_GENERATION_ID", ID)
+        .env("MARATHON_APP_GENERATION", token)
+        .status()
+        .unwrap()
+        .success());
+    source(&paths::system_app(ID), "1", false, &[]);
+    for relative in ["receipt.json", "files/manifest.json"] {
+        let path = second.install_root.join(relative);
+        let saved = path.with_extension("saved");
+        fs::rename(&path, &saved).unwrap();
+        assert_eq!(apps::find(ID).unwrap().version, "1");
+        assert!(child("invalid_snapshot")
+            .env("MARATHON_APP_GENERATION_ID", ID)
+            .env("MARATHON_APP_GENERATION", token)
+            .status()
+            .unwrap()
+            .success());
+        // Another app's explicit token cannot change this catalogue lookup.
+        assert!(child("catalogue_fallback")
+            .env("MARATHON_APP_GENERATION_ID", "com.example.other")
+            .env("MARATHON_APP_GENERATION", token)
+            .status()
+            .unwrap()
+            .success());
+        fs::rename(&saved, &path).unwrap();
+    }
     fs::write(&archive, "tampered package").unwrap();
     assert!(install::install_package(&archive, &[]).is_err());
     assert_eq!(apps::find(ID).unwrap().version, "2");

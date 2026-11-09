@@ -38,6 +38,12 @@ generation. Installed updates of bundled apps also use this cold-launch path;
 they cannot adopt a warm runner containing a different selection. Immutable
 paths keep late QML/import/resource reads on the selected code even after an
 update. The runner token is checked against its own app ID and store namespace.
+An explicit runner selection never falls back to bundled code if its receipt
+or manifest is unavailable. Catalogue scans and lookups for other app IDs keep
+their normal bundled fallback. A bundled system app's signed update retains
+its existing read-only catalogue/store access when its approved permissions
+include `system`. Other installed apps do not receive that shared catalogue/store
+bind.
 
 This aligns storage identity and launch-time confinement. Shell D-Bus permission
 grants are still keyed by app ID; generation-scoped bus identity, permission

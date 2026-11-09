@@ -477,17 +477,17 @@ fn sandbox(runner: &Runner, app: Option<&App<'_>>) -> Vec<String> {
     let socket = runner.wayland_socket.clone();
     let display = var_or("MARATHON_WL_SOCKET_NAME", "marathon-wayland-0");
     args.flags(&["--ro-bind", &socket, &format!("{runtime}/{display}")]);
-    match app {
-        Some(_) if !runner.install_root.as_os_str().is_empty() => {
-            args.bind("--ro-bind", &runner.install_root.to_string_lossy());
-        }
-        Some(app) if !app.has("system") => {}
-        _ => {
-            args.bind("--ro-bind-try", &user_installs().to_string_lossy());
-            let store = format!("{runtime}/marathon-store-state");
+    let bundled = app.is_some_and(|app| {
+        marathon_apps::paths::system_app(&app.id)
+            .join("manifest.json")
+            .is_file()
+    });
+    let store = Path::new(&runtime).join("marathon-store-state");
+    for (kind, path) in install_mounts(runner, bundled, &user_installs(), &store) {
+        if path == store {
             fs::create_dir_all(&store).ok();
-            args.bind("--ro-bind-try", &store);
         }
+        args.bind(kind, &path.to_string_lossy());
     }
     // The home is the sandbox's own (a tmpfs, or a terminal's kept one).
     let mut writable = vec![home.clone(), data, cache, runtime.into()];
@@ -533,6 +533,33 @@ fn sandbox(runner: &Runner, app: Option<&App<'_>>) -> Vec<String> {
         args.flags(&["--setenv", name, &value]);
     }
     args.0
+}
+
+/// Keep the bundled system app's existing catalogue/store visibility when a
+/// signed update supplies its code. Ordinary installed apps remain scoped even
+/// if their manifest asks for `system`; the selected generation binds last.
+fn install_mounts(
+    runner: &Runner,
+    bundled: bool,
+    installs: &Path,
+    store: &Path,
+) -> Vec<(&'static str, PathBuf)> {
+    let installed = !runner.install_root.as_os_str().is_empty();
+    let catalogue = runner.app_id.is_empty()
+        || (runner
+            .permissions
+            .iter()
+            .any(|permission| permission == "system")
+            && (!installed || bundled));
+    let mut mounts = Vec::new();
+    if catalogue {
+        mounts.push(("--ro-bind-try", installs.to_path_buf()));
+        mounts.push(("--ro-bind-try", store.to_path_buf()));
+    }
+    if installed {
+        mounts.push(("--ro-bind", runner.install_root.clone()));
+    }
+    mounts
 }
 
 #[derive(Default)]
@@ -671,6 +698,43 @@ mod tests {
 )]
 mod generation_tests {
     use super::*;
+
+    #[test]
+    fn bundled_system_updates_keep_catalogue_access_without_broadening_user_apps() {
+        let installs = Path::new("/app-store");
+        let state = Path::new("/runtime/marathon-store-state");
+        let root = installs.join(".generations/settings/gen-selected");
+        let mut runner = Runner {
+            app_id: "settings".to_owned(),
+            permissions: vec!["system".to_owned()],
+            install_root: root.clone(),
+            ..Runner::default()
+        };
+        assert_eq!(
+            install_mounts(&runner, true, installs, state),
+            vec![
+                ("--ro-bind-try", installs.to_path_buf()),
+                ("--ro-bind-try", state.to_path_buf()),
+                ("--ro-bind", root.clone()),
+            ]
+        );
+        assert_eq!(
+            install_mounts(&runner, false, installs, state),
+            vec![("--ro-bind", root.clone())]
+        );
+        runner.permissions.clear();
+        assert_eq!(
+            install_mounts(&runner, true, installs, state),
+            vec![("--ro-bind", root)]
+        );
+        assert_eq!(
+            install_mounts(&Runner::default(), false, installs, state),
+            vec![
+                ("--ro-bind-try", installs.to_path_buf()),
+                ("--ro-bind-try", state.to_path_buf()),
+            ]
+        );
+    }
 
     #[test]
     fn metadata_and_environment_follow_the_selected_generation() {
