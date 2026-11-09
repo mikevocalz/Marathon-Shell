@@ -135,13 +135,10 @@ impl Tasks {
             return false;
         };
         runner.wayland_socket = socket;
-        let command = sandbox::argv(&runner, &runner_path(), &policy);
-        let Some((program, args)) = command.split_first() else {
-            return false;
-        };
+        let command = sandbox::command(&runner, &runner_path(), &policy);
         // Shell-only start-up shortcuts (see WaylandCompositor::launchApp).
-        let child = Command::new(program)
-            .args(args)
+        let child = Command::new(&command.program)
+            .args(&command.arguments)
             .env_remove("QT_NO_BUILTIN_SELECTORS")
             .env_remove("GST_REGISTRY_UPDATE")
             .stdin(Stdio::piped())

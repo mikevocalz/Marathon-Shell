@@ -25,8 +25,10 @@
 #include <QVector>
 
 #include <functional>
+#include <optional>
 
 #include "src/wayland/hiddenframethrottle.h"
+#include "src/wayland/processcommand.h"
 
 class SecurityContextManagerV1;
 class FifoManagerV1;
@@ -105,6 +107,8 @@ class WaylandCompositor : public QWaylandCompositor {
 
     Q_INVOKABLE void launchApp(const QString &command, const QVariantMap &env = {},
                                const QString &requestId = {});
+    void             launchRunner(const QString &requestId, const QString &program,
+                                  const QStringList &arguments, const QVariantMap &env);
     Q_INVOKABLE void closeWindow(int surfaceId);
     Q_INVOKABLE void activateSurface(int surfaceId);
     // Takes the keyboard from the app windows, so keys reach the shell and the
@@ -235,9 +239,11 @@ class WaylandCompositor : public QWaylandCompositor {
 
   private:
     static bool filterGlobal(const wl_client *client, const struct wl_global *global, void *data);
-    void        watchTextInputBinds();
-    void        setCompositorRealtimePriority();
-    void        calculateAndSetPhysicalSize();
+    void launchProcess(const QString &command, const QVariantMap &env, const QString &requestId,
+                       const std::optional<marathon::ProcessCommand> &runner);
+    void watchTextInputBinds();
+    void setCompositorRealtimePriority();
+    void calculateAndSetPhysicalSize();
     // DPMS-off/on the primary output (opt-in via MARATHON_DOZE_DPMS).
     // Called from setCompositorActive with render already paused/resumed.
     // Drives the CRTC's ACTIVE property directly via a libdrm atomic

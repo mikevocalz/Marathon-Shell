@@ -91,8 +91,7 @@ fn var(name: &str) -> Option<String> {
     env::var(name).ok().filter(|v| !v.is_empty())
 }
 
-// An empty value would vanish in the command-line round trip and shift
-// every later argument, so empty counts as unset.
+// Empty environment settings use the same defaults as unset settings.
 fn var_or(name: &str, fallback: &str) -> String {
     var(name).unwrap_or_else(|| fallback.to_owned())
 }
@@ -314,22 +313,43 @@ fn media_folders() -> Vec<PathBuf> {
         .collect()
 }
 
-/// The program and its arguments.
-pub(crate) fn argv(runner: &Runner, runner_path: &str, policy: &LaunchPolicy) -> Vec<String> {
+/// Executable and literal arguments, kept separate through QProcess/Command.
+pub(crate) struct RunnerCommand {
+    pub program: String,
+    pub arguments: Vec<String>,
+}
+
+impl RunnerCommand {
+    /// Diagnostic text only. It must never be parsed or executed as a command.
+    pub(crate) fn description(&self) -> String {
+        std::iter::once(&self.program)
+            .chain(&self.arguments)
+            .map(|argument| format!("{argument:?}"))
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+}
+
+pub(crate) fn command(runner: &Runner, runner_path: &str, policy: &LaunchPolicy) -> RunnerCommand {
     let app = app(runner);
     let tail = match &app {
-        Some(app) => vec![
-            runner_path.to_owned(),
-            "--app-id".to_owned(),
-            app.id.clone(),
-        ],
-        None => vec![runner_path.to_owned(), "--pool".to_owned()],
+        Some(app) => vec!["--app-id".to_owned(), app.id.clone()],
+        None => vec!["--pool".to_owned()],
     };
     match policy {
-        LaunchPolicy::Bubblewrap(bwrap) => {
-            [vec![bwrap.clone()], sandbox(runner, app.as_ref()), tail].concat()
-        }
-        LaunchPolicy::DisabledByOverride => tail,
+        LaunchPolicy::Bubblewrap(bwrap) => RunnerCommand {
+            program: bwrap.clone(),
+            arguments: [
+                sandbox(runner, app.as_ref()),
+                vec![runner_path.to_owned()],
+                tail,
+            ]
+            .concat(),
+        },
+        LaunchPolicy::DisabledByOverride => RunnerCommand {
+            program: runner_path.to_owned(),
+            arguments: tail,
+        },
     }
 }
 
@@ -528,25 +548,6 @@ impl Args {
     }
 }
 
-// splitCommand honours double quotes only, and drops an empty argument.
-/// `argv` as one line that `QProcess::splitCommand` gives back whole.
-pub(crate) fn command_line(argv: &[String]) -> String {
-    let quoted: Vec<String> = argv
-        .iter()
-        .cloned()
-        .map(|a| {
-            if a.is_empty() {
-                "\"\"".to_owned()
-            } else if a.contains([' ', '"']) {
-                format!("\"{}\"", a.replace('"', "\\\""))
-            } else {
-                a
-            }
-        })
-        .collect();
-    quoted.join(" ")
-}
-
 #[cfg(test)]
 mod tests {
     use std::error::Error;
@@ -570,9 +571,11 @@ mod tests {
             ..Runner::default()
         };
         let policy = LaunchPolicy::resolve(Some(OsStr::new("1")), None)?;
+        let command = command(&runner, "/test/runner", &policy);
+        assert_eq!(command.program, "/test/runner");
         assert_eq!(
-            argv(&runner, "/test/runner", &policy),
-            ["/test/runner", "--app-id", "org.marathonos.sandbox-test"]
+            command.arguments,
+            ["--app-id", "org.marathonos.sandbox-test"]
         );
         assert_eq!(sandbox_marker(&runner, &policy).as_deref(), Some("0"));
         Ok(())
@@ -629,36 +632,33 @@ mod tests {
             wayland_socket: directory.join("wayland").to_string_lossy().into_owned(),
             ..Runner::default()
         };
-        let command = argv(&runner, "/test/runner", &policy);
-        assert_eq!(
-            command.first().map(String::as_str),
-            bin.join("bwrap").to_str()
-        );
-        assert!(command.ends_with(&[
+        let command = command(&runner, "/test/runner", &policy);
+        assert_eq!(Some(command.program.as_str()), bin.join("bwrap").to_str());
+        assert!(command.arguments.ends_with(&[
             "/test/runner".into(),
             "--app-id".into(),
             runner.app_id.clone()
         ]));
         assert!(command
+            .arguments
             .windows(3)
             .any(|args| args == ["--setenv", "MARATHON_SANDBOXED", "1"]));
-        assert!(command.iter().any(|arg| arg == "--unshare-net"));
+        assert!(command.arguments.iter().any(|arg| arg == "--unshare-net"));
         assert_eq!(sandbox_marker(&runner, &policy).as_deref(), Some("1"));
-        assert!(
-            command_line(&command).starts_with(&format!("\"{}\" ", bin.join("bwrap").display()))
-        );
+        assert!(command
+            .description()
+            .starts_with(&format!("\"{}\" ", bin.join("bwrap").display())));
 
         // Pool construction receives the same resolved confinement policy.
         let spare = Runner {
             app_id: String::new(),
             ..runner
         };
-        let command = argv(&spare, "/test/runner", &policy);
-        assert_eq!(
-            command.first().map(String::as_str),
-            bin.join("bwrap").to_str()
-        );
-        assert!(command.ends_with(&["/test/runner".into(), "--pool".into()]));
+        let command = super::command(&spare, "/test/runner", &policy);
+        assert_eq!(Some(command.program.as_str()), bin.join("bwrap").to_str());
+        assert!(command
+            .arguments
+            .ends_with(&["/test/runner".into(), "--pool".into()]));
         assert_eq!(sandbox_marker(&spare, &policy).as_deref(), Some("1"));
         Ok(())
     }

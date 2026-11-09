@@ -231,6 +231,16 @@ pub mod qobject {
             command: &QString,
             env: &QMap_QString_QVariant,
         );
+        /// Marathon runners bypass desktop Exec parsing and shell interpretation.
+        #[qsignal]
+        #[cxx_name = "spawnRunnerRequested"]
+        fn spawn_runner_requested(
+            self: Pin<&mut Tasks>,
+            request_id: &QString,
+            program: &QString,
+            arguments: &QStringList,
+            env: &QMap_QString_QVariant,
+        );
         #[qsignal]
         #[cxx_name = "closeWindowRequested"]
         fn close_window_requested(self: Pin<&mut Tasks>, surface_id: i32);

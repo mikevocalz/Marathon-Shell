@@ -51,7 +51,7 @@ wrapped:
 
 ## Layer 1: bwrap around Marathon apps
 
-`sandbox::argv` (`crates/marathon-shell-native/src/sandbox.rs`) builds the
+`sandbox::command` (`crates/marathon-shell-native/src/sandbox.rs`) builds the
 sandbox for each launch and for the warm runner pool (`tasks/pool.rs`):
 
 - New user, PID, UTS, IPC and cgroup namespaces, and a network namespace
@@ -103,6 +103,13 @@ and reports `appLaunchFailed`; it clears the app's pending/card state only
 when no other pending process, running process, window or launcher handoff
 owns that state. A process that never started does not receive a synthetic
 process-close event.
+
+Runner launches carry the executable and a literal argument list through
+`spawnRunnerRequested` to QProcess. App IDs, paths, environment values and
+routes are never reparsed as shell commands. Warm spares use the same
+structured command with Rust's process API. Command descriptions are only
+diagnostic text. The compositor's desktop `Exec` compatibility path remains
+separate and still supports the existing native shell commands.
 
 Gaps:
 

@@ -161,6 +161,7 @@ static void connectTasks(Tasks *tasks, WaylandCompositor *wc) {
                      [=](const QString &requestId, const QString &command, const QVariantMap &env) {
                          wc->launchApp(command, env, requestId);
                      });
+    QObject::connect(tasks, &Tasks::spawnRunnerRequested, wc, &WaylandCompositor::launchRunner);
     QObject::connect(tasks, &Tasks::closeWindowRequested, wc, &WaylandCompositor::closeWindow);
     QObject::connect(tasks, &Tasks::sandboxSocketRequested, wc,
                      [=](const QString &appId, const QString &instance) {

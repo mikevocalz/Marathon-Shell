@@ -9,7 +9,7 @@ use std::pin::Pin;
 use std::time::{Duration, Instant};
 
 use cxx_qt::{CxxQtType, Threading};
-use cxx_qt_lib::{QString, QVariant};
+use cxx_qt_lib::{QString, QStringList, QVariant};
 
 use super::{dbus, later, pool, q, Launch, Map, Tasks, TasksRust};
 use crate::apps::{self, App};
@@ -44,10 +44,7 @@ fn take_failed_launch(state: &mut TasksRust, request_id: &str) -> Option<(Launch
         .chain(state.active_by_pid.values())
         .any(|other| other.app_id == launch.app_id)
         && !state.exited_launches.contains_key(&launch.app_id)
-        && !state
-            .windows
-            .get(&launch.app_id)
-            .is_some_and(|windows| !windows.is_empty())
+        && state.windows.get(&launch.app_id).is_none_or(Vec::is_empty)
         && !state
             .tasks
             .iter()
@@ -697,13 +694,17 @@ impl Tasks {
         path.exists().then(|| path.to_string_lossy().into_owned())
     }
 
+    fn reject_launch(mut self: Pin<&mut Self>, app: &App, error: &str) {
+        log::warn("tasks", format_args!("cannot launch {}: {error}", app.id));
+        self.as_mut().rust_mut().launching.remove(&app.id);
+        self.app_launch_failed(&q(&app.id), &q(&app.name), &q(error));
+    }
+
     fn launch_marathon(mut self: Pin<&mut Self>, app: &App, foreground_generation: u64) -> bool {
         let policy = match sandbox::LaunchPolicy::from_environment() {
             Ok(policy) => policy,
             Err(error) => {
-                log::warn("tasks", format_args!("cannot launch {}: {error}", app.id));
-                self.as_mut().rust_mut().launching.remove(&app.id);
-                self.app_launch_failed(&q(&app.id), &q(&app.name), &q(&error.to_string()));
+                self.as_mut().reject_launch(app, &error.to_string());
                 return false;
             }
         };
@@ -781,19 +782,16 @@ impl Tasks {
             if let Some(socket) = self.as_mut().open_sandbox_socket(&app.id, &instance) {
                 runner.wayland_socket = socket;
             } else {
-                log::warn(
-                    "tasks",
-                    format_args!("no sandbox Wayland socket for {}", app.id),
-                );
-                self.as_mut().rust_mut().launching.remove(&app.id);
-                self.app_launch_failed(&q(&app.id), &q(&app.name), &q("No sandbox Wayland socket"));
+                self.as_mut()
+                    .reject_launch(app, "No sandbox Wayland socket");
                 return false;
             }
         }
-        let mut command =
-            sandbox::command_line(&sandbox::argv(&runner, &pool::runner_path(), &policy));
+        let mut command = sandbox::command(&runner, &pool::runner_path(), &policy);
         if let Some((route, params)) = self.as_mut().take_route() {
-            command = format!("{command} --route \"{route}\"");
+            command
+                .arguments
+                .extend(["--route".to_owned(), route.clone()]);
             env.insert(q("MARATHON_APP_ROUTE"), QVariant::from(&q(&route)));
             if !params.is_empty() {
                 env.insert(q("MARATHON_APP_ROUTE_PARAMS"), QVariant::from(&q(&params)));
@@ -804,14 +802,19 @@ impl Tasks {
             name: app.name.clone(),
             icon: app.icon.clone(),
             kind: app.kind.clone(),
-            command: command.clone(),
+            command: command.description(),
             sandbox_instance: instance,
             pid: -1,
             foreground_generation,
         };
         let request_id = self.as_mut().track_launch(launch);
+        let arguments: QStringList = command
+            .arguments
+            .iter()
+            .map(|argument| q(argument))
+            .collect();
         self.as_mut()
-            .spawn_requested(&request_id, &q(&command), &env);
+            .spawn_runner_requested(&request_id, &q(&command.program), &arguments, &env);
         let id = app.id.clone();
         later(self.qt_thread(), LAUNCH_HOLD, move |mut obj| {
             obj.as_mut().rust_mut().launching.remove(&id);

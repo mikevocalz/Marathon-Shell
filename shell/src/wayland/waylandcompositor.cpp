@@ -519,6 +519,20 @@ QQmlListProperty<QObject> WaylandCompositor::surfaces() {
 
 void WaylandCompositor::launchApp(const QString &command, const QVariantMap &extraEnv,
                                   const QString &requestId) {
+    launchProcess(command, extraEnv, requestId, std::nullopt);
+}
+
+void WaylandCompositor::launchRunner(const QString &requestId, const QString &program,
+                                     const QStringList &arguments, const QVariantMap &env) {
+    const marathon::ProcessCommand runner{program, arguments};
+    // This description is only for logs/process bookkeeping, never execution.
+    const QString description = program + QLatin1Char(' ') + arguments.join(QLatin1Char(' '));
+    launchProcess(description, env, requestId, runner);
+}
+
+void WaylandCompositor::launchProcess(const QString &command, const QVariantMap &extraEnv,
+                                      const QString                                 &requestId,
+                                      const std::optional<marathon::ProcessCommand> &runner) {
     if (!command.isEmpty()) {
         qDebug() << "[WaylandCompositor] Launching app:" << command;
         qDebug() << "[WaylandCompositor] Socket name:" << socketName();
@@ -526,19 +540,19 @@ void WaylandCompositor::launchApp(const QString &command, const QVariantMap &ext
     }
 
     QString     actualCommand = command;
-    bool        isFlatpak     = command.startsWith("FLATPAK:");
-    bool        isSnap        = command.startsWith("SNAP:");
+    bool        isFlatpak     = !runner && command.startsWith("FLATPAK:");
+    bool        isSnap        = !runner && command.startsWith("SNAP:");
     QStringList execPartsOverride;
 
     if (isFlatpak) {
         actualCommand = command.mid(8);
-    } else if (command.startsWith("flatpak run")) {
+    } else if (!runner && command.startsWith("flatpak run")) {
         isFlatpak = true;
     }
 
     if (isSnap) {
         actualCommand = command.mid(5);
-    } else if (command.startsWith("snap run")) {
+    } else if (!runner && command.startsWith("snap run")) {
         isSnap = true;
     }
 
@@ -639,7 +653,7 @@ void WaylandCompositor::launchApp(const QString &command, const QVariantMap &ext
         env.remove("QT_WEBENGINE_DISABLE_SANDBOX");
     }
 
-    const bool isRunner = actualCommand.contains("marathon-app-runner");
+    const bool isRunner = runner.has_value() || actualCommand.contains("marathon-app-runner");
 
     qint64     timestamp   = QDateTime::currentMSecsSinceEpoch();
     uint       commandHash = qHash(actualCommand);
@@ -764,8 +778,7 @@ void WaylandCompositor::launchApp(const QString &command, const QVariantMap &ext
     if (!isFlatpak && !isSnap && !extraEnv.contains("QT_MEDIA_BACKEND"))
         env.insert("QT_MEDIA_BACKEND", "ffmpeg");
 
-    if (actualCommand.contains("marathon-app-runner") ||
-        marathon::desktop::is_keel_hosted(actualCommand)) {
+    if (isRunner || marathon::desktop::is_keel_hosted(actualCommand)) {
         env.insert("MARATHON_SHELL_PID", QString::number(QCoreApplication::applicationPid()));
     }
 
@@ -858,16 +871,8 @@ void WaylandCompositor::launchApp(const QString &command, const QVariantMap &ext
         qDebug() << "[WaylandCompositor] Starting process:" << actualCommand;
     }
 
-    const QStringList parts =
-        execPartsOverride.isEmpty() ? QProcess::splitCommand(actualCommand) : execPartsOverride;
-    const bool        hasParts = !parts.isEmpty();
-    const QString     program  = hasParts ? parts.first() : QString();
-    const QStringList args     = hasParts ? parts.mid(1) : QStringList();
-
-    const bool        needsShell = !hasParts || actualCommand.contains('|') ||
-        actualCommand.contains('&') || actualCommand.contains(';') ||
-        actualCommand.contains("&&") || actualCommand.contains("||") ||
-        actualCommand.contains('>') || actualCommand.contains('<');
+    const auto processCommand =
+        runner ? *runner : marathon::ProcessCommand::desktop(actualCommand, execPartsOverride);
 
     connect(process, &QProcess::started, this, [this, requestId, process]() {
         const qint64 pid = process ? process->processId() : -1;
@@ -877,13 +882,7 @@ void WaylandCompositor::launchApp(const QString &command, const QVariantMap &ext
         }
     });
 
-    if (needsShell) {
-        process->start("/bin/sh", {"-c", actualCommand});
-        return;
-    }
-    process->setProgram(program);
-    process->setArguments(args);
-    process->start();
+    processCommand.start(*process);
 }
 
 void WaylandCompositor::closeWindow(int surfaceId) {
