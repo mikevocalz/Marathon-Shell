@@ -306,7 +306,7 @@ TestCase {
         const network = child(info, "permission-network");
         network.clicked(null);
         verify(!network.checked);
-        compare(Permissions.calls, [["weather", "location", true], ["weather", "network", false]]);
+        compare(Permissions.calls, [["weather", "location", true, true], ["weather", "network", false, true]]);
     }
 
     function test_permissionSwitchRevertsOnFailure() {
@@ -315,7 +315,7 @@ TestCase {
         Permissions.fail = true;
         network.clicked(null);
         verify(network.checked);
-        compare(Permissions.calls.length, 1);
+        compare(Permissions.calls, [["weather", "network", false, true]]);
     }
 
     function test_permissionSwitchFollowsShellSignals() {

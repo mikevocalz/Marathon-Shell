@@ -6,13 +6,14 @@ The `native-ui` job in `.github/workflows/ci.yml` now runs a required, bounded
 native gate. It builds the real Keel source pinned by
 `packaging/packages/keel-silica/APKBUILD`, verifies the checked-out commit, builds
 its Silica, Actions, Share and Configuration plugins against the job's Qt, and
-runs these six CTests:
+runs these seven CTests:
 
 | CTest | Required evidence |
 | --- | --- |
 | `NativeUI_Toolkit` | Qt 6 imports and instantiates real Silica and Configuration; imports real Keel.Actions, Sailfish.Share and QtWayland.Compositor |
 | `Qml_apps_notes_tests` | The complete existing Notes/Tasks UI, actions and persistence suite through its original `run.sh` |
-| `Qml_settings_AppPages` | The actual Settings AppPages suite, including the installer change's pending-cleanup retry UI; other Settings pages remain separate |
+| `Qml_settings_AppPages` | The actual Settings AppPages suite, including pending-cleanup retry and explicit persistent permission grants/revocations |
+| `Qml_settings_PermissionPages` | The actual permission-list and per-permission app pages, including the four-argument native permission call contract; platform services remain fixtures |
 | `Qml_shell_PageViewHub` | The actual launcher PageViewHub test, including accepted, partial and failed uninstall outcomes; broader shell UI remains separate |
 | `Lint_QmlValidator` | 12 executable contract tests, using real `qmllint` for QML behavior |
 | `NativeUI_GateContract` | 8 contract tests: real Qt pass/failure/skip/empty execution, missing tooling, required/optional dependency configuration, and the CMake lint target |
@@ -47,7 +48,7 @@ ctest --test-dir build-native-ui -L native-ui-required \
 ```
 
 The reports under `build-native-ui/reports/` are `toolkit.xml`, `notes.xml`,
-`settings-apppages.xml`, and `pageviewhub.xml`. The
+`settings-apppages.xml`, `settings-permissionpages.xml`, and `pageviewhub.xml`. The
 container workflow is reproducible with the invocation in `ci.yml` and
 `scripts/ci/native-ui.sh`. The native CI container installs Alpine
 `qt6-qtwayland-dev` for the real QtWayland.Compositor module. If that matching

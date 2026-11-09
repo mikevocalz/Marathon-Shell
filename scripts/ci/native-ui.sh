@@ -1,5 +1,5 @@
 #!/bin/sh
-# Required Notes, Settings AppPages and shell PageViewHub UI with the APK Keel pin.
+# Required Notes, Settings app/permission pages and shell PageViewHub UI with the APK Keel pin.
 # Reproduce with the alpine:edge container invocation in .github/workflows/ci.yml.
 set -eu
 

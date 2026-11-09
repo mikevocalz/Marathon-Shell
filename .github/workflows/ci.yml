@@ -19,7 +19,7 @@ concurrency:
 # marathon-shell apk is built on (release.yml), with Qt 6.11.
 #
 # The separate native-ui job builds the pinned real Keel plugins and requires
-# complete Notes/Tasks, Settings AppPages and shell PageViewHub coverage. Broader
+# complete Notes/Tasks, Settings AppPages/PermissionPages and shell PageViewHub coverage. Broader
 # suites, compositor server operation, and device mlite/dconf remain outside
 # that focused gate. Alpine also has no busctl,
 # so Shell_KeelActivation is not registered in the shell build job.

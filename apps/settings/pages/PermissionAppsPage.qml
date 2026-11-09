@@ -44,7 +44,7 @@ Page {
             AndroidApps.setPermission(row.pkg, permission, !row.granted);
             return;
         }
-        Permissions.setPermission(row.id, permission, !row.granted);
+        Permissions.setPermission(row.id, permission, !row.granted, true);
         revision++;
     }
 

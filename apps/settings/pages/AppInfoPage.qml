@@ -187,7 +187,7 @@ Page {
                     enabled: !page.app.isProtected
                     Component.onCompleted: refresh()
                     onClicked: {
-                        if (Permissions.setPermission(page.appId, modelData, !checked))
+                        if (Permissions.setPermission(page.appId, modelData, !checked, true))
                             checked = !checked;
                     }
 
