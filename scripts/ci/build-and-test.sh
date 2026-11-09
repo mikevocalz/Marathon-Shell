@@ -16,7 +16,7 @@ apk add --no-cache \
 	hunspell-dev hunspell-en-us pulseaudio-dev pipewire-dev wayland-dev wayland-protocols \
 	mesa-dev libdrm-dev dbus dbus-dev eudev-dev libinput-dev linux-pam-dev sqlite-dev \
 	rpm findutils coreutils cryptsetup pipewire wireplumber pipewire-tools zstd e2fsprogs \
-	e2fsprogs-extra dosfstools mtools sfdisk blkid android-tools
+	e2fsprogs-extra dosfstools mtools sfdisk blkid android-tools gnupg erofs-utils
 
 # Tests that check file permissions pass trivially as root, so build and test
 # as an ordinary user from a private copy of the tree.
