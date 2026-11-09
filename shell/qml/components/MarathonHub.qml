@@ -52,15 +52,16 @@ Rectangle {
         //: Qt date format pattern: keep the letters d, M, y; reorder or add separators only. Day and month for notification group headings, e.g. 26 October
         return Qt.formatDate(date, qsTr("d MMMM"));
     }
-    readonly property bool overlayOpen: weatherSheet.open
+    readonly property bool overlayOpen: weatherSheet.open || taskCapture.open
 
     // Back: true when it closed the weather.
     function closeOverlay() {
-        return weatherSheet.back();
+        return taskCapture.back() || weatherSheet.back();
     }
 
     function dismissOverlay() {
         weatherSheet.open = false;
+        taskCapture.open = false;
     }
 
     function refreshAgenda() {
@@ -277,6 +278,13 @@ Rectangle {
                 }
             }
 
+            Silica.Button {
+                objectName: "hubResumeTaskCapture"
+                visible: taskCapture.hasDraft
+                text: taskCapture.hasTask ? qsTr("Task in Notes") : qsTr("Resume task capture")
+                onClicked: taskCapture.open = true
+            }
+
             Repeater {
                 objectName: "hubAgendaEntries"
                 model: hub.agenda
@@ -429,11 +437,13 @@ Rectangle {
             snippet: body
             ongoing: !!model.ongoing
             progress: model.ongoing ? model.progress : -1
+            canCreateTask: true
 
             onActivated: hub.openNotification(model.id, appId)
             onDismissed: NotificationService.dismissNotification(model.id)
             onActionInvoked: key => NotificationService.triggerAction(model.id, key)
             onReplied: text => NotificationService.reply(model.id, text)
+            onCreateTaskRequested: taskCapture.capture(model.id, timestamp, title, body, hub.sourceLabel(appId, ""))
         }
     }
 
@@ -478,6 +488,14 @@ Rectangle {
         lightAmbience: ambience.light
         width: parent.width
         height: parent.height
+    }
+
+    HubTaskCapture {
+        id: taskCapture
+        objectName: "hubTaskCapture"
+        anchors.fill: parent
+        wallpaper: ambience.wallpaper
+        lightAmbience: ambience.light
     }
 
     // ── Helpers ─────────────────────────────────────────────

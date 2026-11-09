@@ -1,0 +1,19 @@
+[package]
+name = "marathon-notes-wire"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# Compile the exact production transport/model without the whole compositor.
+# The lock is checked in; versions match Marathon's primary Rust workspace.
+[dependencies]
+async-io = "=2.6.0"
+marathon-rt = { path = "../../../crates/marathon-rt" }
+serde_json = "=1.0.154"
+zbus = { version = "=6.1.0", default-features = false, features = ["default-rt", "proxy", "service"] }
+
+[patch.crates-io]
+blocking = { path = "../../../crates/vendor/blocking" }
+
+[workspace]

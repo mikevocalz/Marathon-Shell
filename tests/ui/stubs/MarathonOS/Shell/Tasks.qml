@@ -5,6 +5,11 @@ ListModel {
     readonly property int taskCount: count
     property bool androidStarting: false
     property var secureApps: []
+    property var launched: []
+    function launchApp(appId) {
+        launched = launched.concat([appId]);
+        return true;
+    }
     signal appRegistered(string appId)
     signal appUnregistered(string appId)
     signal appCommand(string appId, string command)

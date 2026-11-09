@@ -55,6 +55,7 @@
 #include "marathon-shell-native/src/pressure.cxxqt.h"
 #include "marathon-shell-native/src/storage.cxxqt.h"
 #include "marathon-shell-native/src/notifications.cxxqt.h"
+#include "marathon-shell-native/src/notes_task.cxxqt.h"
 #include "marathon-shell-native/src/push.cxxqt.h"
 #include "marathon-shell-native/src/timezone.cxxqt.h"
 #include "marathon-shell-native/src/network.cxxqt.h"
@@ -1256,6 +1257,10 @@ int main(int argc, char *argv[]) {
     weather->setParent(&app);
     qmlRegisterSingletonInstance<marathon::WeatherClient>("MarathonOS.Shell", 1, 0, "WeatherClient",
                                                           weather);
+    // One capture shared by home Hub and Peek, independent of recyclable pages.
+    auto *notesTasks = new marathon::NotesTaskClient(&app);
+    qmlRegisterSingletonInstance<marathon::NotesTaskClient>("MarathonOS.Shell", 1, 0,
+                                                          "NotesTaskClient", notesTasks);
 
     createObject<CursorManager>(ctx, "CursorManager", &app);
     // Started at boot: Plymouth's last frame is still on screen, and the

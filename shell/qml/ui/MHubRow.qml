@@ -20,6 +20,7 @@ FocusScope {
     property bool glyphReplacesMonogram: true
     property var actions: []
     property bool actionIcons: false
+    property bool canCreateTask: false
     // Only a sender that advertised inline-reply can receive the text. The
     // model's actions are a sequence, not a JS array.
     readonly property bool canReply: {
@@ -52,6 +53,7 @@ FocusScope {
     signal actionInvoked(string key)
     signal replied(string text)
     signal dismissed
+    signal createTaskRequested
 
     function reset() {
         dismissAnimation.stop();
@@ -295,6 +297,17 @@ FocusScope {
                     row.replying = true;
                     replyField.forceActiveFocus();
                 }
+            }
+
+            // A Hub operation, separate from the provider's advertised actions.
+            Silica.Button {
+                objectName: "hubRowCreateTask"
+                anchors.right: parent.right
+                text: qsTr("Create task")
+                preferredWidth: Silica.Theme.buttonWidthExtraSmall
+                width: Math.min(preferredWidth, parent.width)
+                visible: row.canCreateTask && !row.replying
+                onClicked: row.createTaskRequested()
             }
 
             Row {

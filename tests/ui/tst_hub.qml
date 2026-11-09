@@ -37,6 +37,11 @@ TestCase {
         signalName: "closed"
     }
 
+    Component {
+        id: additionalHub
+        MarathonHub { isInPeekMode: true }
+    }
+
     function initTestCase() {
         // Construct the real ambience before Theme attaches to it, so native
         // text-size changes reach the labels instead of testing fallback sizes.
@@ -51,6 +56,10 @@ TestCase {
     }
 
     function init() {
+        const capture = findChild(hub, "hubTaskCapture");
+        NotesTaskClient.resetFixture();
+        capture.clearDraft(false);
+        Tasks.launched = [];
         hubWindow.width = 540;
         SettingsManagerCpp.timeFormat = "12h";
         SettingsManagerCpp.store = {};
@@ -71,6 +80,20 @@ TestCase {
         hub.filterApp = "";
         hub.unreadOnly = false;
         hub.refreshSources();
+    }
+
+    function cleanup() {
+        // Some provider-action tests below deliberately give a delegate a QML
+        // sequence. Restore its model binding before the reusable delegate can
+        // represent a different notification in the next test.
+        const list = findChild(hub, "hubList");
+        for (let i = 0; i < list.count; ++i) {
+            const item = list.itemAtIndex(i);
+            if (item) {
+                item.actions = Qt.binding(() => item.model.actions || []);
+                item.actionIcons = Qt.binding(() => !!item.model.actionIcons);
+            }
+        }
     }
 
     // Every role the delegate reads, since a ListView sees only the roles
@@ -405,6 +428,255 @@ TestCase {
         waitForPolish(list);
         waitForRendering(hub);
         return list.itemAtIndex(i);
+    }
+
+    function startCapture() {
+        addNotification(42, "mail");
+        tryVerify(() => row(0));
+        const button = findChild(row(0), "hubRowCreateTask");
+        verify(button.visible);
+        mouseClick(button);
+        const sheet = findChild(hub, "hubTaskCapture");
+        tryCompare(sheet, "open", true);
+        return sheet;
+    }
+
+    function clickCapture(name) {
+        const sheet = findChild(hub, "hubTaskCapture");
+        const flick = findChild(sheet, "hubTaskCaptureFlick");
+        const button = findChild(sheet, name);
+        verify(button !== null);
+        waitForPolish(flick);
+        flick.contentY = Math.max(0, Math.min(flick.contentHeight - flick.height, button.mapToItem(flick.contentItem, 0, 0).y - flick.height / 2));
+        waitForRendering(sheet);
+        mouseClick(button);
+    }
+
+    function test_captureReviewsSnapshotWithoutChangingProviderState() {
+        const sheet = startCapture();
+        const client = NotesTaskClient;
+        compare(sheet.draftTitle, "Ada");
+        compare(sheet.draftBody, "Hi");
+        compare(NotificationService.clicked, []);
+        compare(NotificationService.read, []);
+        compare(NotificationService.dismissed, []);
+        compare(NotificationService.triggered, []);
+        compare(client.created.length, 0);
+        const title = findChild(sheet, "hubTaskCaptureTitle");
+        const body = findChild(sheet, "hubTaskCaptureBody");
+        hubWindow.requestActivate();
+        tryVerify(() => hubWindow.active);
+        clickCapture("hubTaskCaptureTitle");
+        tryVerify(() => title.activeFocus);
+        keyClick(Qt.Key_A, Qt.ControlModifier);
+        for (const letter of "Send the revised draft")
+            keyClick(letter);
+        clickCapture("hubTaskCaptureBody");
+        tryVerify(() => body.activeFocus);
+        keyClick(Qt.Key_A, Qt.ControlModifier);
+        for (const letter of "Check the figures first")
+            keyClick(letter);
+        NotificationService.setProperty(0, "title", "Replacement");
+        NotificationService.setProperty(0, "body", "Different content");
+        NotificationService.remove(0);
+        compare(sheet.draftTitle, "Send the revised draft");
+        compare(sheet.draftBody, "Check the figures first");
+        clickCapture("hubTaskCaptureCreate");
+        compare(client.created.length, 1);
+        compare(client.created[0].title, "Send the revised draft");
+        compare(client.created[0].body, "Check the figures first");
+        verify(client.created[0].sourceId.indexOf("notification:42:") === 0);
+        compare(client.created[0].sourceLabel, "Mail notification");
+        clickCapture("hubTaskCaptureCreate");
+        compare(client.created.length, 1);
+    }
+
+    function test_captureCloseRetainsPendingThenOpensExactTask() {
+        const sheet = startCapture();
+        const client = NotesTaskClient;
+        clickCapture("hubTaskCaptureCreate");
+        client.snapshot = {state: "creating"};
+        verify(hub.closeOverlay());
+        compare(sheet.open, false);
+        compare(sheet.hasDraft, true);
+        client.snapshot = {state: "created", taskId: 812};
+        const resume = findChild(hub, "hubResumeTaskCapture");
+        waitForPolish(findChild(hub, "hubList"));
+        mouseClick(resume);
+        tryCompare(sheet, "open", true);
+        clickCapture("hubTaskCaptureOpen");
+        compare(client.opened, [812]);
+        client.snapshot = {state: "open-failed", taskId: 812, error: "transport"};
+        clickCapture("hubTaskCaptureOpen");
+        compare(client.opened, [812, 812]);
+        compare(client.created.length, 1);
+        compare(NotificationService.clicked, []);
+        compare(NotificationService.read, []);
+    }
+
+    function test_captureUnknownCannotRetryAndNeedsExplicitAcknowledgement() {
+        const sheet = startCapture();
+        const client = NotesTaskClient;
+        clickCapture("hubTaskCaptureCreate");
+        client.snapshot = {state: "unknown", error: "timeout"};
+        compare(sheet.canCreate, false);
+        verify(!findChild(sheet, "hubTaskCaptureCreate").visible);
+        sheet.submit();
+        compare(client.created.length, 1);
+        verify(hub.closeOverlay());
+        sheet.capture(99, 9999, "Another", "Other body", "Chat");
+        compare(sheet.draftTitle, "Ada");
+        compare(sheet.anotherDraftRequested, true);
+        clickCapture("hubTaskCaptureInspect");
+        compare(Tasks.launched, ["notes"]);
+        const acknowledge = findChild(sheet, "hubTaskCaptureAcknowledge");
+        verify(!acknowledge.enabled);
+        clickCapture("hubTaskCaptureCheckedNotes");
+        tryCompare(acknowledge, "enabled", true);
+        clickCapture("hubTaskCaptureAcknowledge");
+        compare(sheet.hasDraft, false);
+        compare(client.created.length, 1);
+    }
+
+    function test_capturePreparationFailureAndCancellationKeepEdits() {
+        const sheet = startCapture();
+        const client = NotesTaskClient;
+        client.updateDraft({title: "Review notes", body: sheet.draftBody});
+        clickCapture("hubTaskCaptureCreate");
+        client.snapshot = {state: "rejected", error: "unavailable"};
+        compare(sheet.draftTitle, "Review notes");
+        compare(sheet.canCreate, true);
+        clickCapture("hubTaskCaptureCreate");
+        clickCapture("hubTaskCaptureCancelPreparation");
+        compare(sheet.state, "ready");
+        compare(sheet.draftTitle, "Review notes");
+        clickCapture("hubTaskCaptureCreate");
+        client.dispatchWon = true;
+        clickCapture("hubTaskCaptureCancelPreparation");
+        compare(sheet.state, "preparing");
+        client.snapshot = {state: "creating"};
+        verify(!findChild(sheet, "hubTaskCaptureCancelPreparation").visible);
+        compare(client.created.length, 3);
+    }
+
+    function test_captureNarrowLargeTextKeepsControlsWithinPage() {
+        hubWindow.width = 320;
+        Keel.Ambience.applyForwarded("/desktop/sailfish/silica/font_size_multiplier=1.5");
+        const sheet = startCapture();
+        for (const name of ["hubTaskCaptureTitle", "hubTaskCaptureBody", "hubTaskCaptureCreate", "hubTaskCaptureStatus"]) {
+            const control = findChild(sheet, name);
+            const bounds = control.mapToItem(sheet, 0, 0, control.width, control.height);
+            verify(bounds.x >= 0 && bounds.x + bounds.width <= sheet.width + 1, name + " must stay within the narrow page");
+        }
+    }
+
+    function test_captureSharedAcrossPeekAndRecycledHub() {
+        let sheet = startCapture();
+        const client = NotesTaskClient;
+        client.updateDraft({title: "Retained edits", body: "Snapshot survives recycling"});
+        const originalSource = sheet.sourceId;
+        const peek = createTemporaryObject(additionalHub, hubWindow.contentItem, {
+            width: hubWindow.width, height: hubWindow.height, visible: false
+        });
+        verify(peek !== null);
+        const peekSheet = findChild(peek, "hubTaskCapture");
+        compare(peekSheet.draftTitle, "Retained edits");
+        peekSheet.capture(999, 111, "Another notification", "Other content", "Chat");
+        compare(peekSheet.sourceId, originalSource);
+        compare(peekSheet.draftTitle, "Retained edits");
+        compare(peekSheet.anotherDraftRequested, true);
+        peekSheet.open = false;
+
+        clickCapture("hubTaskCaptureCreate");
+        client.snapshot = {state: "creating"};
+        hubLoader.active = false;
+        tryCompare(hubLoader, "item", null);
+        compare(client.draft.title, "Retained edits");
+        compare(peekSheet.state, "creating");
+        client.snapshot = {state: "created", taskId: 351};
+        compare(peekSheet.hasTask, true);
+        hubLoader.active = true;
+        tryVerify(() => hub !== null);
+        sheet = findChild(hub, "hubTaskCapture");
+        compare(sheet.sourceId, originalSource);
+        compare(sheet.draftBody, "Snapshot survives recycling");
+        compare(sheet.state, "created");
+        sheet.open = true;
+        clickCapture("hubTaskCaptureOpen");
+        compare(client.opened, [351]);
+        compare(client.created.length, 1);
+        client.snapshot = {state: "opened", taskId: 351};
+    }
+
+    function test_captureUnknownSurvivesEveryViewBeingDestroyed() {
+        let sheet = startCapture();
+        const client = NotesTaskClient;
+        clickCapture("hubTaskCaptureCreate");
+        client.snapshot = {state: "unknown", error: "timeout"};
+        const source = sheet.sourceId;
+        hubLoader.active = false;
+        tryCompare(hubLoader, "item", null);
+        verify(!client.reset());
+        hubLoader.active = true;
+        tryVerify(() => hub !== null);
+        sheet = findChild(hub, "hubTaskCapture");
+        sheet.capture(333, 444, "New notification", "Never replaces uncertainty", "Chat");
+        compare(sheet.sourceId, source);
+        compare(sheet.state, "unknown");
+        compare(sheet.canCreate, false);
+        sheet.submit();
+        compare(client.created.length, 1);
+    }
+
+    function test_captureActiveEditorDoesNotReapplyPublishedDraft() {
+        const sheet = startCapture();
+        const client = NotesTaskClient;
+        hubWindow.requestActivate();
+        tryVerify(() => hubWindow.active);
+        clickCapture("hubTaskCaptureTitle");
+        const title = findChild(sheet, "hubTaskCaptureTitle");
+        tryVerify(() => title.activeFocus);
+        keyClick(Qt.Key_End);
+        keyClick("!");
+        keyClick(Qt.Key_Left);
+        const position = title.cursorPosition;
+        // A source publication while the native editor is active must not set
+        // its text/selection again. Real IME preedit remains a device gate.
+        client.updateDraft({title: "Published elsewhere", body: sheet.draftBody});
+        compare(title.text, "Ada!");
+        compare(title.cursorPosition, position);
+        keyClick("x");
+        compare(client.draft.title, "Adax!");
+        clickCapture("hubTaskCaptureCreate");
+        compare(client.created[0].title, "Adax!");
+    }
+
+    function test_captureAcknowledgementResetsAcrossViewsAndFlows() {
+        let sheet = startCapture();
+        const client = NotesTaskClient;
+        const peek = createTemporaryObject(additionalHub, hubWindow.contentItem, {
+            width: hubWindow.width, height: hubWindow.height, visible: false
+        });
+        verify(peek !== null);
+        const other = findChild(peek, "hubTaskCapture");
+        clickCapture("hubTaskCaptureCreate");
+        client.snapshot = {state: "unknown", error: "timeout"};
+        clickCapture("hubTaskCaptureCheckedNotes");
+        compare(sheet.checkedNotes, true);
+        sheet.confirmingDiscard = true;
+        sheet.anotherDraftRequested = true;
+        sheet.notesLaunchRejected = true;
+        other.clearDraft(true);
+        compare(sheet.checkedNotes, false);
+        compare(sheet.confirmingDiscard, false);
+        compare(sheet.anotherDraftRequested, false);
+        compare(sheet.notesLaunchRejected, false);
+        other.capture(98, 999, "Another task", "A different flow", "Chat");
+        client.createTask();
+        client.snapshot = {state: "unknown", error: "timeout"};
+        sheet.open = true;
+        verify(!findChild(sheet, "hubTaskCaptureAcknowledge").enabled);
+        compare(sheet.draftTitle, "Another task");
     }
 
     // clickNotification opens the app; the Hub must not too.

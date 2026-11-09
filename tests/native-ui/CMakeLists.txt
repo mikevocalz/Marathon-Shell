@@ -13,6 +13,9 @@ set(MARATHON_SOURCE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 find_package(Python3 COMPONENTS Interpreter QUIET)
 set(KEEL_QML "$ENV{KEEL_QML}" CACHE PATH "Real Keel build/install QML directory")
 set(QMLTESTRUNNER "$ENV{QMLTESTRUNNER}" CACHE FILEPATH "Qt 6 qmltestrunner")
+set(MARATHON_NOTES_WIRE_CLIENT "$ENV{MARATHON_NOTES_WIRE_CLIENT}" CACHE FILEPATH
+    "Locked production Notes transport integration client")
+find_program(_native_dbus_run dbus-run-session)
 if(NOT QMLTESTRUNNER)
     set(_qt_bins)
     if(TARGET Qt6::qmake)
@@ -46,6 +49,12 @@ endif()
 if(NOT QMLTESTRUNNER OR NOT EXISTS "${QMLTESTRUNNER}")
     list(APPEND _missing "Qt 6 qmltestrunner")
 endif()
+if(NOT MARATHON_NOTES_WIRE_CLIENT OR NOT EXISTS "${MARATHON_NOTES_WIRE_CLIENT}")
+    list(APPEND _missing "Hub/Notes wire client (build tests/native-ui/notes-wire and set MARATHON_NOTES_WIRE_CLIENT)")
+endif()
+if(NOT _native_dbus_run)
+    list(APPEND _missing "dbus-run-session for the required private Notes wire test")
+endif()
 foreach(module Keel Keel/Actions Sailfish/Silica Sailfish/Share Nemo/Configuration)
     if(NOT KEEL_QML OR NOT EXISTS "${KEEL_QML}/${module}/qmldir")
         list(APPEND _missing "${module}")
@@ -72,6 +81,17 @@ else()
     set_tests_properties(Qml_apps_notes_tests PROPERTIES LABELS "native-ui-required"
         FIXTURES_REQUIRED NativeKeel TIMEOUT 180
         ENVIRONMENT "KEEL_QML=${KEEL_QML};QMLTESTRUNNER=${QMLTESTRUNNER}")
+    # Production Rust transport, actual Notes app/schema/actions/store/editor.
+    # The conductor owns a private bus and isolated Configuration state; a
+    # small Navigation1 admission fixture cannot claim real cgroup thaw.
+    add_test(NAME NativeUI_NotesWire COMMAND "${Python3_EXECUTABLE}"
+        "${MARATHON_SOURCE_ROOT}/scripts/ci/run-notes-wire.py"
+        --client "${MARATHON_NOTES_WIRE_CLIENT}" --runner "${QMLTESTRUNNER}"
+        --keel "${KEEL_QML}" --root "${MARATHON_SOURCE_ROOT}"
+        --report "${CMAKE_CURRENT_BINARY_DIR}/reports/notes-wire.xml"
+        -input "${CMAKE_CURRENT_SOURCE_DIR}/tst_noteswire.qml")
+    set_tests_properties(NativeUI_NotesWire PROPERTIES LABELS "native-ui-required"
+        FIXTURES_REQUIRED NativeKeel TIMEOUT 180)
     # The changed uninstall/cleanup UI lives in Settings AppPages. Keep this
     # input explicit: it does not claim the rest of Settings is qualified.
     add_test(NAME Qml_settings_AppPages COMMAND "${Python3_EXECUTABLE}"
@@ -134,7 +154,7 @@ else()
         -input "${MARATHON_SOURCE_ROOT}/tests/ui/tst_taskswitcher.qml")
     set_tests_properties(Qml_shell_TaskSwitcher PROPERTIES LABELS "native-ui-required"
         FIXTURES_REQUIRED NativeKeel TIMEOUT 180)
-    message(STATUS "Required native UI scope: toolkit + complete Notes + Settings AppPages/PermissionPages + PageViewHub + Hub + overview geometry/task switcher; broader suites remain separate")
+    message(STATUS "Required native UI scope: toolkit + complete Notes + real Hub/Notes wire + Settings AppPages/PermissionPages + PageViewHub + Hub + overview geometry/task switcher; broader suites remain separate")
 endif()
 
 if(Python3_Interpreter_FOUND)

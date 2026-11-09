@@ -66,9 +66,15 @@ for tool in "$QMLTESTRUNNER" "$QMLLINT"; do
 done
 export KEEL_QML="$PWD/build-keel/qml"
 export QT_QPA_PLATFORM=offscreen
+# Compile the exact production Rust capture transport with its checked-in
+# lock. This small client needs no compositor or platform-native build.
+cargo build --manifest-path tests/native-ui/notes-wire/Cargo.toml --locked \
+    --target-dir build-native-ui/notes-wire-target
+export MARATHON_NOTES_WIRE_CLIENT="$PWD/build-native-ui/notes-wire-target/debug/marathon-notes-wire"
 cmake -S tests/native-ui -B build-native-ui -G Ninja \
     -DMARATHON_REQUIRE_NATIVE_UI_TESTS=ON \
-    -DKEEL_QML="$KEEL_QML" -DQMLTESTRUNNER="$QMLTESTRUNNER"
+    -DKEEL_QML="$KEEL_QML" -DQMLTESTRUNNER="$QMLTESTRUNNER" \
+    -DMARATHON_NOTES_WIRE_CLIENT="$MARATHON_NOTES_WIRE_CLIENT"
 # Qt Quick tests emit JUnit reports checked for real cases, skips, and failures.
 # CTest also fails if the required label ever selects no tests.
 dbus-run-session -- ctest --test-dir build-native-ui -L native-ui-required \

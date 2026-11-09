@@ -114,6 +114,7 @@ set(QML_FILES
     qml/components/TaskPageIndicator.qml
     qml/components/MarathonPeek.qml
     qml/components/MarathonHub.qml
+    qml/components/HubTaskCapture.qml
     qml/components/HubWeather.qml
     qml/components/WeatherHourlyChart.qml
     qml/components/WeatherSheet.qml
