@@ -15,15 +15,35 @@ Page {
     property string focusAppId
     property var pendingUninstalls: []
     property string cleanupError
+    property bool cleanupLoading
+    property var uninstallCapabilities: ({})
+    property bool capabilitiesAvailable
+    property bool capabilitiesLoading
+    property string capabilityError
+
+    function readCleanup() {
+        const result = AppInstaller.pendingUninstalls();
+        cleanupLoading = result.loading;
+        pendingUninstalls = result.items;
+        cleanupError = result.error;
+    }
 
     function refreshCleanup() {
-        const result = AppInstaller.pendingUninstalls();
-        if (result.available) {
-            pendingUninstalls = result.items;
-            cleanupError = "";
-        } else {
-            cleanupError = result.error;
-        }
+        AppInstaller.refreshPendingUninstalls();
+        readCleanup();
+    }
+
+    function readCapabilities() {
+        const result = AppInstaller.uninstallCapabilities();
+        uninstallCapabilities = result.items;
+        capabilitiesAvailable = result.available;
+        capabilitiesLoading = result.loading;
+        capabilityError = result.error;
+    }
+
+    function refreshCapabilities() {
+        AppInstaller.refreshUninstallCapabilities(Apps.getAllAppIds());
+        readCapabilities();
     }
 
     function showApp(appId) {
@@ -33,8 +53,10 @@ Page {
     }
 
     onStatusChanged: {
-        if (status === PageStatus.Active)
+        if (status === PageStatus.Active) {
             refreshCleanup();
+            refreshCapabilities();
+        }
         if (status === PageStatus.Active && focusAppId !== "") {
             const id = focusAppId;
             focusAppId = "";
@@ -70,7 +92,23 @@ Page {
     }
 
     Connections {
+        target: Apps
+
+        function onCountChanged() {
+            if (page.status === PageStatus.Active)
+                page.refreshCapabilities();
+        }
+    }
+
+    Connections {
         target: AppInstaller
+
+        function onPendingUninstallsChanged() {
+            page.readCleanup();
+        }
+        function onUninstallCapabilitiesChanged() {
+            page.readCapabilities();
+        }
 
         function onUninstallComplete(appId) {
             page.refreshCleanup();
@@ -92,9 +130,27 @@ Page {
         objectName: "appList"
         anchors.fill: parent
         model: Apps
-        header: PageHeader {
-            title: qsTr("Installed apps")
-            description: qsTr("%n apps", "", view.count + AndroidApps.apps.length)
+        header: Column {
+            width: view.width
+
+            PageHeader {
+                title: qsTr("Installed apps")
+                description: qsTr("%n apps", "", view.count + AndroidApps.apps.length)
+            }
+            Label {
+                x: Theme.horizontalPageMargin
+                width: parent.width - 2 * x
+                text: page.capabilityError
+                visible: text !== ""
+                wrapMode: Text.Wrap
+            }
+            Button {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: qsTr("Reload app capabilities")
+                visible: page.capabilityError !== ""
+                enabled: !page.capabilitiesLoading
+                onClicked: page.refreshCapabilities()
+            }
         }
 
         delegate: AppRow {
@@ -105,7 +161,7 @@ Page {
             icon: model.icon || ""
             subtitle: [model.version ? qsTr("Version %1").arg(model.version) : "", model.isProtected ? qsTr("System app") : ""].filter(t => t !== "").join(" · ")
             Accessible.name: model.name + (model.isProtected ? ", " + qsTr("system app") : "")
-            canUninstall: AppInstaller.canUninstall(model.id)
+            canUninstall: page.capabilitiesAvailable && page.uninstallCapabilities[model.id] === true
             onUninstallRequested: page.uninstall(model.id, model.name)
             onClicked: page.showApp(model.id)
         }
@@ -149,7 +205,15 @@ Page {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: qsTr("Reload cleanup status")
                 visible: page.cleanupError !== ""
+                enabled: !page.cleanupLoading
                 onClicked: page.refreshCleanup()
+            }
+
+            BusyIndicator {
+                anchors.horizontalCenter: parent.horizontalCenter
+                running: page.cleanupLoading && page.status === PageStatus.Active
+                visible: running
+                size: BusyIndicatorSize.Small
             }
 
             Repeater {
@@ -172,6 +236,7 @@ Page {
                         objectName: "retryCleanup-" + pendingRow.modelData.id
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: qsTr("Retry cleanup")
+                        enabled: !page.cleanupLoading
                         onClicked: page.uninstall(pendingRow.modelData.id, pendingRow.modelData.id)
                     }
                 }

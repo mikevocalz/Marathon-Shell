@@ -112,6 +112,123 @@ TestCase {
         compare(s.page.cleanupError, "");
     }
 
+    function test_cleanupLoadsWithoutBlockingThePageAndKeepsRowsOnFailure() {
+        AppInstaller.deferCleanup = true;
+        const s = open("appmanager");
+        verify(s.page.cleanupLoading);
+        compare(child(s.page, "appList").count, 3);
+        compare(child(s.page, "pendingCleanup").count, 0);
+        AppInstaller.pending = [
+            {
+                id: "removed.notes",
+                detail: "Restart before cleanup"
+            }
+        ];
+        AppInstaller.completeCleanup();
+        verify(!s.page.cleanupLoading);
+        compare(child(s.page, "pendingCleanup").count, 1);
+        s.page.refreshCleanup();
+        verify(s.page.cleanupLoading);
+        compare(child(s.page, "pendingCleanup").count, 1);
+        AppInstaller.cleanupAvailable = false;
+        AppInstaller.completeCleanup();
+        verify(!s.page.cleanupLoading);
+        verify(s.page.cleanupError !== "");
+        compare(child(s.page, "pendingCleanup").count, 1);
+    }
+
+    function test_cleanupChangeDuringLoadWaitsForTheCurrentSnapshot() {
+        AppInstaller.deferCleanup = true;
+        const s = open("appmanager");
+        AppInstaller.pending = [
+            {
+                id: "old",
+                detail: "Obsolete"
+            }
+        ];
+        AppInstaller.uninstallComplete("notes");
+        AppInstaller.completeCleanup();
+        verify(s.page.cleanupLoading);
+        compare(child(s.page, "pendingCleanup").count, 0);
+        compare(AppInstaller.cleanupRequests, 2);
+        AppInstaller.pending = [
+            {
+                id: "new",
+                detail: "Current"
+            }
+        ];
+        AppInstaller.completeCleanup();
+        verify(!s.page.cleanupLoading);
+        compare(s.page.pendingUninstalls[0].id, "new");
+    }
+
+    function test_reopenedCleanupPageShowsTheCachedRowsAfterServiceFailure() {
+        AppInstaller.pending = [
+            {
+                id: "removed.notes",
+                detail: "Retry cleanup"
+            }
+        ];
+        const first = open("appmanager");
+        compare(first.page.pendingUninstalls.length, 1);
+        AppInstaller.cleanupAvailable = false;
+        first.page.refreshCleanup();
+        verify(first.page.cleanupError !== "");
+        verify(first.app.openPage("appmanager", PageStackAction.Immediate, true));
+        const reopened = first.app.pageStack.currentPage;
+        tryCompare(reopened, "status", PageStatus.Active);
+        compare(reopened.pendingUninstalls.length, 1);
+        compare(reopened.pendingUninstalls[0].id, "removed.notes");
+        verify(reopened.cleanupError !== "");
+    }
+
+    function test_uninstallCapabilitiesLoadWithoutBlockingTheList() {
+        AppInstaller.deferCapabilities = true;
+        const s = open("appmanager");
+        verify(s.page.capabilitiesLoading);
+        compare(child(s.page, "appList").count, 3);
+        verify(child(s.page, "app-notes").menu === null);
+        AppInstaller.completeCapabilities();
+        verify(!s.page.capabilitiesLoading);
+        verify(child(s.page, "app-notes").menu !== null);
+        verify(child(s.page, "app-settings").menu === null);
+        AppInstaller.capabilitiesAvailable = false;
+        s.page.refreshCapabilities();
+        AppInstaller.completeCapabilities();
+        verify(s.page.capabilityError !== "");
+        verify(child(s.page, "app-notes").menu === null);
+        AppInstaller.capabilitiesAvailable = true;
+        s.page.refreshCapabilities();
+        AppInstaller.completeCapabilities();
+        verify(child(s.page, "app-notes").menu !== null);
+    }
+
+    function test_flatpakFailurePreservesAppsAndShowsAnError() {
+        AppInstaller.deferFlatpaks = true;
+        const s = open("themedapps");
+        verify(s.page.loading);
+        compare(child(s.page, "appList").count, 0);
+        AppInstaller.completeFlatpaks();
+        verify(!s.page.loading);
+        compare(child(s.page, "appList").count, 2);
+        compare(s.page.apps[0].name, "Calculator");
+        AppInstaller.flatpaksAvailable = false;
+        s.page.refreshApps();
+        AppInstaller.completeFlatpaks();
+        verify(s.page.loadError !== "");
+        compare(child(s.page, "appList").count, 2);
+        AppInstaller.deferFlatpaks = false;
+        verify(s.app.openPage("themedapps", PageStackAction.Immediate, true));
+        const reopened = s.app.pageStack.currentPage;
+        tryCompare(reopened, "status", PageStatus.Active);
+        compare(reopened.apps.length, 2);
+        verify(reopened.loadError !== "");
+        AppInstaller.flatpaksAvailable = true;
+        reopened.refreshApps();
+        compare(reopened.loadError, "");
+        compare(reopened.apps.length, 2);
+    }
+
     // Built into the OS image but not protected, like Test Suite.
     function test_builtInAppsOfferNoUninstall() {
         Apps.append({

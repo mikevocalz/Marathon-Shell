@@ -9,7 +9,34 @@ import "../SettingsLogic.js" as Logic
 Page {
     id: page
 
-    readonly property var apps: AppInstaller.flatpakApps().sort((a, b) => a.name.localeCompare(b.name))
+    property var apps: []
+    property string loadError
+    property bool loading
+
+    function readApps() {
+        const result = AppInstaller.flatpakAppsState();
+        apps = result.items.slice().sort((a, b) => a.name.localeCompare(b.name));
+        loadError = result.error;
+        loading = result.loading;
+    }
+
+    function refreshApps() {
+        AppInstaller.refreshFlatpakApps();
+        readApps();
+    }
+
+    onStatusChanged: {
+        if (status === PageStatus.Active)
+            refreshApps();
+    }
+
+    Connections {
+        target: AppInstaller
+
+        function onFlatpakAppsChanged() {
+            page.readApps();
+        }
+    }
 
     SilicaListView {
         id: view
@@ -61,6 +88,26 @@ Page {
             SectionHeader {
                 visible: view.count > 0
                 text: qsTr("Flatpak apps")
+            }
+            Label {
+                x: Theme.horizontalPageMargin
+                width: parent.width - 2 * x
+                text: page.loadError
+                visible: text !== ""
+                wrapMode: Text.Wrap
+            }
+            Button {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: qsTr("Reload installed apps")
+                visible: page.loadError !== ""
+                enabled: !page.loading
+                onClicked: page.refreshApps()
+            }
+            BusyIndicator {
+                anchors.horizontalCenter: parent.horizontalCenter
+                running: page.loading && page.status === PageStatus.Active
+                visible: running
+                size: BusyIndicatorSize.Small
             }
         }
 

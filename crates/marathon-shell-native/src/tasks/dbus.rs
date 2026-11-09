@@ -324,6 +324,31 @@ impl AppStore1 {
         Ok(marathon_apps::install::can_uninstall(&app_id))
     }
 
+    /// One authorized catalogue read, bounded to 1024 IDs. Capability reads
+    /// do not reserve an uninstall; the mutation rechecks its own authority.
+    async fn uninstall_capabilities(
+        &self,
+        app_ids: Vec<String>,
+        #[zbus(header)] h: Header<'_>,
+    ) -> fdo::Result<HashMap<String, bool>> {
+        system(&h).await?;
+        if app_ids.len() > 1024 {
+            return Err(fdo::Error::LimitsExceeded(
+                "An uninstall capability query accepts at most 1024 app IDs".into(),
+            ));
+        }
+        Ok(blocking::unblock(move || {
+            app_ids
+                .into_iter()
+                .map(|id| {
+                    let removable = marathon_apps::install::can_uninstall(&id);
+                    (id, removable)
+                })
+                .collect()
+        })
+        .await)
+    }
+
     /// The outcome comes as `UninstallComplete`, `UninstallPartial` or
     /// `UninstallFailed`; acknowledging this request is not completion.
     async fn uninstall(&self, app_id: String, #[zbus(header)] h: Header<'_>) -> fdo::Result<()> {
