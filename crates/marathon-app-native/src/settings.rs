@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use cxx_qt::{CxxQtType, Threading};
 use cxx_qt_lib::{QList, QMap, QMapPair_QString_QVariant, QString, QStringList, QVariant};
+use lofty::prelude::{Accessor as _, TaggedFileExt as _};
 use zbus::{OwnedVariant as OwnedValue, Variant as Value};
 
 use crate::shell::{allowed, relay, Arg, Field, Service, State};
@@ -60,6 +61,9 @@ pub mod qobject {
         #[qproperty(bool, filter_mobile_friendly_apps, cxx_name = "filterMobileFriendlyApps", READ, WRITE = set_filter_mobile_friendly_apps, NOTIFY)]
         #[qproperty(QStringList, hidden_apps, cxx_name = "hiddenApps", READ, WRITE = set_hidden_apps, NOTIFY)]
         #[qproperty(QString, app_sort_order, cxx_name = "appSortOrder", READ, WRITE = set_app_sort_order, NOTIFY)]
+        #[qproperty(QString, assist_key_press, cxx_name = "assistKeyPress", READ, WRITE = set_assist_key_press, NOTIFY)]
+        #[qproperty(QString, assist_key_hold, cxx_name = "assistKeyHold", READ, WRITE = set_assist_key_hold, NOTIFY)]
+        #[qproperty(QString, trackpad_mode, cxx_name = "trackpadMode", READ, WRITE = set_trackpad_mode, NOTIFY)]
         #[qproperty(i32, app_grid_columns, cxx_name = "appGridColumns", READ, WRITE = set_app_grid_columns, NOTIFY)]
         #[qproperty(bool, search_native_apps, cxx_name = "searchNativeApps", READ, WRITE = set_search_native_apps, NOTIFY)]
         #[qproperty(bool, show_notification_badges, cxx_name = "showNotificationBadges", READ, WRITE = set_show_notification_badges, NOTIFY)]
@@ -76,6 +80,10 @@ pub mod qobject {
         #[qproperty(bool, keyboard_auto_capitalize, cxx_name = "keyboardAutoCapitalize", READ, WRITE = set_keyboard_auto_capitalize, NOTIFY)]
         #[qproperty(QString, language, READ, WRITE = set_language, NOTIFY)]
         #[qproperty(QList_QVariant, available_languages, cxx_name = "availableLanguages", READ = available_languages, CONSTANT)]
+        #[qproperty(bool, gtk_theming, cxx_name = "gtkTheming", READ, WRITE = set_gtk_theming, NOTIFY)]
+        #[qproperty(bool, kde_theming, cxx_name = "kdeTheming", READ, WRITE = set_kde_theming, NOTIFY)]
+        #[qproperty(bool, android_theming, cxx_name = "androidTheming", READ, WRITE = set_android_theming, NOTIFY)]
+        #[qproperty(QStringList, unthemed_apps, cxx_name = "unthemedApps", READ, WRITE = set_unthemed_apps, NOTIFY)]
         type Settings = super::SettingsRust;
 
         #[qsignal]
@@ -142,6 +150,12 @@ pub mod qobject {
         fn set_hidden_apps(self: Pin<&mut Settings>, value: &QStringList);
         #[cxx_name = "setAppSortOrder"]
         fn set_app_sort_order(self: Pin<&mut Settings>, value: &QString);
+        #[cxx_name = "setAssistKeyPress"]
+        fn set_assist_key_press(self: Pin<&mut Settings>, value: &QString);
+        #[cxx_name = "setAssistKeyHold"]
+        fn set_assist_key_hold(self: Pin<&mut Settings>, value: &QString);
+        #[cxx_name = "setTrackpadMode"]
+        fn set_trackpad_mode(self: Pin<&mut Settings>, value: &QString);
         #[cxx_name = "setAppGridColumns"]
         fn set_app_grid_columns(self: Pin<&mut Settings>, value: i32);
         #[cxx_name = "setSearchNativeApps"]
@@ -172,6 +186,14 @@ pub mod qobject {
         fn set_keyboard_auto_capitalize(self: Pin<&mut Settings>, value: bool);
         #[cxx_name = "setLanguage"]
         fn set_language(self: Pin<&mut Settings>, value: &QString);
+        #[cxx_name = "setGtkTheming"]
+        fn set_gtk_theming(self: Pin<&mut Settings>, value: bool);
+        #[cxx_name = "setKdeTheming"]
+        fn set_kde_theming(self: Pin<&mut Settings>, value: bool);
+        #[cxx_name = "setAndroidTheming"]
+        fn set_android_theming(self: Pin<&mut Settings>, value: bool);
+        #[cxx_name = "setUnthemedApps"]
+        fn set_unthemed_apps(self: Pin<&mut Settings>, value: &QStringList);
         #[cxx_name = "availableLanguages"]
         fn available_languages(self: &Settings) -> QList_QVariant;
 
@@ -284,6 +306,9 @@ properties! {
     filter_mobile_friendly_apps: bool = true, "filterMobileFriendlyApps", filter_mobile_friendly_apps_changed, set_filter_mobile_friendly_apps(bool);
     hidden_apps: QStringList, "hiddenApps", hidden_apps_changed, set_hidden_apps(&QStringList);
     app_sort_order: QString = QString::from("alphabetical"), "appSortOrder", app_sort_order_changed, set_app_sort_order(&QString);
+    assist_key_press: QString = QString::from("camera"), "assistKeyPress", assist_key_press_changed, set_assist_key_press(&QString);
+    assist_key_hold: QString = QString::from("pilot-voice"), "assistKeyHold", assist_key_hold_changed, set_assist_key_hold(&QString);
+    trackpad_mode: QString = QString::from("gesture"), "trackpadMode", trackpad_mode_changed, set_trackpad_mode(&QString);
     app_grid_columns: i32, "appGridColumns", app_grid_columns_changed, set_app_grid_columns(i32);
     search_native_apps: bool = true, "searchNativeApps", search_native_apps_changed, set_search_native_apps(bool);
     show_notification_badges: bool = true, "showNotificationBadges", show_notification_badges_changed, set_show_notification_badges(bool);
@@ -299,6 +324,10 @@ properties! {
     keyboard_language: QString = QString::from("en_US"), "keyboardLanguage", keyboard_language_changed, set_keyboard_language(&QString);
     keyboard_auto_capitalize: bool = true, "keyboardAutoCapitalize", keyboard_auto_capitalize_changed, set_keyboard_auto_capitalize(bool);
     language: QString, "language", language_changed, set_language(&QString);
+    gtk_theming: bool = true, "gtkTheming", gtk_theming_changed, set_gtk_theming(bool);
+    kde_theming: bool = true, "kdeTheming", kde_theming_changed, set_kde_theming(bool);
+    android_theming: bool = true, "androidTheming", android_theming_changed, set_android_theming(bool);
+    unthemed_apps: QStringList, "unthemedApps", unthemed_apps_changed, set_unthemed_apps(&QStringList);
 }
 
 /// Writes a system setting; the shell answers with `PropertyChanged`.
@@ -418,9 +447,29 @@ impl Settings {
     }
 }
 
-/// `file:///usr/share/sounds/ring_old_phone.ogg` is "Old Phone".
+/// The file's title tag, as Android's ringtone picker shows it.
+fn sound_title(path: &str) -> Option<String> {
+    let tagged = lofty::probe::Probe::open(path)
+        .ok()?
+        .options(lofty::config::ParseOptions::new().read_properties(false))
+        .read()
+        .ok()?;
+    let title = tagged
+        .primary_tag()
+        .or_else(|| tagged.first_tag())?
+        .title()?
+        .trim()
+        .to_owned();
+    (!title.is_empty()).then_some(title)
+}
+
+/// The sound's title tag, or `file:///usr/share/sounds/ring_old_phone.ogg`
+/// as "Old Phone".
 fn sound_name(path: &str) -> String {
     let path = path.strip_prefix("file://").unwrap_or(path);
+    if let Some(title) = sound_title(path) {
+        return title;
+    }
     let file = path.rsplit('/').next().unwrap_or(path);
     let base = file
         .split('.')
@@ -465,5 +514,14 @@ mod tests {
             "Old Phone"
         );
         assert_eq!(super::sound_name("/x/alarm_early-bird.wav"), "Early Bird");
+    }
+
+    #[test]
+    fn sound_names_come_from_the_title_tag() {
+        let ringtone = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../shell/resources/sounds/phone/bbpro1.wav"
+        );
+        assert_eq!(super::sound_name(&format!("file://{ringtone}")), "BB Pro 1");
     }
 }

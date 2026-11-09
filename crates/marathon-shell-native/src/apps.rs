@@ -67,6 +67,13 @@ pub mod qobject {
         #[qsignal]
         #[cxx_name = "registryChanged"]
         fn registry_changed(self: Pin<&mut Apps>);
+        /// The launcher entry went away, but some cleanup remains.
+        #[qsignal]
+        #[cxx_name = "uninstallPartial"]
+        fn uninstall_partial(self: Pin<&mut Apps>, app_id: &QString, detail: &QString);
+        #[qsignal]
+        #[cxx_name = "uninstallFailed"]
+        fn uninstall_failed(self: Pin<&mut Apps>, app_id: &QString, detail: &QString);
 
         #[inherit]
         #[cxx_name = "beginResetModel"]
@@ -124,6 +131,8 @@ pub struct App {
     pub search_terms: Vec<String>,
     /// What the manifest lets it claim to keep running in the background.
     pub background_capabilities: Vec<String>,
+    /// The immutable generation selected with this app's permissions.
+    pub install_root: std::path::PathBuf,
 }
 
 const ROLES: [&str; 6] = ["id", "name", "icon", "type", "exec", "flatpakRef"];
@@ -133,6 +142,8 @@ const USER_ROLE: i32 = 0x0100;
 pub struct AppsRust {
     count: i32,
     apps: Vec<App>,
+    pending_uninstalls: HashMap<String, u64>,
+    uninstall_sequence: u64,
 }
 
 static CATALOGUE: LazyLock<RwLock<HashMap<String, App>>> = LazyLock::new(RwLock::default);
@@ -245,6 +256,7 @@ fn from_desktop(map: &QMap<QMapPair_QString_QVariant>) -> Option<App> {
             .map(|t| t.to_lowercase())
             .collect(),
         background_capabilities: Vec::new(),
+        install_root: std::path::PathBuf::new(),
     };
     let valid = !app.id.is_empty() && !app.name.is_empty() && !app.icon.is_empty();
     (valid && ["native", "marathon", "system", "flatpak"].contains(&app.kind.as_str()))
@@ -259,6 +271,7 @@ fn from_manifest(m: &marathon_apps::apps::App) -> Option<App> {
         kind: "marathon".to_owned(),
         permissions: m.permissions.clone(),
         background_capabilities: m.background_capabilities.clone(),
+        install_root: m.install_root.clone(),
         ..App::default()
     };
     (!app.icon.is_empty()).then_some(app)
@@ -527,34 +540,92 @@ impl Apps {
                 })
                 .is_ok();
         }
-        let done = if self.as_mut().can_uninstall(app_id) {
-            marathon_apps::install::uninstall(&id)
-        } else {
-            Err("Cannot uninstall a protected or system app".to_owned())
+        if self.pending_uninstalls.contains_key(&id) {
+            return true;
+        }
+        // Bound outstanding jobs and admit only one removal per app. The disk
+        // transaction survives even if the QObject disappears before delivery.
+        if self.pending_uninstalls.len() >= 8 {
+            crate::tasks::uninstalled(
+                &id,
+                "Too many pending uninstall requests; retry shortly",
+                false,
+            );
+            return false;
+        }
+        let Some(request) = self.uninstall_sequence.checked_add(1) else {
+            crate::tasks::uninstalled(
+                &id,
+                "Uninstall request counter exhausted; restart the shell",
+                false,
+            );
+            return false;
         };
+        {
+            let mut rust = self.as_mut().rust_mut();
+            rust.uninstall_sequence = request;
+            rust.pending_uninstalls.insert(id.clone(), request);
+        }
+        let qt = self.qt_thread();
+        let app = id.clone();
+        match std::thread::Builder::new()
+            .name(format!("uninstall-{request}"))
+            .spawn(move || {
+                let done = marathon_apps::install::uninstall(&app);
+                // Owner destruction does not cancel or roll back durable cleanup.
+                qt.queue(move |obj| obj.finish_uninstall(&app, request, done))
+                    .ok();
+            }) {
+            Ok(_worker) => true,
+            Err(error) => {
+                self.as_mut().rust_mut().pending_uninstalls.remove(&id);
+                crate::tasks::uninstalled(
+                    &id,
+                    &format!("Could not start uninstall worker: {error}"),
+                    false,
+                );
+                false
+            }
+        }
+    }
+
+    fn finish_uninstall(
+        mut self: Pin<&mut Self>,
+        id: &str,
+        request: u64,
+        done: Result<marathon_apps::install::UninstallReport, String>,
+    ) {
+        if self.pending_uninstalls.get(id) != Some(&request) {
+            return;
+        }
+        self.as_mut().rust_mut().pending_uninstalls.remove(id);
+        let mut unpublished = false;
         let error = match done {
-            Ok(data_removed) => {
-                self.as_mut().rescan();
-                crate::permissions::with({
-                    let id = id.clone();
-                    move |p| p.forget_app(&QString::from(&id))
-                });
-                if data_removed {
-                    let key = id.clone();
-                    crate::settings::with(move |s| s.remove_app_keys(&QString::from(&key)));
-                    if let Ok(mut reset) = std::process::Command::new("dconf")
-                        .args(["reset", "-f", &format!("/apps/{id}/")])
-                        .spawn()
-                    {
-                        std::thread::spawn(move || reset.wait());
-                    }
+            Ok(report) => {
+                unpublished = report.unpublished();
+                if report.unpublished() {
+                    self.as_mut().rescan();
+                    crate::permissions::with({
+                        let id = id.to_owned();
+                        move |p| p.forget_app(&QString::from(&id))
+                    });
                 }
-                String::new()
+                if report.complete() {
+                    String::new()
+                } else {
+                    report.summary()
+                }
             }
             Err(e) => e,
         };
-        crate::tasks::uninstalled(&id, &error);
-        error.is_empty()
+        if unpublished && !error.is_empty() {
+            self.as_mut()
+                .uninstall_partial(&QString::from(id), &QString::from(&error));
+        } else if !unpublished {
+            self.as_mut()
+                .uninstall_failed(&QString::from(id), &QString::from(&error));
+        }
+        crate::tasks::uninstalled(id, &error, unpublished);
     }
 
     /// A reset rather than row edits: the lists are a few dozen apps, and

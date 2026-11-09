@@ -3,14 +3,18 @@ import Keel.Actions 1.0
 import "NotesStore.js" as Store
 
 // keel-actions.json is actions.json from Shipwright's
-//   keel actions --qml NotesActions.qml --qml pages/NoteEditorPage.qml \
+//   keel actions --qml NotesActions.qml --qml TaskActions.qml --qml pages/NoteEditorPage.qml \
 //       --app-id org.marathonos.notes --exec /usr/bin/marathon-app-runner --out <dir>
 // regenerate it after changing a declaration.
 Item {
     id: root
 
-    // The app: notes and save(next).
+    // The app: notes, the persisted nextNoteId, and save(next).
     property var store
+
+    TaskActions {
+        store: root.store
+    }
 
     function summary(note) {
         const text = Store.text(note);
@@ -20,6 +24,55 @@ Item {
             body: text.substring(0, 2000),
             modified: new Date(Number(note.timestamp) || 0).toISOString()
         };
+    }
+
+    KeelAction {
+        name: "notes.open"
+        title: qsTr("Open note")
+        description: "Open an existing note by its persistent id and request application activation. Any pending draft must be recorded first. Fails if the note is missing or the draft cannot be recorded."
+        idempotent: true
+        parameters: [
+            KeelParam {
+                name: "id"
+                type: "integer"
+                minimum: 1
+                maximum: 2147483647
+                required: true
+            }
+        ]
+        returns: KeelResult {
+            type: "object"
+            KeelParam {
+                name: "id"
+                type: "integer"
+                minimum: 1
+                maximum: 2147483647
+                required: true
+            }
+        }
+        onInvoked: (args, call) => {
+            if (root.store.storageProtected) {
+                call.fail("Failed", "Stored notes need recovery before a note can be opened");
+                return;
+            }
+            if (!root.store.notes.some(note => note.id === args.id)) {
+                call.fail("InvalidArguments", "There is no note with that id");
+                return;
+            }
+            try {
+                root.store.openNote(args.id);
+                const shown = KeelActions.invoke("app.show", {});
+                if (!shown.succeeded) {
+                    call.fail("Failed", shown.errorMessage);
+                    return;
+                }
+                call.reply({
+                    id: args.id
+                });
+            } catch (error) {
+                call.fail("Failed", error.message);
+            }
+        }
     }
 
     KeelAction {
@@ -53,11 +106,15 @@ Item {
         }
         onInvoked: (args, call) => {
             const title = String(args.title || "").trim();
-            const next = Store.create(root.store.notes, title ? title + "\n" + args.body : args.body, Date.now());
-            root.store.save(next);
-            call.reply({
-                id: next[0].id
-            });
+            try {
+                const next = Store.create(root.store.notes, title ? title + "\n" + args.body : args.body, Date.now(), root.store.nextNoteId);
+                root.store.save(next);
+                call.reply({
+                    id: next[0].id
+                });
+            } catch (error) {
+                call.fail("Failed", error.message);
+            }
         }
     }
 
@@ -113,6 +170,10 @@ Item {
             }
         }
         onInvoked: (args, call) => {
+            if (root.store.storageProtected) {
+                call.fail("Failed", "Stored notes need recovery before they can be searched");
+                return;
+            }
             const found = Store.sorted(Store.search(root.store.notes, args.query));
             call.reply(found.slice(0, args.limit || 10).map(root.summary));
         }

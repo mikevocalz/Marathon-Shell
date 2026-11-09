@@ -1,0 +1,22 @@
+[
+  {"name": "no scheduled work", "permissions": [], "tasks": [], "valid": true},
+  {"name": "awake defaults", "permissions": [], "tasks": [{"id": "sync", "action": "mail.sync", "intervalMinutes": 15}], "valid": true},
+  {"name": "all supported constraints", "permissions": ["network"], "tasks": [{"id": "sync", "action": "mail.sync", "intervalMinutes": 60, "network": "unmetered", "requiresCharging": true, "requiresBatteryNotLow": true, "wake": true, "timeoutSeconds": 600}], "valid": true},
+  {"name": "last allowed calendar slot", "permissions": [], "tasks": [{"id": "clean", "action": "mail.clean", "intervalMinutes": 1440, "timeoutSeconds": 1}], "valid": true},
+  {"name": "wake too often", "permissions": [], "tasks": [{"id": "sync", "action": "mail.sync", "intervalMinutes": 30, "wake": true}], "valid": false},
+  {"name": "unsupported interval", "permissions": [], "tasks": [{"id": "sync", "action": "mail.sync", "intervalMinutes": 90}], "valid": false},
+  {"name": "zero timeout", "permissions": [], "tasks": [{"id": "sync", "action": "mail.sync", "intervalMinutes": 60, "timeoutSeconds": 0}], "valid": false},
+  {"name": "excessive timeout", "permissions": [], "tasks": [{"id": "sync", "action": "mail.sync", "intervalMinutes": 60, "timeoutSeconds": 601}], "valid": false},
+  {"name": "unknown task key", "permissions": [], "tasks": [{"id": "sync", "action": "mail.sync", "intervalMinutes": 60, "wakeDevice": true}], "valid": false},
+  {"name": "explicit null constraint", "permissions": ["network"], "tasks": [{"id": "sync", "action": "mail.sync", "intervalMinutes": 60, "network": null}], "valid": false},
+  {"name": "unknown network constraint", "permissions": ["network"], "tasks": [{"id": "sync", "action": "mail.sync", "intervalMinutes": 60, "network": "wifi"}], "valid": false},
+  {"name": "network without permission", "permissions": [], "tasks": [{"id": "sync", "action": "mail.sync", "intervalMinutes": 60, "network": "any"}], "valid": false},
+  {"name": "duplicate identity with a different action", "permissions": [], "tasks": [{"id": "sync", "action": "mail.sync", "intervalMinutes": 60}, {"id": "sync", "action": "mail.clean", "intervalMinutes": 1440}], "valid": false},
+  {"name": "missing action", "permissions": [], "tasks": [{"id": "sync", "intervalMinutes": 60}], "valid": false},
+  {"name": "trailing task hyphen", "permissions": [], "tasks": [{"id": "sync-", "action": "mail.sync", "intervalMinutes": 60}], "valid": false},
+  {"name": "systemd specifier in action", "permissions": [], "tasks": [{"id": "sync", "action": "%h", "intervalMinutes": 60}], "valid": false},
+  {"name": "unit-line injection", "permissions": [], "tasks": [{"id": "sync", "action": "mail.sync\nExecStart=/bin/sh", "intervalMinutes": 60}], "valid": false},
+  {"name": "nonboolean constraint", "permissions": [], "tasks": [{"id": "sync", "action": "mail.sync", "intervalMinutes": 60, "requiresCharging": "true"}], "valid": false},
+  {"name": "nonarray declaration", "permissions": [], "tasks": {}, "valid": false},
+  {"name": "too many timers", "permissions": [], "tasks": [{"id": "a", "action": "mail.sync", "intervalMinutes": 60}, {"id": "b", "action": "mail.sync", "intervalMinutes": 60}, {"id": "c", "action": "mail.sync", "intervalMinutes": 60}, {"id": "d", "action": "mail.sync", "intervalMinutes": 60}, {"id": "e", "action": "mail.sync", "intervalMinutes": 60}, {"id": "f", "action": "mail.sync", "intervalMinutes": 60}, {"id": "g", "action": "mail.sync", "intervalMinutes": 60}, {"id": "h", "action": "mail.sync", "intervalMinutes": 60}, {"id": "i", "action": "mail.sync", "intervalMinutes": 60}], "valid": false}
+]

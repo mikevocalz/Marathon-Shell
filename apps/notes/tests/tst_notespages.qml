@@ -48,12 +48,12 @@ TestCase {
             legacySettings: null,
             route: route || ""
         });
-        tryVerify(() => app.pageStack.currentPage !== null && app.pageStack.busy === false);
+        tryVerify(() => app.workspace !== null && app.workspace.collectionPage !== null && !app.pageStack.busy);
         return app;
     }
 
     function view(app, name) {
-        const v = findChild(app.pageStack.currentPage, name);
+        const v = findChild(app.workspace.collectionPage, name);
         verify(v, name);
         return v;
     }
@@ -99,26 +99,32 @@ TestCase {
 
     function test_notesPulleyOpens() {
         const app = makeApp([note(1), note(2)]);
-        pullDown(app.pageStack.currentPage);
+        pullDown(app.workspace.collectionPage);
     }
 
-    function pushed(app, depth) {
-        tryCompare(app.pageStack, "depth", depth);
-        tryVerify(() => !app.pageStack.busy);
-        return app.pageStack.currentPage;
+    function collection(app) {
+        const stack = findChild(app.workspace, "collectionStack");
+        tryVerify(() => stack.currentPage !== null && !stack.busy);
+        return app.workspace.collectionPage;
+    }
+
+    function editor(app) {
+        const stack = findChild(app.workspace, "editorStack");
+        tryVerify(() => app.workspace.currentEditor !== null && !stack.busy);
+        return app.workspace.currentEditor;
     }
 
     function test_listPinnedFirstThenNewest() {
         const app = makeApp([note(1), note(3), note(2, {
                 pinned: true
             })]);
-        compare(app.pageStack.currentPage.shown.map(n => n.id), [2, 3, 1]);
+        compare(collection(app).shown.map(n => n.id), [2, 3, 1]);
         compare(view(app, "notesView").count, 3);
     }
 
     function test_emptyPlaceholder() {
         const app = makeApp([]);
-        const p = findChild(app.pageStack.currentPage, "placeholder");
+        const p = findChild(collection(app), "placeholder");
         verify(p.enabled);
         compare(p.text, "No notes");
     }
@@ -132,9 +138,9 @@ TestCase {
             })]);
         const field = findChild(view(app, "notesView").headerItem, "searchField");
         field.text = "MILK";
-        compare(app.pageStack.currentPage.shown.map(n => n.id), [1]);
+        compare(collection(app).shown.map(n => n.id), [1]);
         field.text = "nothing";
-        const p = findChild(app.pageStack.currentPage, "placeholder");
+        const p = findChild(collection(app), "placeholder");
         verify(p.enabled);
         compare(p.text, "No matching notes");
     }
@@ -151,22 +157,22 @@ TestCase {
         keyClick(Qt.Key_M);
         keyClick(Qt.Key_I);
         compare(field.text, "mi");
-        compare(app.pageStack.currentPage.shown.map(n => n.id), [1]);
+        compare(collection(app).shown.map(n => n.id), [1]);
         verify(field.activeFocus);
     }
 
     function test_tapOpensEditor() {
         const app = makeApp([note(1), note(2)]);
         mouseClick(delegateAt(view(app, "notesView"), 0));
-        const editor = pushed(app, 2);
-        compare(editor.noteId, 2);
-        compare(findChild(editor, "bodyField").text, "Note 2");
+        const opened = editor(app);
+        compare(opened.noteId, 2);
+        compare(findChild(opened, "bodyField").text, "Note 2");
     }
 
     function test_pulleyNewNote() {
         const app = makeApp([]);
-        findChild(app.pageStack.currentPage, "newNoteItem").clicked(null);
-        compare(pushed(app, 2).noteId, -1);
+        findChild(collection(app), "newNoteItem").clicked(null);
+        compare(editor(app).noteId, -1);
     }
 
     function test_contextMenuPins() {
@@ -174,7 +180,7 @@ TestCase {
         const menu = delegateAt(view(app, "notesView"), 1).openMenu();
         tapMenuItem(menu, "pinItem");
         tryVerify(() => app.notes.find(n => n.id === 1).pinned === true);
-        compare(app.pageStack.currentPage.shown[0].id, 1);
+        compare(collection(app).shown[0].id, 1);
     }
 
     function test_contextMenuRemorseDelete() {
@@ -192,11 +198,11 @@ TestCase {
             }), note(2, {
                 content: "see #home"
             }), note(3)], "/folders");
-        const folders = pushed(app, 2);
+        const folders = collection(app);
         const v = findChild(folders, "foldersView");
         compare(v.count, 3);
         mouseClick(delegateAt(v, 1));
-        const inFolder = pushed(app, 3);
+        const inFolder = collection(app);
         compare(inFolder.folder, "work");
         compare(inFolder.shown.map(n => n.id), [1]);
     }
@@ -205,7 +211,7 @@ TestCase {
         const app = makeApp([note(4, {
                 content: "list\n- [ ] milk"
             })], "/tasks");
-        const tasks = pushed(app, 2);
+        const tasks = collection(app);
         const sw = findChild(delegateAt(findChild(tasks, "tasksView"), 0), "taskSwitch");
         verify(!sw.checked);
         mouseClick(sw);
@@ -217,25 +223,73 @@ TestCase {
         const app = makeApp([note(4, {
                 content: "list\n- [ ] milk"
             })], "/tasks");
-        const tasks = pushed(app, 2);
+        const tasks = collection(app);
         mouseClick(delegateAt(findChild(tasks, "tasksView"), 0), 400, 20);
         tryVerify(() => app.notes[0].content === "list\n- [x] milk");
-        compare(app.pageStack.depth, 2);
+        compare(app.workspace.collectionPage, tasks);
+        compare(app.workspace.currentEditor, null);
     }
 
     function test_taskMenuOpensNote() {
         const app = makeApp([note(4, {
                 content: "- [ ] milk"
             })], "/tasks");
-        const tasks = pushed(app, 2);
+        const tasks = collection(app);
         const menu = delegateAt(findChild(tasks, "tasksView"), 0).openMenu();
         tapMenuItem(menu, "openNoteItem");
-        compare(pushed(app, 3).noteId, 4);
+        compare(editor(app).noteId, 4);
+    }
+
+    function test_newTaskPulleyCreatesTaskNote() {
+        const app = makeApp([], "/tasks");
+        const tasks = collection(app);
+        findChild(tasks, "newTaskItem").clicked();
+        const opened = editor(app);
+        verify(opened.taskRequested);
+        findChild(opened, "bodyField").text = "Buy milk";
+        opened.commit();
+        compare(app.notes.length, 1);
+        compare(app.notes[0].task, {
+            completed: false
+        });
+        app.handleBack();
+        tryCompare(app.workspace, "currentEditor", null);
+        compare(collection(app), tasks);
+        compare(findChild(tasks, "tasksView").count, 1);
+    }
+
+    function test_taskNoteCompletesWithoutCheckingItsChecklist() {
+        const app = makeApp([note(4, {
+                title: "Plan trip",
+                content: "Plan trip\n- [ ] book ferry",
+                task: {
+                    completed: false,
+                    dueDate: "2026-12-10"
+                },
+                source: {
+                    kind: "message",
+                    appId: "org.marathonos.messages",
+                    itemId: "m:4",
+                    label: "Travel ideas"
+                }
+            })], "/tasks");
+        const tasks = collection(app);
+        const list = findChild(tasks, "tasksView");
+        compare(list.count, 2);
+        const sw = findChild(delegateAt(list, 0), "taskSwitch");
+        compare(sw.description, "Due 2026-12-10");
+        mouseClick(sw);
+        tryVerify(() => app.notes[0].task.completed);
+        compare(app.notes[0].content, "Plan trip\n- [ ] book ferry");
+        compare(app.notes[0].source.itemId, "m:4");
+        mouseClick(findChild(delegateAt(list, 1), "taskSwitch"));
+        tryVerify(() => app.notes[0].content === "Plan trip\n- [x] book ferry");
+        verify(app.notes[0].task.completed);
     }
 
     function test_coverNewNote() {
         const app = makeApp([]);
         app.newNote();
-        compare(pushed(app, 2).noteId, -1);
+        compare(editor(app).noteId, -1);
     }
 }

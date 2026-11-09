@@ -5,6 +5,9 @@ QtObject {
     property string timeZone: "Europe/London"
     property string wallpaperPath: "file:///wallpapers/slate-aurora.svg"
     property string timeFormat: "24h"
+    property string assistKeyPress: "camera"
+    property string assistKeyHold: "pilot-voice"
+    property string trackpadMode: "gesture"
     property var hiddenApps: []
     property int appGridColumns: 0
     property bool dndEnabled: false
@@ -28,6 +31,10 @@ QtObject {
     property bool automaticTimeZone: true
     property var systemTimes: []
     property bool vibrationEnabled: true
+    property bool gtkTheming: true
+    property bool kdeTheming: true
+    property bool androidTheming: true
+    property var unthemedApps: []
 
     signal dateTimeChangeFailed(string reason)
 
@@ -62,6 +69,10 @@ QtObject {
         automaticTimeZone = true;
         systemTimes = [];
         vibrationEnabled = true;
+        gtkTheming = true;
+        kdeTheming = true;
+        androidTheming = true;
+        unthemedApps = [];
     }
     function availableRingtones() {
         return ["/sounds/ring_classic.wav", "/sounds/ring_bright.wav"];

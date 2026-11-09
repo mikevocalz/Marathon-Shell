@@ -671,26 +671,30 @@ fn without_history_notes(text: &str) -> String {
 }
 
 /// A tool call written as the reply's text instead of as a call (a small
-/// model's `{"name": .., "arguments": {..}}` or `name{..}`, maybe inside
-/// `<tool_call>`), when it names a known tool; other text is an answer.
+/// model's `{"name": .., "arguments": {..}}`, `name{..}` or the bare name,
+/// maybe inside `<tool_call>` or before its follow-ups), when it names a
+/// known tool; other text is an answer.
 fn stray_call(text: &str, registry: &Registry) -> Option<crate::llm::ToolCall> {
-    let text = text.trim();
+    let (text, _) = split_followups(text);
     let text = text
+        .as_str()
         .strip_prefix("<tool_call>")
         .and_then(|t| t.strip_suffix("</tool_call>"))
-        .unwrap_or(text)
+        .unwrap_or(&text)
         .trim();
     let (name, arguments) = if let Ok(Value::Object(call)) = serde_json::from_str::<Value>(text) {
         (
             call.get("name")?.as_str()?.to_owned(),
             call.get("arguments").cloned().unwrap_or_else(|| json!({})),
         )
-    } else {
-        let (name, rest) = text.split_at(text.find('{')?);
+    } else if let Some(brace) = text.find('{') {
+        let (name, rest) = text.split_at(brace);
         (
             name.trim().to_owned(),
             serde_json::from_str::<Value>(rest).ok()?,
         )
+    } else {
+        (text.trim_end_matches("()").to_owned(), json!({}))
     };
     (registry.knows(&name) && arguments.is_object()).then(|| crate::llm::ToolCall {
         id: "stray".into(),
@@ -1227,6 +1231,25 @@ impl Pipeline {
         };
         if let Err(e) = backends.jev.decide(&req, "decide").await {
             log::debug!("warming the router: {e}");
+        }
+        // The model on the phone reads the system prompt now, not with the
+        // first question: every turn's prompt starts with it.
+        if backends.llm.provider() == "local" {
+            let req = ChatRequest {
+                messages: vec![
+                    Message::text(Role::System, self.system_prompt()),
+                    Message::text(Role::User, "."),
+                ],
+                tools: Vec::new(),
+                json_mode: false,
+                effort: Effort::Off,
+                purpose: "warm".into(),
+                require: false,
+                max_tokens: Some(1),
+            };
+            if let Err(e) = backends.llm.chat(&req).await {
+                log::debug!("warming the model: {e}");
+            }
         }
     }
 
@@ -2731,6 +2754,7 @@ impl Pipeline {
                     "tool-loop".into()
                 },
                 require: round == 0 && ground,
+                max_tokens: None,
             };
             self.stage(
                 turn,
@@ -3241,6 +3265,7 @@ impl Pipeline {
             effort: Effort::Off,
             purpose: "vision".into(),
             require: false,
+            max_tokens: None,
         };
         let card = match self.backends().llm.chat(&req).await {
             Ok(r) => {
@@ -3541,8 +3566,38 @@ fn domain_question(registry: &Registry, domains: &[String]) -> Question {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, reason = "tests")]
 mod answer_tests {
     use super::*;
+
+    struct Nothing;
+
+    #[async_trait::async_trait]
+    impl crate::tools::ToolExecutor for Nothing {
+        async fn call(&self, _: &str, _: &Value) -> Result<crate::tools::ToolOutput, ToolError> {
+            Err(ToolError::Failed("unused".into()))
+        }
+    }
+
+    #[test]
+    fn a_tool_name_written_as_the_answer_is_a_call() {
+        let mut registry = Registry::new();
+        registry.add(crate::weather::spec(), true, std::sync::Arc::new(Nothing));
+        let name = registry.entries().next().unwrap().model_name.clone();
+        for reply in [
+            name.clone(),
+            format!("{name}()"),
+            format!("{name}\nFOLLOWUPS: Is it windy? | And tomorrow?"),
+            format!("<tool_call>{name}</tool_call>"),
+        ] {
+            let call = stray_call(&reply, &registry).unwrap();
+            assert_eq!(
+                (call.name.as_str(), call.arguments.as_str()),
+                (name.as_str(), "{}")
+            );
+        }
+        assert!(stray_call("It is sunny.\nFOLLOWUPS: Rain? | Wind?", &registry).is_none());
+    }
 
     #[test]
     fn reasoning_is_not_the_answer() {
@@ -3691,12 +3746,13 @@ mod answer_tests {
         // Pilot's real answer on the Jolla Phone (curly apostrophe).
         let answer = "Here's a full-day plan for Helsinki. My web search didn\u{2019}t turn up \
                       anything useful for this, so the plan is from general knowledge.";
-        assert!(pick_sources(answer, &found).is_empty());
-        assert!(pick_sources(
+        let empty = pick_sources(answer, &found);
+        assert!(empty.is_empty(), "{empty:?}");
+        let empty = pick_sources(
             "The search found nothing useful, but here's what I know.",
-            &found
-        )
-        .is_empty());
+            &found,
+        );
+        assert!(empty.is_empty(), "{empty:?}");
         assert_eq!(
             pick_sources(
                 "There's nothing useful in Handball results for this.",
@@ -3727,6 +3783,7 @@ mod answer_tests {
         let picked = pick_sources(answer, &found);
         let sites: Vec<&str> = picked.iter().map(|s| s.site.as_str()).collect();
         assert_eq!(sites, ["myhelsinki.fi"]);
-        assert!(pick_sources("Start early. October is dark.", &found).is_empty());
+        let empty = pick_sources("Start early. October is dark.", &found);
+        assert!(empty.is_empty(), "{empty:?}");
     }
 }

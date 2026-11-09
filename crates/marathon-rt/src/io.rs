@@ -41,15 +41,21 @@ fn spawn_with(
 /// If creating the thread fails, `task` is dropped and the next call retries
 /// thread creation. The failure is written to the process log.
 pub fn spawn(task: impl Future<Output = ()> + Send + 'static) {
-    let spawned = spawn_with(&EXECUTOR, &THREAD_STARTED, task, || {
+    if let Err(error) = try_spawn(task) {
+        crate::log::warn("io", format_args!("cannot start the I/O thread: {error}"));
+    }
+}
+
+/// Starts owned asynchronous work, reporting failure to create its executor
+/// thread. On failure the task is dropped without running, so a caller can
+/// release admission state and report the operation's failure immediately.
+pub fn try_spawn(task: impl Future<Output = ()> + Send + 'static) -> io::Result<()> {
+    spawn_with(&EXECUTOR, &THREAD_STARTED, task, || {
         std::thread::Builder::new()
             .name("marathon-io".into())
             .spawn(|| async_io::block_on(EXECUTOR.run(futures_lite::future::pending::<()>())))
             .map(drop)
-    });
-    if let Err(error) = spawned {
-        crate::log::warn("io", format_args!("cannot start the I/O thread: {error}"));
-    }
+    })
 }
 
 /// A file's trimmed contents, parsed: how sysfs and procfs report a value.
