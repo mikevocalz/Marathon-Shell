@@ -223,8 +223,9 @@ WaylandCompositor::WaylandCompositor(QQuickWindow *window)
                 [this]() {
                     timespec ts{};
                     clock_gettime(CLOCK_MONOTONIC, &ts);
-                    m_presentationTime->sendFeedback(m_window, ++m_presentSequence,
-                                                     quint64(ts.tv_sec), quint32(ts.tv_nsec));
+                    emit m_presentationTime->presented(++m_presentSequence, quint64(ts.tv_sec),
+                                                       quint32(ts.tv_nsec),
+                                                       quint32(1e9 / m_refreshHz));
                 },
                 Qt::QueuedConnection);
         },
@@ -314,6 +315,12 @@ WaylandCompositor::WaylandCompositor(QQuickWindow *window)
 
     m_output = new QWaylandQuickOutput(this, window);
     m_output->setSizeFollowsWindow(true);
+    // eglfs sets a configured mode on its first flip: read the mode after it.
+    m_refreshHz = window->screen()->refreshRate();
+    connect(window, &QQuickWindow::frameSwapped, this, &WaylandCompositor::resolveOutputRefresh,
+            Qt::SingleShotConnection);
+    connect(m_output, &QWaylandOutput::currentModeChanged, this,
+            &WaylandCompositor::advertiseRefresh);
 
     setDefaultOutput(m_output);
 
@@ -355,15 +362,15 @@ WaylandCompositor::WaylandCompositor(QQuickWindow *window)
         // environment override for device-specific experiments.
         if (!phaseSet)
             m_framePhaseMs = 0;
+        m_gateTimer.setSingleShot(true);
+        m_gateTimer.setTimerType(Qt::PreciseTimer);
+        connect(&m_gateTimer, &QTimer::timeout, this, [this]() {
+            m_passUpdate = true;
+            QCoreApplication::postEvent(m_window, new QEvent(QEvent::UpdateRequest));
+        });
         if (m_framePhaseMs > 0) {
             // Frames latch late in the vblank interval and clients hear at the
             // vblank, so a client's frame lands in the next composite.
-            m_gateTimer.setSingleShot(true);
-            m_gateTimer.setTimerType(Qt::PreciseTimer);
-            connect(&m_gateTimer, &QTimer::timeout, this, [this]() {
-                m_passUpdate = true;
-                QCoreApplication::postEvent(m_window, new QEvent(QEvent::UpdateRequest));
-            });
             m_callbackTimer.setSingleShot(true);
             m_callbackTimer.setTimerType(Qt::PreciseTimer);
             connect(&m_callbackTimer, &QTimer::timeout, this,
@@ -722,6 +729,7 @@ void WaylandCompositor::launchApp(const QString &command, const QVariantMap &ext
     env.insert("MOZ_ENABLE_WAYLAND", "1");
 
     env.insert("QT_IM_MODULE", "wayland");
+    env.insert("QT_QPA_GENERIC_PLUGINS", "marathontouch");
     // GTK 4 otherwise falls back to its "simple" module, never binds
     // text-input, and the keyboard can't open or type into GTK apps.
     env.insert("GTK_IM_MODULE", "wayland");
@@ -751,7 +759,7 @@ void WaylandCompositor::launchApp(const QString &command, const QVariantMap &ext
 
     env.insert("QT_WAYLAND_DISABLE_WINDOWDECORATION", "1");
 
-    if (!isFlatpak && !isSnap)
+    if (!isFlatpak && !isSnap && !extraEnv.contains("QT_MEDIA_BACKEND"))
         env.insert("QT_MEDIA_BACKEND", "ffmpeg");
 
     if (actualCommand.contains("marathon-app-runner") ||
@@ -1135,9 +1143,8 @@ void WaylandCompositor::activateSurface(int surfaceId) {
     }
 }
 
-void WaylandCompositor::releaseForeignKeyboard() {
-    QWaylandSurface *focus = defaultSeat() ? defaultSeat()->keyboardFocus() : nullptr;
-    if (focus && focus->property("foreignClient").toBool())
+void WaylandCompositor::releaseKeyboard() {
+    if (defaultSeat() && defaultSeat()->keyboardFocus())
         defaultSeat()->setKeyboardFocus(nullptr);
 }
 
@@ -1364,6 +1371,11 @@ void WaylandCompositor::handleTextInputSurfaceEnabled(QWaylandSurface *surface) 
         emit nativeTextInputPanelRequested(true);
 }
 
+bool WaylandCompositor::focusedTextInputEnabled() const {
+    QWaylandSurface *focus = defaultSeat() ? defaultSeat()->keyboardFocus() : nullptr;
+    return focus && m_textInputSurfaces.contains(focus);
+}
+
 void WaylandCompositor::handleTextInputUpdate(Qt::InputMethodQueries queries) {
     if (queries & Qt::ImHints)
         emit textInputHintsChanged();
@@ -1408,6 +1420,24 @@ void WaylandCompositor::handleXdgToplevelCreated(QWaylandXdgToplevel *toplevel,
 
     int surfaceId              = surface->property("surfaceId").toInt();
     m_xdgSurfaceMap[surfaceId] = xdgSurface;
+
+    // xdg roles can die while wl_surface remains alive. Its cached role pointers
+    // are read by screenshot security checks, native back and suspended state.
+    QPointer<QWaylandSurface> safeSurface(surface);
+    connect(toplevel, &QObject::destroyed, surface, [safeSurface, toplevel]() {
+        if (safeSurface &&
+            safeSurface->property("xdgToplevel").value<QWaylandXdgToplevel *>() == toplevel)
+            safeSurface->setProperty("xdgToplevel", QVariant());
+    });
+    connect(xdgSurface, &QObject::destroyed, this, [this, safeSurface, xdgSurface, surfaceId]() {
+        if (safeSurface &&
+            safeSurface->property("xdgSurface").value<QWaylandXdgSurface *>() == xdgSurface)
+            safeSurface->setProperty("xdgSurface", QVariant());
+        // QPointer is already null when destroyed() is emitted. A newer
+        // role for this id must keep its live map entry.
+        if (m_xdgSurfaceMap.value(surfaceId).isNull())
+            m_xdgSurfaceMap.remove(surfaceId);
+    });
 
     qInfo() << "[WaylandCompositor] New toplevel:" << surfaceId << toplevel->appId() << "-"
             << toplevel->title();
@@ -1498,15 +1528,16 @@ void WaylandCompositor::mapToplevel(QWaylandXdgToplevel *toplevel, QWaylandXdgSu
     connect(
         toplevel, &QWaylandXdgToplevel::setMaximized, this,
         [configure]() { configure(true, false); }, Qt::QueuedConnection);
+    // A phone window never floats: GTK unmaximizes to drag its header bar.
     connect(
         toplevel, &QWaylandXdgToplevel::unsetMaximized, this,
-        [configure]() { configure(false, false); }, Qt::QueuedConnection);
+        [configure]() { configure(true, false); }, Qt::QueuedConnection);
     connect(
         toplevel, &QWaylandXdgToplevel::setFullscreen, this,
         [configure]() { configure(false, true); }, Qt::QueuedConnection);
     connect(
         toplevel, &QWaylandXdgToplevel::unsetFullscreen, this,
-        [configure]() { configure(false, false); }, Qt::QueuedConnection);
+        [configure]() { configure(true, false); }, Qt::QueuedConnection);
 
     QPointer<QWaylandSurface> safeSurface(surface);
 
@@ -1660,8 +1691,15 @@ void WaylandCompositor::handleXdgPopupCreated(QWaylandXdgPopup   *popup,
     }
 
     surface->setProperty("isPopup", true);
-    surface->setProperty("xdgPopup", QVariant::fromValue(popup));
     surface->setProperty("xdgSurface", QVariant::fromValue(xdgSurface));
+    QPointer<QWaylandSurface> safeSurface(surface);
+    connect(xdgSurface, &QObject::destroyed, this, [this, safeSurface, xdgSurface, surfaceId]() {
+        if (safeSurface &&
+            safeSurface->property("xdgSurface").value<QWaylandXdgSurface *>() == xdgSurface)
+            safeSurface->setProperty("xdgSurface", QVariant());
+        if (m_xdgSurfaceMap.value(surfaceId).isNull())
+            m_xdgSurfaceMap.remove(surfaceId);
+    });
 
     // Qt's xdg-shell object sends the unconstrained initial configure before
     // popupCreated. Apply Marathon's work-area policy immediately, before the
@@ -1963,22 +2001,74 @@ void WaylandCompositor::handleProcessError(QProcess::ProcessError error) {
 void WaylandCompositor::setCompositorActive(bool active) {
     if (!m_window)
         return;
+    const quint64 seq = ++m_activeSeq;
 
-    if (active) {
-        // Always re-assert display power on wake, even if the window already
-        // reports visible. Window-visibility is NOT a reliable proxy for CRTC
-        // power: a raced double-toggle or a partial wake can leave the window
-        // visible while the CRTC sits at ACTIVE=0 -- and the old
-        // `active == isVisible()` early-return then skipped the CRTC re-enable
-        // outright, leaving the panel dark with no recovery (an unwakeable
-        // screen). setDisplayPowerState is idempotent, so re-asserting a live
-        // CRTC is a cheap no-op. Power the pipeline on BEFORE resuming page
-        // flips so the first flip lands on a live CRTC (a sleeping one wedges
-        // eglfs_kms with EINVAL).
-        setDisplayPowerState(true);
-        if (!m_window->isVisible()) {
-            qDebug() << "[WaylandCompositor] Resuming compositor window";
+    // The panel wakes showing the last frame scanned out before it slept,
+    // which is still the app under the lock screen: draw one frame first
+    // (the backlight is already off), then power down.
+    if (!active && m_window->isVisible()) {
+        auto suspend = [this, seq] {
+            if (seq != m_activeSeq)
+                return;
+            ++m_activeSeq;
+            suspendCompositor();
+        };
+        connect(m_window, &QQuickWindow::frameSwapped, this, suspend, Qt::SingleShotConnection);
+        QTimer::singleShot(150, this, suspend);
+        m_window->update();
+        return;
+    }
+    if (!active) {
+        suspendCompositor();
+        return;
+    }
+
+    if (marathon::device::profile().device_id == QStringLiteral("zinwa-q25") &&
+        marathon::device::profile().doze_dpms && initAtomicDisplay() && m_simpleDrmQualified) {
+        const bool   wasDetached = m_simpleDozeDetached;
+        const qint64 wakeStart   = monotonicUs();
+        if (!setSimpleDrmPowerState(true))
+            return;
+        if (wasDetached && envBool("MARATHON_FRAME_TIMING", false))
+            connect(
+                m_window, &QQuickWindow::frameSwapped, this,
+                [wakeStart]() {
+                    qWarning() << "[Q25Doze] wake_to_frameSwapped_notification_us"
+                               << monotonicUs() - wakeStart << "not-photon-latency";
+                },
+                Qt::SingleShotConnection);
+        m_window->setVisible(true);
+        m_window->update();
+        return;
+    }
+
+    // Always re-assert display power on wake, even if the window already
+    // reports visible. Window-visibility is NOT a reliable proxy for CRTC
+    // power: a raced double-toggle or a partial wake can leave the window
+    // visible while the CRTC sits at ACTIVE=0 -- and the old
+    // `active == isVisible()` early-return then skipped the CRTC re-enable
+    // outright, leaving the panel dark with no recovery (an unwakeable
+    // screen). setDisplayPowerState is idempotent, so re-asserting a live
+    // CRTC is a cheap no-op. Power the pipeline on BEFORE resuming page
+    // flips so the first flip lands on a live CRTC (a sleeping one wedges
+    // eglfs_kms with EINVAL).
+    setDisplayPowerState(true);
+    if (!m_window->isVisible()) {
+        qDebug() << "[WaylandCompositor] Resuming compositor window";
+        m_window->setVisible(true);
+    }
+}
+
+void WaylandCompositor::suspendCompositor() {
+    if (marathon::device::profile().device_id == QStringLiteral("zinwa-q25") &&
+        marathon::device::profile().doze_dpms && initAtomicDisplay() && m_simpleDrmQualified) {
+        // Retain Qt's GBM surface/front buffer while pausing its render loop.
+        m_window->setPersistentGraphics(true);
+        m_window->setPersistentSceneGraph(true);
+        m_window->setVisible(false);
+        if (!setSimpleDrmPowerState(false)) {
             m_window->setVisible(true);
+            m_window->update();
         }
         return;
     }
@@ -2074,6 +2164,10 @@ bool WaylandCompositor::initAtomicDisplay() {
 
     qInfo() << "[WaylandCompositor] atomic display ready: fd" << m_driFd << "crtc" << m_crtcId
             << "ACTIVE prop" << m_crtcActivePropId;
+    if (drmVersionPtr version = drmGetVersion(m_driFd)) {
+        m_simpleDrmQualified = QByteArray(version->name, version->name_len) == "simpledrm";
+        drmFreeVersion(version);
+    }
     m_atomicDisplayReady = true;
     return true;
 }
@@ -2107,6 +2201,164 @@ bool WaylandCompositor::initAtomicDisplay() {
 // Render must already be paused (setVisible(false)+releaseResources)
 // before ACTIVE=0, and restored to ACTIVE=1 before render resumes —
 // callers in setCompositorActive guarantee that ordering.
+
+void WaylandCompositor::releaseSimpleDozeState(SimpleDozeState &state) {
+    for (uint32_t fb : std::as_const(state.framebuffers))
+        drmModeRmFB(m_driFd, fb);
+    if (state.modeBlob)
+        drmModeDestroyPropertyBlob(m_driFd, state.modeBlob);
+    state = {};
+}
+
+bool WaylandCompositor::setSimpleDrmPowerState(bool on) {
+    if (on && !m_simpleDozeDetached)
+        return true;
+    if (!on && m_simpleDozeDetached)
+        return true;
+    SimpleDozeState next;
+    auto            capture = [this](uint32_t object, uint32_t type) {
+        QMap<QByteArray, QPair<uint32_t, uint64_t>> result;
+        drmModeObjectProperties *properties = drmModeObjectGetProperties(m_driFd, object, type);
+        if (!properties)
+            return result;
+        for (uint32_t i = 0; i < properties->count_props; ++i) {
+            drmModePropertyRes *property = drmModeGetProperty(m_driFd, properties->props[i]);
+            if (property) {
+                result.insert(property->name, {property->prop_id, properties->prop_values[i]});
+                drmModeFreeProperty(property);
+            }
+        }
+        drmModeFreeObjectProperties(properties);
+        return result;
+    };
+    auto fail = [this, &next](const char *what) {
+        const int error = errno;
+        qWarning() << "[Q25Doze]" << what << strerror(error);
+        releaseSimpleDozeState(next);
+        return false;
+    };
+    if (!on) {
+        const auto crtc = capture(m_crtcId, DRM_MODE_OBJECT_CRTC);
+        if (!crtc.contains("ACTIVE") || crtc["ACTIVE"].second != 1 || !crtc.contains("MODE_ID") ||
+            !crtc["MODE_ID"].second) {
+            errno = EINVAL;
+            return fail("missing active mode");
+        }
+        drmModePropertyBlobRes *blob = drmModeGetPropertyBlob(m_driFd, crtc["MODE_ID"].second);
+        if (!blob)
+            return fail("GetPropertyBlob");
+        const int modeResult =
+            drmModeCreatePropertyBlob(m_driFd, blob->data, blob->length, &next.modeBlob);
+        drmModeFreePropertyBlob(blob);
+        if (modeResult)
+            return fail("CreatePropertyBlob");
+        next.off.append({m_crtcId, crtc["ACTIVE"].first, 0});
+        next.off.append({m_crtcId, crtc["MODE_ID"].first, 0});
+        next.restore.append({m_crtcId, crtc["MODE_ID"].first, next.modeBlob});
+        next.restore.append({m_crtcId, crtc["ACTIVE"].first, crtc["ACTIVE"].second});
+        drmModeRes *resources = drmModeGetResources(m_driFd);
+        if (!resources)
+            return fail("GetResources");
+        int connectors = 0;
+        for (int i = 0; i < resources->count_connectors; ++i) {
+            const uint32_t id    = resources->connectors[i];
+            const auto     props = capture(id, DRM_MODE_OBJECT_CONNECTOR);
+            if (props.contains("CRTC_ID") && props["CRTC_ID"].second == m_crtcId) {
+                next.off.append({id, props["CRTC_ID"].first, 0});
+                next.restore.append({id, props["CRTC_ID"].first, m_crtcId});
+                ++connectors;
+            }
+        }
+        drmModeFreeResources(resources);
+        if (!connectors)
+            return fail("no attached connector");
+        drmModePlaneRes *planes = drmModeGetPlaneResources(m_driFd);
+        if (!planes)
+            return fail("GetPlaneResources");
+        bool valid = true;
+        for (uint32_t i = 0; i < planes->count_planes && valid; ++i) {
+            const uint32_t id    = planes->planes[i];
+            const auto     props = capture(id, DRM_MODE_OBJECT_PLANE);
+            if (!props.contains("CRTC_ID") || props["CRTC_ID"].second != m_crtcId)
+                continue;
+            const QList<QByteArray> names = {"FB_ID", "CRTC_ID", "SRC_X",  "SRC_Y",  "SRC_W",
+                                             "SRC_H", "CRTC_X",  "CRTC_Y", "CRTC_W", "CRTC_H"};
+            for (const auto &name : names)
+                valid = valid && props.contains(name);
+            if (!valid || !props["FB_ID"].second) {
+                valid = false;
+                break;
+            }
+            drmModeFB2 *fb = drmModeGetFB2(m_driFd, props["FB_ID"].second);
+            if (!fb) {
+                valid = false;
+                break;
+            }
+            uint32_t       clone        = 0;
+            const uint64_t modifiers[4] = {fb->modifier, fb->modifier, fb->modifier, fb->modifier};
+            const int      result       = (fb->flags & DRM_MODE_FB_MODIFIERS) ?
+                drmModeAddFB2WithModifiers(m_driFd, fb->width, fb->height, fb->pixel_format,
+                                           fb->handles, fb->pitches, fb->offsets, modifiers, &clone,
+                                           fb->flags) :
+                drmModeAddFB2(m_driFd, fb->width, fb->height, fb->pixel_format, fb->handles,
+                              fb->pitches, fb->offsets, &clone, 0);
+            const int      framebufferError = errno;
+            QSet<uint32_t> handles;
+            for (uint32_t handle : fb->handles) {
+                if (handle && !handles.contains(handle)) {
+                    handles.insert(handle);
+                    drm_gem_close closeHandle{};
+                    closeHandle.handle = handle;
+                    drmIoctl(m_driFd, DRM_IOCTL_GEM_CLOSE, &closeHandle);
+                }
+            }
+            drmModeFreeFB2(fb);
+            errno = framebufferError;
+            if (result) {
+                valid = false;
+                break;
+            }
+            next.framebuffers.append(clone);
+            next.off.append({id, props["FB_ID"].first, 0});
+            next.off.append({id, props["CRTC_ID"].first, 0});
+            for (const auto &name : names)
+                next.restore.append(
+                    {id, props[name].first, name == "FB_ID" ? clone : props[name].second});
+        }
+        drmModeFreePlaneResources(planes);
+        if (!valid || next.framebuffers.isEmpty())
+            return fail("plane snapshot/retention");
+    }
+    const auto       &properties = on ? m_simpleDoze.restore : next.off;
+    drmModeAtomicReq *request    = drmModeAtomicAlloc();
+    if (!request)
+        return fail("AtomicAlloc");
+    bool added = true;
+    for (const auto &property : properties)
+        added = added &&
+            drmModeAtomicAddProperty(request, property.object, property.property, property.value) >=
+                0;
+    const uint32_t flags  = DRM_MODE_ATOMIC_ALLOW_MODESET;
+    int            result = added ?
+        drmModeAtomicCommit(m_driFd, request, flags | DRM_MODE_ATOMIC_TEST_ONLY, nullptr) :
+        -1;
+    if (!result)
+        result = drmModeAtomicCommit(m_driFd, request, flags, nullptr);
+    drmModeAtomicFree(request);
+    if (result)
+        return fail(on ? "restore TEST/commit" : "detach TEST/commit");
+    if (!on) {
+        // Old retained FBs are no longer scanned out; keep new clones through
+        // wake and Qt's first page flip rather than destroying a live FB.
+        releaseSimpleDozeState(m_simpleDoze);
+        m_simpleDoze = std::move(next);
+    }
+    m_simpleDozeDetached = !on;
+    qWarning() << "[Q25Doze] native atomic" << (on ? "restored" : "detached") << "crtc" << m_crtcId
+               << "retainedFBs" << m_simpleDoze.framebuffers;
+    return true;
+}
+
 void WaylandCompositor::setDisplayPowerState(bool on) {
     // DEFAULT ON as of 2026-07-01. Validated: the atomic CRTC ACTIVE=0
     // display-off drops Doze draw from ~2.8W to ~0.1W (measured; matches
@@ -2495,15 +2747,67 @@ qint64 WaylandCompositor::nextVblankUs() {
     const qint64 last = lastVblankUs();
     if (last < 0)
         return -1;
-    const qreal  hz     = m_window && m_window->screen() ? m_window->screen()->refreshRate() : 60.0;
-    const qint64 period = qint64(1000000.0 / (hz > 0 ? hz : 60.0));
+    const qint64 period = qint64(1000000.0 / m_refreshHz);
     qint64       next   = last + period;
     while (next < monotonicUs())
         next += period;
     return next;
 }
 
+// Qt rounds the mode to whole Hz: 60 for a 59.94 Hz panel, 71 for 70.98. A
+// mode without blanking is made up (simpledrm's 60 Hz); MARATHON_OUTPUT_HZ
+// then gives the panel's real rate.
+void WaylandCompositor::resolveOutputRefresh() {
+    drmModeCrtcPtr         crtc = initAtomicDisplay() ? drmModeGetCrtc(m_driFd, m_crtcId) : nullptr;
+    const drmModeModeInfo *mode = crtc && crtc->mode_valid ? &crtc->mode : nullptr;
+    const qreal            panelHz = qEnvironmentVariable("MARATHON_OUTPUT_HZ").toDouble();
+    bool                   known   = true;
+    if (mode && (mode->htotal > mode->hdisplay || mode->vtotal > mode->vdisplay))
+        m_refreshHz = mode->clock * 1000.0 / (qreal(mode->htotal) * mode->vtotal);
+    else if (panelHz > 0)
+        m_refreshHz = panelHz;
+    else
+        known = false;
+    // A CRTC without vblank (simpledrm) completes flips at once, so frames
+    // would free-run: start them a period apart (MARATHON_SOFT_VSYNC=0: don't).
+    if (known && mode && m_presentPipeline && m_framePhaseMs == 0 && lastVblankUs() < 0 &&
+        envBool("MARATHON_SOFT_VSYNC", true))
+        m_softPeriodUs = qint64(1000000.0 / m_refreshHz);
+    drmModeFreeCrtc(crtc);
+    qInfo() << "[WaylandCompositor] output refresh" << m_refreshHz << "Hz, soft vsync"
+            << (m_softPeriodUs > 0);
+    advertiseRefresh();
+}
+
+// QtWayland gives wl_output Qt's rounded rate, which clients animate by.
+void WaylandCompositor::advertiseRefresh() {
+    const QWaylandOutputMode current = m_output->currentMode();
+    const QWaylandOutputMode exact(current.size(), qRound(m_refreshHz * 1000));
+    if (!current.isValid() || exact == current)
+        return;
+    m_output->addMode(exact, true);
+    m_output->setCurrentMode(exact);
+}
+
 bool WaylandCompositor::eventFilter(QObject *watched, QEvent *event) {
+    if (watched == m_window && m_softPeriodUs > 0 && event->type() == QEvent::UpdateRequest) {
+        if (m_passUpdate) {
+            m_passUpdate = false;
+            return false;
+        }
+        if (m_gateTimer.isActive())
+            return true;
+        // Frames keep a beat of one period; the first after an idle starts it.
+        const qint64 now  = monotonicUs();
+        const qint64 next = m_softFrameUs + m_softPeriodUs;
+        if (now >= next) {
+            m_softFrameUs = now - next < m_softPeriodUs ? next : now;
+            return false;
+        }
+        m_softFrameUs = next;
+        m_gateTimer.start(int((next - now + 999) / 1000));
+        return true;
+    }
     if (watched == m_window && m_framePhaseMs > 0 && event->type() == QEvent::UpdateRequest) {
         if (m_passUpdate) {
             m_passUpdate = false;
@@ -2579,17 +2883,34 @@ bool WaylandCompositor::eventFilter(QObject *watched, QEvent *event) {
             m_xdgActivation->noteUserInput();
             m_lastUserInput.start();
         }
+        if (type == QEvent::KeyPress)
+            emit keyPressed();
 
+        if ((type == QEvent::KeyPress || type == QEvent::KeyRelease) &&
+            static_cast<QKeyEvent *>(event)->nativeScanCode() == KeyRouting::SelectScanCode) {
+            const auto *select = static_cast<QKeyEvent *>(event);
+            QKeyEvent   enter(type, Qt::Key_Return, select->modifiers(), KeyRouting::EnterScanCode,
+                              KeyRouting::ReturnKeysym, select->nativeModifiers(),
+                              QStringLiteral("\r"), select->isAutoRepeat(), select->count(),
+                              select->device());
+            QCoreApplication::sendEvent(watched, &enter);
+            return true;
+        }
         if (type == QEvent::KeyPress || type == QEvent::KeyRelease) {
             const auto              *keyEvent = static_cast<QKeyEvent *>(event);
-            const KeyRouting::Action action =
-                KeyRouting::systemAction(keyEvent->key(), focusedToolkit());
+            const KeyRouting::Action action   = KeyRouting::systemAction(
+                keyEvent->key(), focusedToolkit(), keyEvent->nativeScanCode());
             if (action != KeyRouting::None) {
                 if (type == QEvent::KeyRelease) {
-                    if (action == KeyRouting::Back)
-                        emit systemBackTriggered();
-                    else
-                        emit systemHomeTriggered();
+                    switch (action) {
+                        case KeyRouting::Back: emit systemBackTriggered(); break;
+                        case KeyRouting::Home: emit systemHomeTriggered(); break;
+                        case KeyRouting::Call: emit systemCallTriggered(); break;
+                        case KeyRouting::End: emit systemEndTriggered(); break;
+                        case KeyRouting::Switcher: emit systemSwitcherTriggered(); break;
+                        case KeyRouting::Hangup: emit systemHangupTriggered(); break;
+                        case KeyRouting::None: break;
+                    }
                 }
                 return true;
             }

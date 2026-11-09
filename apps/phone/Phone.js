@@ -3,7 +3,7 @@
 const twoDigitCountryCodes = ["20", "27", "30", "31", "32", "33", "34", "36", "39", "40", "41", "43", "44", "45", "46", "47", "48", "49", "51", "52", "53", "54", "55", "56", "57", "58", "60", "61", "62", "63", "64", "65", "66", "81", "82", "84", "86", "90", "91", "92", "93", "94", "95", "98"];
 
 // Short codes networks route to emergency services, with or without a SIM.
-const emergencyNumbers = ["112", "911", "999", "000", "110", "119", "118", "08"];
+const emergencyNumbers = ["112", "911", "999", "000", "110", "119", "118"];
 
 function dialable(text) {
     return String(text || "").replace(/[^0-9+*#]/g, "");
@@ -114,4 +114,31 @@ function lastOutgoing(history) {
             best = c;
     }
     return best ? String(best.number) : "";
+}
+
+// The kinds of number and address a contact keeps, as marathon-davd names them.
+const kinds = ["mobile", "home", "work", "other", "fax"];
+
+function kindName(kind) {
+    switch (kind) {
+    case "mobile":
+        return qsTr("Mobile");
+    case "home":
+        return qsTr("Home");
+    case "work":
+        return qsTr("Work");
+    case "fax":
+        return qsTr("Fax");
+    default:
+        return qsTr("Other");
+    }
+}
+
+// A contact's numbers or addresses as {type, value}, from its list or its one
+// `key` field; one empty entry when it has none, to type into.
+function contactEntries(contact, listKey, key, kind) {
+    const list = contact && contact[listKey] && contact[listKey].length > 0 ? contact[listKey]
+        : contact && contact[key] ? [{ type: kind, value: contact[key] }] : [];
+    const out = list.map(e => ({ type: e.type || kind, value: String(e.value || "") }));
+    return out.length > 0 ? out : [{ type: kind, value: "" }];
 }

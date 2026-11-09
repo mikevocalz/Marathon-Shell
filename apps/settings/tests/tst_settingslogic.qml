@@ -58,7 +58,7 @@ TestCase {
 
     function test_batteryStatus() {
         compare(Logic.batteryStatus(true, true, 0), "Charging");
-        compare(Logic.batteryStatus(false, true, 0), "Plugged in, not charging");
+        compare(Logic.batteryStatus(false, true, 0), "Charged");
         compare(Logic.batteryStatus(false, false, 0), "Discharging");
         compare(Logic.batteryStatus(false, false, 2 * 3600 + 5 * 60), "2 h 5 min left");
         compare(Logic.batteryStatus(false, false, 40 * 60), "40 min left");
@@ -116,12 +116,24 @@ TestCase {
         ]), "Buds");
         compare(Logic.batterySummary(55, false), "55%");
         compare(Logic.batterySummary(55, true), "55% · charging");
-        compare(Logic.batterySummary(-1, false), "");
-        compare(Logic.batterySummary(undefined, false), "");
+        compare(Logic.batterySummary(-1, false), "Battery level unavailable");
+        compare(Logic.batterySummary(undefined, false), "Battery level unavailable");
         compare(Logic.percent(0.456), 46);
         compare(Logic.percent(2), 100);
         compare(Logic.zoneCity("America/Port_of_Spain"), "Port of Spain");
         compare(Logic.zoneCity(""), "UTC");
+    }
+
+    function test_nightLight() {
+        compare(Logic.nightLightKelvin(0), 4500);
+        compare(Logic.nightLightKelvin(100), 2700);
+        compare(Logic.nightLightKelvin(61), 3400);
+        compare(Logic.nightLightKelvin(150), 2700);
+        compare(Logic.nightLightWarmth(3400), 61);
+        compare(Logic.nightLightWarmth(6500), 0);
+        const t = Logic.timeOfDay(22 * 60 + 5);
+        compare(t.getHours(), 22);
+        compare(t.getMinutes(), 5);
     }
 
     function test_setMember() {
