@@ -6,7 +6,7 @@ The `native-ui` job in `.github/workflows/ci.yml` now runs a required, bounded
 native gate. It builds the real Keel source pinned by
 `packaging/packages/keel-silica/APKBUILD`, verifies the checked-out commit, builds
 its Silica, Actions, Share and Configuration plugins against the job's Qt, and
-runs these seven CTests:
+runs these ten CTests:
 
 | CTest | Required evidence |
 | --- | --- |
@@ -15,6 +15,9 @@ runs these seven CTests:
 | `Qml_settings_AppPages` | The actual Settings AppPages suite, including pending-cleanup retry and explicit persistent permission grants/revocations |
 | `Qml_settings_PermissionPages` | The actual permission-list and per-permission app pages, including the four-argument native permission call contract; platform services remain fixtures |
 | `Qml_shell_PageViewHub` | The actual launcher PageViewHub test, including accepted, partial and failed uninstall outcomes; broader shell UI remains separate |
+| `Qml_shell_Hub` | Actual Hub unread/source-filter composition, badge updates, filtered empty states and interactive chips; notification providers remain fixtures |
+| `Qml_shell_OverviewGrid` | The production adaptive-grid helper across compact, square, wide and scaled viewports, page bounds and reflow |
+| `Qml_shell_TaskSwitcher` | Actual task-switcher geometry, stable task anchors through insert/remove/reorder, resize and offscreen reveal; live Wayland surfaces remain separate |
 | `Lint_QmlValidator` | 12 executable contract tests, using real `qmllint` for QML behavior |
 | `NativeUI_GateContract` | 8 contract tests: real Qt pass/failure/skip/empty execution, missing tooling, required/optional dependency configuration, and the CMake lint target |
 
@@ -48,7 +51,8 @@ ctest --test-dir build-native-ui -L native-ui-required \
 ```
 
 The reports under `build-native-ui/reports/` are `toolkit.xml`, `notes.xml`,
-`settings-apppages.xml`, `settings-permissionpages.xml`, and `pageviewhub.xml`. The
+`settings-apppages.xml`, `settings-permissionpages.xml`, `pageviewhub.xml`,
+`hub.xml`, `overviewgrid.xml` and `taskswitcher.xml`. The
 container workflow is reproducible with the invocation in `ci.yml` and
 `scripts/ci/native-ui.sh`. The native CI container installs Alpine
 `qt6-qtwayland-dev` for the real QtWayland.Compositor module. If that matching
@@ -256,6 +260,80 @@ This comparison distinguishes the observed host failures from the repair's
 focused native tests. It does not qualify process identity enforcement on a
 device. The full native/image CI and the actual device boundary tests remain
 required; no test was disabled or rewritten to conceal these failures.
+
+## Rust/API and open-PR integration follow-up
+
+The Rust repair source is preserved at
+[`1241537c`](https://github.com/mikevocalz/Marathon-Shell/commit/1241537cdb17e3beb7523eb94c81ad829d062fe6),
+tree `f74ee42e90362d0f59e8eed059b93e4c2be37f27`. Later feature integration through
+[`70cb8b6c`](https://github.com/mikevocalz/Marathon-Shell/commit/70cb8b6cafca615ed7076f13bc24e856d7076ede)
+adds the reviewed Hub, adaptive overview, Passport utility and documentation
+slices without changing that Rust source. The required registrations above
+extend the combined native gate to ten CTests.
+
+Local verification used Rust **1.99.1**, official Qt **6.11.3**, CXX-Qt
+**0.10.0**, and real Keel **`0df499bf34e02cec7f571853cbf5a4323dc1609e`**.
+Keel itself used its pinned Rust **1.94.1** toolchain. The supported JSON
+Configuration backend and existing Platform/shell service fixtures remain
+explicit. No production toolkit was replaced with a test double.
+
+| Check | Observed result and boundary |
+| --- | --- |
+| Combined required native gate | **10/10 CTests passed**, 64.15 seconds; all Qt reports have zero failures/skips |
+| Settings AppPages / PermissionPages | **28 / 7 total Qt results**, including **26 / 5 behavioral functions**; actual Keel widgets, explicit service fixtures |
+| Hub | **33 total / 31 behavioral results**; source/read filtering, badge changes, source removal and chip interaction |
+| OverviewGrid / TaskSwitcher | **12 / 12 total**, **10 / 10 behavioral rows/functions**; four new mutation/reveal journeys failed on the original PR #2 prototype and passed after repair |
+| Integrated Rust task filters | **25 passed** across launch, pool and claim resources, plus the isolated subprocess exercise of default SIGPIPE behavior; no failures/ignored cases |
+| Actual generated Tasks Qt boundary | `Core_TasksLaunch` **1/1 CTest**, **3 behavioral rows / 5 total Qt results**; replacement success/failure and unrelated pending launch. Both replacement rows failed before the fix |
+| AppInstaller cache / runtime admission | **3 / 1 Rust tests passed**; generated app-native bridge and static archive built successfully |
+| Strict native Clippy | `marathon-shell-native`, `marathon-app-native` and `marathon-rt`, all targets, passed with `-D warnings` |
+| Persistent permission backend | Existing persistence regression **1/1 passed**; separate from fixture-driven Settings behavior |
+| Passport inspection | **25 Python tests**, **1/1 focused CTest**; actual offline CLI success/incompatible/error exits **0/1/2**. macOS inventory uses mocked responses |
+| Changed-source validation | Native QML lint for affected Settings, Hub and overview files reports zero diagnostics with named fixture imports; formatting, reachability and whitespace checks pass |
+
+Three temporary native captures at **540 × 1140** were independently reviewed:
+cleanup loading with retained rows and disabled retry controls, cleanup and
+capability errors with reload actions, and Flatpak failure with retained apps.
+No new overlap or clipping was found. This is host/offscreen rendering with
+fixtures, not a device, multi-DPI, light-theme or accessibility qualification.
+Keel's native theme provider was also checked: the informational missing-asset
+message precedes its valid generated busy-indicator fallback. No theme shim
+or replacement asset was needed.
+
+### Actual bus execution and remaining evidence
+
+`Core_AppInstaller` links the real generated Rust `AppInstaller` and holds
+replies from a controlled private D-Bus service. Its eight test functions
+contain ten behavioral rows covering GUI-owner responsiveness, wire shapes,
+error/malformed replies, retained cache and recovery, coalescing, the real
+15-second client deadline, late replies, destruction/replacement, and one
+64-ID capability request with no legacy per-app calls. CTest requires
+`dbus-run-session` and gives the test a 90-second deadline; it has no skip path.
+
+The executable compiled, linked and enumerated locally. **Its private-bus
+execution must be read from the exact hosted candidate**, because this local
+host denies AF_UNIX sockets. The direct `Core_TasksLaunch` callback test runs
+locally despite explicit bus/cgroup unavailability messages; that does not
+qualify production D-Bus, cgroups, child-process transport or a compositor.
+
+At the first published Rust head, format, commit subjects and all **7/7**
+then-required native UI CTests passed in
+[CI run 42646605430](https://github.com/mikevocalz/Marathon-Shell/actions/runs/42646605430).
+Its full build/test job was still running at this record. The later integrated
+head needs its own hosted result, including the three added UI suites and
+Passport registration. The [draft PR's verification record](https://github.com/mikevocalz/Marathon-Shell/pull/9)
+records those exact-head results when they complete; older success is not a
+claim for a newer tree.
+
+The controlled AppInstaller service does not establish the production shell's
+authorization/filesystem boundary. The overview fixture's clear/repopulate
+journey does not execute native `beginResetModel`/`endResetModel`; that wiring
+was source-reviewed. The 30-second delayed old-launch cleanup branch was
+source-reviewed, while immediate replacement callbacks were executed.
+Generation-bound authority, request-owned routes/hold timers, readiness,
+subscription cancellation, resource/energy budgets, real provider persistence,
+full-source QML warnings and physical image/device gates remain open. All
+R01–R08 tickets and 37 packages retain their full acceptance requirements.
 
 ## Primary tooling references
 

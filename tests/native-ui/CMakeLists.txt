@@ -8,7 +8,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 else()
     set(_native_required_default OFF)
 endif()
-option(MARATHON_REQUIRE_NATIVE_UI_TESTS "Require real Notes, Settings app/permission pages and shell PageViewHub UI" ${_native_required_default})
+option(MARATHON_REQUIRE_NATIVE_UI_TESTS "Require real Notes, Settings, Hub and overview UI" ${_native_required_default})
 set(MARATHON_SOURCE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 find_package(Python3 COMPONENTS Interpreter QUIET)
 set(KEEL_QML "$ENV{KEEL_QML}" CACHE PATH "Real Keel build/install QML directory")
@@ -104,7 +104,37 @@ else()
         -input "${MARATHON_SOURCE_ROOT}/tests/ui/tst_pageviewhub.qml")
     set_tests_properties(Qml_shell_PageViewHub PROPERTIES LABELS "native-ui-required"
         FIXTURES_REQUIRED NativeKeel TIMEOUT 180)
-    message(STATUS "Required native UI scope: toolkit + complete Notes + Settings AppPages/PermissionPages + shell PageViewHub; broader suites remain separate")
+    # Integrated Hub filtering and adaptive overview use the actual shell
+    # components with the existing local shell-service fixtures. These do not
+    # establish provider read-state sync or live Wayland surface presentation.
+    add_test(NAME Qml_shell_Hub COMMAND "${Python3_EXECUTABLE}"
+        "${MARATHON_SOURCE_ROOT}/scripts/ci/run-qml-suite.py"
+        --report "${CMAKE_CURRENT_BINARY_DIR}/reports/hub.xml" --
+        "${QMLTESTRUNNER}" -import "${KEEL_QML}"
+        -import "${MARATHON_SOURCE_ROOT}/marathon-silica"
+        -import "${MARATHON_SOURCE_ROOT}/tests/ui/stubs"
+        -input "${MARATHON_SOURCE_ROOT}/tests/ui/tst_hub.qml")
+    set_tests_properties(Qml_shell_Hub PROPERTIES LABELS "native-ui-required"
+        FIXTURES_REQUIRED NativeKeel TIMEOUT 180)
+    add_test(NAME Qml_shell_OverviewGrid COMMAND "${Python3_EXECUTABLE}"
+        "${MARATHON_SOURCE_ROOT}/scripts/ci/run-qml-suite.py"
+        --report "${CMAKE_CURRENT_BINARY_DIR}/reports/overviewgrid.xml" --
+        "${QMLTESTRUNNER}" -import "${KEEL_QML}"
+        -import "${MARATHON_SOURCE_ROOT}/marathon-silica"
+        -import "${MARATHON_SOURCE_ROOT}/tests/ui/stubs"
+        -input "${MARATHON_SOURCE_ROOT}/tests/ui/tst_overviewgrid.qml")
+    set_tests_properties(Qml_shell_OverviewGrid PROPERTIES LABELS "native-ui-required"
+        FIXTURES_REQUIRED NativeKeel TIMEOUT 180)
+    add_test(NAME Qml_shell_TaskSwitcher COMMAND "${Python3_EXECUTABLE}"
+        "${MARATHON_SOURCE_ROOT}/scripts/ci/run-qml-suite.py"
+        --report "${CMAKE_CURRENT_BINARY_DIR}/reports/taskswitcher.xml" --
+        "${QMLTESTRUNNER}" -import "${KEEL_QML}"
+        -import "${MARATHON_SOURCE_ROOT}/marathon-silica"
+        -import "${MARATHON_SOURCE_ROOT}/tests/ui/stubs"
+        -input "${MARATHON_SOURCE_ROOT}/tests/ui/tst_taskswitcher.qml")
+    set_tests_properties(Qml_shell_TaskSwitcher PROPERTIES LABELS "native-ui-required"
+        FIXTURES_REQUIRED NativeKeel TIMEOUT 180)
+    message(STATUS "Required native UI scope: toolkit + complete Notes + Settings AppPages/PermissionPages + PageViewHub + Hub + overview geometry/task switcher; broader suites remain separate")
 endif()
 
 if(Python3_Interpreter_FOUND)
