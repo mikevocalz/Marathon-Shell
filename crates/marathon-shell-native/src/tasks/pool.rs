@@ -27,6 +27,7 @@ struct Spare {
     pid: i64,
     instance: String,
     started: Instant,
+    policy: sandbox::LaunchPolicy,
 }
 
 #[derive(Default)]
@@ -111,7 +112,17 @@ impl Tasks {
     }
 
     fn spawn_spare(mut self: Pin<&mut Self>, storage: bool) -> bool {
-        if self.pool.spares[slot(storage)].is_some() || sandbox::bwrap().is_none() {
+        if self.pool.spares[slot(storage)].is_some() {
+            return false;
+        }
+        let policy = match sandbox::LaunchPolicy::from_environment() {
+            Ok(policy) => policy,
+            Err(error) => {
+                log::warn("tasks", format_args!("cannot start spare runner: {error}"));
+                return false;
+            }
+        };
+        if !policy.is_sandboxed() {
             return false;
         }
         if self.pool.failures >= 3 {
@@ -124,7 +135,7 @@ impl Tasks {
             return false;
         };
         runner.wayland_socket = socket;
-        let command = sandbox::argv(&runner, &runner_path());
+        let command = sandbox::argv(&runner, &runner_path(), &policy);
         let Some((program, args)) = command.split_first() else {
             return false;
         };
@@ -159,6 +170,7 @@ impl Tasks {
             pid,
             instance,
             started: Instant::now(),
+            policy,
         });
         true
     }
@@ -233,11 +245,15 @@ impl Tasks {
         storage: bool,
         mut launch: Launch,
         env: &Map,
+        policy: &sandbox::LaunchPolicy,
     ) -> bool {
         self.as_mut().note_launch_shape(storage);
         let Some(spare) = self.pool.spares[slot(storage)].as_ref() else {
             return false;
         };
+        if !policy.can_adopt(&spare.policy) {
+            return false;
+        }
         let (pid, instance) = (spare.pid, spare.instance.clone());
         let mut grants = serde_json::Map::new();
         grants.insert(

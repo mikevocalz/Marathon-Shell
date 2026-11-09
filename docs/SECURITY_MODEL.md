@@ -75,8 +75,26 @@ sandbox for each launch and for the warm runner pool (`tasks/pool.rs`):
   host socket stays in its own tmpfs.
 - `--die-with-parent`, `--new-session`.
 
-`MARATHON_DISABLE_SANDBOX=1` (or a missing `bwrap`) runs apps without any
-of this, and the shell logs a warning for every such launch.
+The shell resolves the launch policy once, before choosing a cold runner
+or adopting a warm spare (`sandbox/policy.rs`):
+
+| `MARATHON_DISABLE_SANDBOX` | Marathon app launch policy |
+|---------------------------|----------------------------|
+| Unset or exactly `0` | Require an executable `bwrap`; refuse the launch if it is unavailable. |
+| Exactly `1` | Deliberately run without confinement and log a warning for this launch. The runner pool is not used. |
+| Any other value, including empty or non-UTF-8 | Refuse the launch and report the configuration error through `appLaunchFailed`. |
+
+The selected `bwrap` has an absolute, UTF-8 executable path. That path and
+policy are reused for environment and command construction, with no second
+PATH or override decision. A warm spare records its original policy and
+can be adopted only under the same confined policy. An unavailable
+security-context socket or a failed `bwrap` start never falls back to a
+direct runner. The environment marker `MARATHON_SANDBOXED` is `1` for a
+confined launch and `0` for the deliberate override; it describes the
+selected launch mode, not proof that every kernel filter succeeded.
+
+These rules apply to Marathon QML/WebEngine runners. The native, Flatpak
+and Sailfish launch mechanisms retain the trust model described above.
 
 Gaps:
 

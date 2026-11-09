@@ -662,19 +662,40 @@ impl Tasks {
     }
 
     fn launch_marathon(mut self: Pin<&mut Self>, app: &App, foreground_generation: u64) -> bool {
+        let policy = match sandbox::LaunchPolicy::from_environment() {
+            Ok(policy) => policy,
+            Err(error) => {
+                log::warn("tasks", format_args!("cannot launch {}: {error}", app.id));
+                self.as_mut().rust_mut().launching.remove(&app.id);
+                self.app_launch_failed(&q(&app.id), &q(&app.name), &q(&error.to_string()));
+                return false;
+            }
+        };
+        if !policy.is_sandboxed() {
+            log::warn(
+                "tasks",
+                format_args!(
+                    "launching {} without confinement: MARATHON_DISABLE_SANDBOX=1 was explicitly set",
+                    app.id
+                ),
+            );
+        }
         if !self.background_launches.contains(&app.id) {
             self.as_mut().open(app, false);
             self.as_mut().show(app, &app.kind, -1);
         }
         let mut runner = self.runner(&app.id, &app.permissions, false);
-        let webengine = sandbox::uses_webengine(&runner);
-        let camera = sandbox::uses_camera(&runner);
-        let mut env = sandbox::environment(&runner);
+        let mut env = sandbox::environment(&runner, &policy);
         // A spare can write every app's data: it takes only Marathon's own,
         // and not WebEngine's, the camera's or a terminal's, whose
         // environment or home is per app.
         let terminal = app.permissions.iter().any(|p| p == "terminal");
-        if !sandbox::is_user_installed(&app.id) && !webengine && !camera && !terminal {
+        if policy.is_sandboxed()
+            && !sandbox::is_user_installed(&app.id)
+            && !sandbox::uses_webengine(&runner)
+            && !sandbox::uses_camera(&runner)
+            && !terminal
+        {
             let storage = app.permissions.iter().any(|p| p == "storage");
             let launch = Launch {
                 app_id: app.id.clone(),
@@ -685,7 +706,7 @@ impl Tasks {
                 foreground_generation,
                 ..Launch::default()
             };
-            if self.as_mut().adopt_spare(storage, launch, &env) {
+            if self.as_mut().adopt_spare(storage, launch, &env, &policy) {
                 let qt = self.qt_thread();
                 let id = app.id.clone();
                 later(qt, LAUNCH_HOLD, move |mut obj| {
@@ -696,7 +717,7 @@ impl Tasks {
             }
         }
         let mut instance = String::new();
-        if sandbox::bwrap().is_some() {
+        if policy.is_sandboxed() {
             instance = super::launch_uuid();
             if let Some(socket) = self.as_mut().open_sandbox_socket(&app.id, &instance) {
                 runner.wayland_socket = socket;
@@ -710,7 +731,8 @@ impl Tasks {
                 return false;
             }
         }
-        let mut command = sandbox::command_line(&sandbox::argv(&runner, &pool::runner_path()));
+        let mut command =
+            sandbox::command_line(&sandbox::argv(&runner, &pool::runner_path(), &policy));
         if let Some((route, params)) = self.as_mut().take_route() {
             command = format!("{command} --route \"{route}\"");
             env.insert(q("MARATHON_APP_ROUTE"), QVariant::from(&q(&route)));

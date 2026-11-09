@@ -17,6 +17,9 @@ use std::sync::{LazyLock, Mutex};
 
 use cxx_qt_lib::{QMap, QMapPair_QString_QVariant, QString, QStringList, QVariant};
 
+mod policy;
+pub(crate) use policy::LaunchPolicy;
+
 #[cxx_qt::bridge]
 mod ffi {
     unsafe extern "C++" {
@@ -102,21 +105,6 @@ pub(crate) fn is_user_installed(app_id: &str) -> bool {
         .join("manifest.json")
         .exists()
         && marathon_apps::paths::receipt(app_id).exists()
-}
-
-/// bubblewrap, or none when apps run unsandboxed.
-pub(crate) fn bwrap() -> Option<String> {
-    if env::var_os("MARATHON_DISABLE_SANDBOX").is_some() {
-        return None;
-    }
-    let found = env::var_os("PATH")
-        .map(|p| {
-            env::split_paths(&p)
-                .map(|d| d.join("bwrap"))
-                .find(|p| p.is_file())
-        })
-        .unwrap_or_default();
-    found.map(|p| p.to_string_lossy().into_owned())
 }
 
 #[derive(Default, Clone)]
@@ -275,12 +263,15 @@ fn variables(runner: &Runner) -> Vec<(&'static str, String)> {
     vars
 }
 
-pub(crate) fn environment(runner: &Runner) -> QMap<QMapPair_QString_QVariant> {
+pub(crate) fn environment(
+    runner: &Runner,
+    policy: &LaunchPolicy,
+) -> QMap<QMapPair_QString_QVariant> {
     let mut map = QMap::<QMapPair_QString_QVariant>::default();
-    let sandboxed = bwrap().is_some();
+    let sandboxed = if policy.is_sandboxed() { "1" } else { "0" };
     for (name, value) in variables(runner)
         .into_iter()
-        .chain(sandboxed.then(|| ("MARATHON_SANDBOXED", "1".to_owned())))
+        .chain([("MARATHON_SANDBOXED", sandboxed.to_owned())])
     {
         map.insert(QString::from(name), QVariant::from(&QString::from(&value)));
     }
@@ -316,7 +307,7 @@ fn media_folders() -> Vec<PathBuf> {
 }
 
 /// The program and its arguments.
-pub(crate) fn argv(runner: &Runner, runner_path: &str) -> Vec<String> {
+pub(crate) fn argv(runner: &Runner, runner_path: &str, policy: &LaunchPolicy) -> Vec<String> {
     let app = app(runner);
     let tail = match &app {
         Some(app) => vec![
@@ -326,9 +317,11 @@ pub(crate) fn argv(runner: &Runner, runner_path: &str) -> Vec<String> {
         ],
         None => vec![runner_path.to_owned(), "--pool".to_owned()],
     };
-    match bwrap() {
-        Some(bwrap) => [vec![bwrap], sandbox(runner, app.as_ref()), tail].concat(),
-        None => tail,
+    match policy {
+        LaunchPolicy::Bubblewrap(bwrap) => {
+            [vec![bwrap.clone()], sandbox(runner, app.as_ref()), tail].concat()
+        }
+        LaunchPolicy::DisabledByOverride => tail,
     }
 }
 
@@ -547,4 +540,121 @@ pub(crate) fn command_line(argv: &[String]) -> String {
         })
         .collect();
     quoted.join(" ")
+}
+
+#[cfg(test)]
+mod tests {
+    use std::error::Error;
+    use std::ffi::OsStr;
+    use std::os::unix::fs::PermissionsExt as _;
+    use std::process::Command;
+
+    use super::*;
+
+    fn sandbox_marker(runner: &Runner, policy: &LaunchPolicy) -> Option<String> {
+        environment(runner, policy)
+            .get(&QString::from("MARATHON_SANDBOXED"))?
+            .value::<QString>()
+            .map(|value| value.to_string())
+    }
+
+    #[test]
+    fn explicit_override_builds_a_direct_runner_and_reports_it() -> Result<(), Box<dyn Error>> {
+        let runner = Runner {
+            app_id: "org.marathonos.sandbox-test".into(),
+            ..Runner::default()
+        };
+        let policy = LaunchPolicy::resolve(Some(OsStr::new("1")), None)?;
+        assert_eq!(
+            argv(&runner, "/test/runner", &policy),
+            ["/test/runner", "--app-id", "org.marathonos.sandbox-test"]
+        );
+        assert_eq!(sandbox_marker(&runner, &policy).as_deref(), Some("0"));
+        Ok(())
+    }
+
+    #[test]
+    fn launch_command_and_environment_keep_resolved_policy() -> Result<(), Box<dyn Error>> {
+        const CHILD: &str = "MARATHON_SANDBOX_POLICY_TEST_DIRECTORY";
+        let Some(directory) = env::var_os(CHILD) else {
+            // The real argument builder creates per-app directories. Run it
+            // with isolated XDG homes without mutating this test process's
+            // environment while other native tests are running.
+            let directory = tempfile::tempdir()?;
+            let bin = directory.path().join("bin with spaces");
+            fs::create_dir(&bin)?;
+            let executable = bin.join("bwrap");
+            fs::write(&executable, b"command construction fixture, never executed")?;
+            fs::set_permissions(executable, fs::Permissions::from_mode(0o755))?;
+            let output = Command::new(env::current_exe()?)
+                .current_dir(directory.path())
+                .args([
+                    "--exact",
+                    "sandbox::tests::launch_command_and_environment_keep_resolved_policy",
+                ])
+                .env(CHILD, directory.path())
+                .env("XDG_DATA_HOME", directory.path().join("data"))
+                .env("XDG_CACHE_HOME", directory.path().join("cache"))
+                .env("XDG_CONFIG_HOME", directory.path().join("config"))
+                .env("XDG_RUNTIME_DIR", directory.path().join("runtime"))
+                .env(
+                    "MARATHON_DISABLE_SANDBOX",
+                    "malformed-after-policy-resolution",
+                )
+                .env("PATH", directory.path().join("missing-bin"))
+                .output()?;
+            assert!(
+                output.status.success(),
+                "native command construction failed: {}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return Ok(());
+        };
+        let directory = PathBuf::from(directory);
+        let bin = directory.join("bin with spaces");
+        assert!(matches!(
+            LaunchPolicy::from_environment(),
+            Err(policy::PolicyError::InvalidOverride)
+        ));
+        let policy =
+            LaunchPolicy::resolve(Some(OsStr::new("0")), Some(OsStr::new("bin with spaces")))?;
+        let runner = Runner {
+            app_id: "org.marathonos.sandbox-test".into(),
+            wayland_socket: directory.join("wayland").to_string_lossy().into_owned(),
+            ..Runner::default()
+        };
+        let command = argv(&runner, "/test/runner", &policy);
+        assert_eq!(
+            command.first().map(String::as_str),
+            bin.join("bwrap").to_str()
+        );
+        assert!(command.ends_with(&[
+            "/test/runner".into(),
+            "--app-id".into(),
+            runner.app_id.clone()
+        ]));
+        assert!(command
+            .windows(3)
+            .any(|args| args == ["--setenv", "MARATHON_SANDBOXED", "1"]));
+        assert!(command.iter().any(|arg| arg == "--unshare-net"));
+        assert_eq!(sandbox_marker(&runner, &policy).as_deref(), Some("1"));
+        assert!(
+            command_line(&command).starts_with(&format!("\"{}\" ", bin.join("bwrap").display()))
+        );
+
+        // Pool construction receives the same resolved confinement policy.
+        let spare = Runner {
+            app_id: String::new(),
+            ..runner
+        };
+        let command = argv(&spare, "/test/runner", &policy);
+        assert_eq!(
+            command.first().map(String::as_str),
+            bin.join("bwrap").to_str()
+        );
+        assert!(command.ends_with(&["/test/runner".into(), "--pool".into()]));
+        assert_eq!(sandbox_marker(&spare, &policy).as_deref(), Some("1"));
+        Ok(())
+    }
 }
