@@ -6,12 +6,13 @@ The `native-ui` job in `.github/workflows/ci.yml` now runs a required, bounded
 native gate. It builds the real Keel source pinned by
 `packaging/packages/keel-silica/APKBUILD`, verifies the checked-out commit, builds
 its Silica, Actions, Share and Configuration plugins against the job's Qt, and
-runs these four CTests:
+runs these five CTests:
 
 | CTest | Required evidence |
 | --- | --- |
 | `NativeUI_Toolkit` | Qt 6 imports and instantiates real Silica and Configuration; imports real Keel.Actions and Sailfish.Share |
 | `Qml_apps_notes_tests` | The complete existing Notes/Tasks UI, actions and persistence suite through its original `run.sh` |
+| `Qml_settings_AppPages` | The actual Settings AppPages suite, including the installer change's pending-cleanup retry UI; other Settings pages remain separate |
 | `Lint_QmlValidator` | 12 executable contract tests, using real `qmllint` for QML behavior |
 | `NativeUI_GateContract` | 8 contract tests: real Qt pass/failure/skip/empty execution, missing tooling, required/optional dependency configuration, and the CMake lint target |
 
@@ -43,7 +44,8 @@ ctest --test-dir build-native-ui -L native-ui-required \
   --no-tests=error --output-on-failure
 ```
 
-The reports are `build-native-ui/reports/toolkit.xml` and `notes.xml`. The
+The reports under `build-native-ui/reports/` are `toolkit.xml`, `notes.xml`,
+and `settings-apppages.xml`. The
 container workflow is reproducible with the invocation in `ci.yml` and
 `scripts/ci/native-ui.sh`.
 
@@ -92,11 +94,15 @@ cleanup remains a separate requirement before claiming the whole tree clean.
 ## Verified evidence and limits
 
 On the combined implementation base
-`14b70b8f19ecabd2f5d71ccfca8b5e4418788e53`, with these gate changes, the four
+`14b70b8f19ecabd2f5d71ccfca8b5e4418788e53`, with these gate changes, the five
 required CTests pass against official Qt **6.11.3** and unmodified Keel
 **0df499bf34e02cec7f571853cbf5a4323dc1609e**. Notes reports **127 passed,
 0 failed, 0 skipped**: **115** test functions/data rows plus setup/cleanup.
 The toolkit probe reports two actual test functions plus setup/cleanup.
+Settings AppPages reports 22 total results on that base. With the accompanying
+installer changes, its independently run native suite reports **23 passed,
+0 failed, 0 skipped** (21 actual test functions/data rows), including retry
+after removal, partial cleanup, and removal of the completed cleanup row.
 The 12 validator and 8 gate-contract regressions exercise their failure paths
 as well as success. Test reachability and shell/Python syntax checks pass.
 
@@ -120,7 +126,7 @@ missing native modules rather than demonstrated product bugs:
 | Suite | Passed / failed | Observed boundary |
 | --- | --- | --- |
 | Marathon.Silica | 159 / 2 | Fling-stop interaction and dialog frost assertions |
-| Shell UI | 547 / 9 | Broader shell assertions; not part of this required Notes gate |
+| Shell UI | 547 / 9 | Broader shell assertions; outside this required Notes/Settings slice |
 | Browser | 86 / 0 | Host run passed |
 | Calculator | 76 / 2 | Native Nemo.Ngf plugin not built |
 | Calendar | 60 / 0 | Host run passed |
@@ -133,7 +139,7 @@ missing native modules rather than demonstrated product bugs:
 | Music | 34 / 4 | Broader platform module/runtime dependencies need qualification |
 | Notes | 127 / 0 | Now the complete required application suite |
 | Phone | 23 / 4 | Broader platform module/runtime dependencies need qualification |
-| Settings | 176 / 0 | Host run passed |
+| Settings | 176 / 0 | Broad exploratory baseline passed; only changed AppPages is now required |
 | Template | 9 / 0 | Host run passed |
 | Terminal | 28 / 4 | Broader platform module/runtime dependencies need qualification |
 | Test app | 0 / 2 | Native platform imports did not load; zero successful coverage |

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Required native Notes/Tasks UI gate, using the same Keel source pin as the APK.
+# Required Notes/Tasks and Settings AppPages UI, using the APK's Keel source pin.
 # Reproduce with the alpine:edge container invocation in .github/workflows/ci.yml.
 set -eu
 
