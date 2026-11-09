@@ -433,7 +433,7 @@ set_property(TARGET marathon-shell PROPERTY QT_QML_MODULE_NO_IMPORT_SCAN TRUE)
 # Link the big resources (sounds-only qrc) to the target
 target_sources(marathon-shell PRIVATE ${SHELL_SOUNDS})
 
-# Add qmllint validation target - runs BEFORE building
+# Explicit strict QML validation target; depends on generated type metadata.
 if(QMLLINT_AVAILABLE)
     add_qmllint_target(marathon-shell ${QML_FILES})
 endif()
