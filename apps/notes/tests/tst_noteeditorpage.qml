@@ -4,6 +4,7 @@ import Sailfish.Silica 1.0
 import Marathon.Silica 1.0
 import Keel.Actions 1.0
 import "../pages"
+import "../NotesStore.js" as Store
 
 TestCase {
     id: testCase
@@ -17,9 +18,11 @@ TestCase {
         id: storeStub
         QtObject {
             property var notes: []
+            property double nextNoteId: 1
             property int saves: 0
             function save(next) {
                 notes = next;
+                nextNoteId = Math.max(nextNoteId, Store.nextId(next));
                 saves++;
             }
         }
@@ -165,6 +168,128 @@ TestCase {
         verify(store.notes[0].pinned);
         findChild(page, "pinNoteItem").clicked(null);
         verify(!store.notes[0].pinned);
+    }
+
+    function test_makeTaskCommitsTextAndKeepsNoteId() {
+        const store = createTemporaryObject(storeStub, this, {
+            notes: [
+                {
+                    id: 3,
+                    title: "Call",
+                    content: "Call\nAna",
+                    timestamp: 1,
+                    pinned: true
+                }
+            ]
+        });
+        const page = createTemporaryObject(pageComponent, this, {
+            store: store,
+            noteId: 3
+        });
+        findChild(page, "bodyField").text = "Call Ana\nAsk about Friday";
+        findChild(page, "makeTaskItem").clicked(null);
+        compare(store.notes[0].id, 3);
+        compare(store.notes[0].content, "Call Ana\nAsk about Friday");
+        verify(store.notes[0].pinned);
+        compare(store.notes[0].task, {
+            completed: false
+        });
+        findChild(page, "taskCompletedSwitch").clicked();
+        verify(store.notes[0].task.completed);
+        findChild(page, "taskCompletedSwitch").clicked();
+        verify(!store.notes[0].task.completed);
+    }
+
+    function test_newTaskIsOnlySavedAfterTyping() {
+        const store = createTemporaryObject(storeStub, this, {
+            nextNoteId: 42
+        });
+        const page = createTemporaryObject(pageComponent, this, {
+            store: store,
+            taskRequested: true
+        });
+        compare(findChild(page, "header").title, "New task");
+        page.commit();
+        compare(store.saves, 0);
+        findChild(page, "bodyField").text = "Buy milk\nOn the way home";
+        page.commit();
+        compare(store.notes.length, 1);
+        compare(store.notes[0].id, 42);
+        compare(store.notes[0].content, "Buy milk\nOn the way home");
+        compare(store.notes[0].task, {
+            completed: false
+        });
+    }
+
+    function test_taskSourceAndDueDateSurviveEditing() {
+        const source = {
+            kind: "event",
+            appId: "org.marathonos.calendar",
+            itemId: "event:3",
+            label: "Friday meeting"
+        };
+        const store = createTemporaryObject(storeStub, this, {
+            notes: [
+                {
+                    id: 3,
+                    title: "Call",
+                    content: "Call",
+                    timestamp: 1,
+                    task: {
+                        completed: false,
+                        dueDate: "2026-12-10"
+                    },
+                    source: source
+                }
+            ]
+        });
+        const page = createTemporaryObject(pageComponent, this, {
+            store: store,
+            noteId: 3
+        });
+        compare(findChild(page, "taskSourceLabel").value, "Friday meeting");
+        compare(findChild(page, "taskSourceLabel").valueTextFormat, Text.PlainText);
+        compare(findChild(page, "taskDueDateButton").value, "2026-12-10");
+        findChild(page, "bodyField").text = "Call tomorrow";
+        findChild(page, "clearDueDateItem").clicked(null);
+        compare(store.notes[0].content, "Call tomorrow");
+        verify(store.notes[0].task.dueDate === undefined);
+        compare(store.notes[0].source, source);
+        compare(findChild(page, "taskDueDateButton").value, "None");
+    }
+
+    function test_taskDueDateUsesNativePicker() {
+        const store = createTemporaryObject(storeStub, this, {
+            notes: [
+                {
+                    id: 3,
+                    title: "Call",
+                    content: "Call",
+                    timestamp: 1,
+                    task: {
+                        completed: false,
+                        dueDate: "2026-12-10"
+                    }
+                }
+            ]
+        });
+        const app = createTemporaryObject(appComponent, testCase);
+        tryVerify(() => app.pageStack.currentPage !== null);
+        app.pageStack.push(pageComponent, {
+            store: store,
+            noteId: 3
+        }, PageStackAction.Immediate);
+        const page = app.pageStack.currentPage;
+        tryCompare(page, "status", PageStatus.Active);
+        findChild(page, "taskDueDateButton").clicked();
+        tryCompare(app.pageStack, "depth", 3);
+        tryVerify(() => !app.pageStack.busy);
+        const picker = app.pageStack.currentPage;
+        compare(Qt.formatDate(picker.date, "yyyy-MM-dd"), "2026-12-10");
+        picker.date = new Date(2027, 0, 15, 12, 0);
+        picker.accept();
+        tryCompare(app.pageStack, "depth", 2);
+        compare(store.notes[0].task.dueDate, "2027-01-15");
     }
 
     function test_contextIsTheNoteOnScreen() {

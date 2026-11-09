@@ -3,14 +3,18 @@ import Keel.Actions 1.0
 import "NotesStore.js" as Store
 
 // keel-actions.json is actions.json from Shipwright's
-//   keel actions --qml NotesActions.qml --qml pages/NoteEditorPage.qml \
+//   keel actions --qml NotesActions.qml --qml TaskActions.qml --qml pages/NoteEditorPage.qml \
 //       --app-id org.marathonos.notes --exec /usr/bin/marathon-app-runner --out <dir>
 // regenerate it after changing a declaration.
 Item {
     id: root
 
-    // The app: notes and save(next).
+    // The app: notes, the persisted nextNoteId, and save(next).
     property var store
+
+    TaskActions {
+        store: root.store
+    }
 
     function summary(note) {
         const text = Store.text(note);
@@ -53,11 +57,15 @@ Item {
         }
         onInvoked: (args, call) => {
             const title = String(args.title || "").trim();
-            const next = Store.create(root.store.notes, title ? title + "\n" + args.body : args.body, Date.now());
-            root.store.save(next);
-            call.reply({
-                id: next[0].id
-            });
+            try {
+                const next = Store.create(root.store.notes, title ? title + "\n" + args.body : args.body, Date.now(), root.store.nextNoteId);
+                root.store.save(next);
+                call.reply({
+                    id: next[0].id
+                });
+            } catch (error) {
+                call.fail("Failed", error.message);
+            }
         }
     }
 

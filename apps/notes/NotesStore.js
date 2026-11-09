@@ -2,13 +2,33 @@
 
 const taskLine = /^(\s*[-*]?\s*\[)([ xX])(\]\s*(.+))$/;
 
-function parse(json) {
+// Legacy stores were a bare array. Version 2 keeps the allocation high-water
+// mark in the same saved value, so deleting every note cannot reuse an id.
+function decode(json) {
     try {
         const v = JSON.parse(json);
-        return Array.isArray(v) ? v : [];
+        if (Array.isArray(v))
+            return { notes: v, nextId: nextId(v) };
+        if (v && v.version === 2 && Array.isArray(v.notes))
+            return {
+                notes: v.notes,
+                nextId: Number.isSafeInteger(v.nextId) && v.nextId >= nextId(v.notes) ? v.nextId : NaN
+            };
     } catch (e) {
-        return [];
     }
+    // A damaged or newer store must not be overwritten with recycled ids.
+    return { notes: [], nextId: NaN };
+}
+
+function parse(json) {
+    return decode(json).notes;
+}
+
+function serialize(notes, minimumId) {
+    const id = Math.max(minimumId === undefined ? 1 : minimumId, nextId(notes));
+    if (!Number.isSafeInteger(id) || id < 1)
+        throw new Error("The saved note identifier sequence is invalid");
+    return JSON.stringify({ version: 2, nextId: id, notes: notes });
 }
 
 function nextId(notes) {
@@ -44,9 +64,35 @@ function when(timestamp, now) {
     return Qt.formatDate(d, d.getFullYear() === now.getFullYear() ? "d MMM" : "d MMM yyyy");
 }
 
-function create(notes, content, now) {
-    const note = { id: nextId(notes), title: titleOf(content), content: content || "", timestamp: now };
+function create(notes, content, now, minimumId) {
+    const id = Math.max(minimumId === undefined ? 1 : minimumId, nextId(notes));
+    if (!Number.isSafeInteger(id) || id < 1 || id > 2147483647)
+        throw new Error("No more note identifiers are available");
+    const note = { id: id, title: titleOf(content), content: content || "", timestamp: now };
     return [note].concat(notes);
+}
+
+function isDueDate(value) {
+    if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value))
+        return false;
+    // Validate the calendar without applying the host's timezone or DST rules.
+    const date = new Date(value + "T12:00:00Z");
+    return date.getUTCFullYear() === Number(value.slice(0, 4))
+        && date.getUTCMonth() + 1 === Number(value.slice(5, 7))
+        && date.getUTCDate() === Number(value.slice(8, 10));
+}
+
+function createTask(notes, request, now, minimumId) {
+    if (request.dueDate !== undefined && !isDueDate(request.dueDate))
+        throw new Error("dueDate must be a real date in YYYY-MM-DD form");
+    const content = request.title.trim() + (request.body ? "\n" + request.body : "");
+    const next = create(notes, content, now, minimumId);
+    next[0].task = { completed: false };
+    if (request.dueDate !== undefined)
+        next[0].task.dueDate = request.dueDate;
+    if (request.source !== undefined)
+        next[0].source = Object.assign({}, request.source);
+    return next;
 }
 
 function edit(notes, id, change) {
@@ -99,14 +145,53 @@ function inFolder(notes, tag) {
     return notes.filter(n => tagOf(n) === tag);
 }
 
+function makeTask(notes, id, now) {
+    const note = notes.find(n => n.id === id);
+    return !note || note.task ? notes : edit(notes, id, {
+        task: { completed: false },
+        timestamp: now
+    });
+}
+
+function setTaskCompleted(notes, id, completed, now) {
+    const note = notes.find(n => n.id === id);
+    return !note || !note.task || note.task.completed === completed ? notes : edit(notes, id, {
+        task: Object.assign({}, note.task, { completed: completed }),
+        timestamp: now
+    });
+}
+
+function setTaskDueDate(notes, id, dueDate, now) {
+    if (dueDate !== "" && !isDueDate(dueDate))
+        throw new Error("dueDate must be a real date in YYYY-MM-DD form");
+    const note = notes.find(n => n.id === id);
+    if (!note || !note.task || (note.task.dueDate || "") === dueDate)
+        return notes;
+    const task = Object.assign({}, note.task);
+    if (dueDate === "")
+        delete task.dueDate;
+    else
+        task.dueDate = dueDate;
+    return edit(notes, id, { task: task, timestamp: now });
+}
+
 function tasks(notes) {
     const out = [];
     for (const n of notes) {
+        if (n.task)
+            out.push({
+                kind: "task",
+                noteId: n.id,
+                noteTitle: n.title || "",
+                checked: n.task.completed,
+                text: titleOf(text(n)),
+                dueDate: n.task.dueDate || ""
+            });
         const lines = String(n.content || "").split("\n");
         for (let i = 0; i < lines.length; i++) {
             const m = lines[i].match(taskLine);
             if (m)
-                out.push({ noteId: n.id, noteTitle: n.title || "", line: i, checked: m[2] !== " ", text: m[4].trim() });
+                out.push({ kind: "checklist", noteId: n.id, noteTitle: n.title || "", line: i, checked: m[2] !== " ", text: m[4].trim() });
         }
     }
     return out;
@@ -125,9 +210,10 @@ function toggleTask(notes, id, line, now) {
 }
 
 // Appends notes from the pre-Keel store, renumbering ids that clash.
-function merge(current, legacy) {
+function merge(current, legacy, minimumId) {
     const out = current.slice();
     const taken = new Set(current.map(n => n.id));
+    const floor = minimumId === undefined ? 1 : minimumId;
     for (const old of legacy) {
         if (!old || typeof old !== "object")
             continue;
@@ -136,8 +222,8 @@ function merge(current, legacy) {
             content: old.content ? String(old.content) : "",
             timestamp: Number(old.timestamp) || 0
         });
-        if (typeof note.id !== "number" || taken.has(note.id))
-            note.id = nextId(out);
+        if (typeof note.id !== "number" || taken.has(note.id) || note.id < floor)
+            note.id = Math.max(floor, nextId(out));
         taken.add(note.id);
         out.push(note);
     }
