@@ -88,7 +88,12 @@ TestCase {
     }
 
     function test_partialUninstallRemainsRetryableAfterAppDisappears() {
-        AppInstaller.pending = [{id: "removed.notes", detail: "Restart the device, then retry cleanup"}];
+        AppInstaller.pending = [
+            {
+                id: "removed.notes",
+                detail: "Restart the device, then retry cleanup"
+            }
+        ];
         const s = open("appmanager");
         compare(child(s.page, "pendingCleanup").count, 1);
         const retry = child(s.page, "retryCleanup-removed.notes");

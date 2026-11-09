@@ -25,7 +25,13 @@ QtObject {
         uninstalled = uninstalled.concat([appId]);
     }
     function pendingUninstalls() {
-        return cleanupAvailable ? {available: true, items: pending} : {available: false, error: "Cleanup state unavailable"};
+        return cleanupAvailable ? {
+            available: true,
+            items: pending
+        } : {
+            available: false,
+            error: "Cleanup state unavailable"
+        };
     }
     function flatpakApps() {
         return [

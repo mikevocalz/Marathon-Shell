@@ -8,9 +8,21 @@ TestCase {
     name: "PageViewHub"
     when: windowShown
 
-    SignalSpy { id: failed; target: pages; signalName: "uninstallFailed" }
-    SignalSpy { id: partial; target: pages; signalName: "uninstallPartial" }
-    SignalSpy { id: detailedFailure; target: pages; signalName: "uninstallFailureDetail" }
+    SignalSpy {
+        id: failed
+        target: pages
+        signalName: "uninstallFailed"
+    }
+    SignalSpy {
+        id: partial
+        target: pages
+        signalName: "uninstallPartial"
+    }
+    SignalSpy {
+        id: detailedFailure
+        target: pages
+        signalName: "uninstallFailureDetail"
+    }
 
     function init() {
         failed.clear();
@@ -22,7 +34,10 @@ TestCase {
     }
 
     function test_acceptedUninstallWaitsForPartialOutcome() {
-        pages.uninstall({id: "notes", name: "Notes"});
+        pages.uninstall({
+            id: "notes",
+            name: "Notes"
+        });
         compare(AppModel.uninstallRequests, ["notes"]);
         compare(failed.count, 0);
         compare(partial.count, 0);
@@ -34,7 +49,10 @@ TestCase {
     }
 
     function test_finalFailureIsDistinctFromAdmission() {
-        pages.uninstall({id: "notes", name: "Notes"});
+        pages.uninstall({
+            id: "notes",
+            name: "Notes"
+        });
         compare(detailedFailure.count, 0);
         AppModel.uninstallFailed("notes", "Permission denied");
         compare(detailedFailure.count, 1);
@@ -45,7 +63,10 @@ TestCase {
 
     function test_refusedAdmissionDoesNotWaitForCompletion() {
         AppModel.uninstallAccepted = false;
-        pages.uninstall({id: "notes", name: "Notes"});
+        pages.uninstall({
+            id: "notes",
+            name: "Notes"
+        });
         compare(failed.count, 1);
         verify(pages.removingApps.notes === undefined);
     }
