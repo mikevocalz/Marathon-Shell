@@ -18,6 +18,8 @@ Rectangle {
     property var agenda: []
     // An app id narrows the list to that app; "" shows everything.
     property string filterApp: ""
+    // Independent of source filtering: both can be active at once.
+    property bool unreadOnly: false
     // The apps with notifications, newest first: { app, label, unread }.
     property var sources: []
 
@@ -97,6 +99,9 @@ Rectangle {
         function onModelReset() {
             Qt.callLater(hub.refreshSources);
         }
+        function onDataChanged() {
+            Qt.callLater(hub.refreshSources);
+        }
     }
 
     Connections {
@@ -116,11 +121,18 @@ Rectangle {
         id: shownNotifications
 
         model: NotificationService
-        filters: ValueFilter {
-            roleName: "appId"
-            value: hub.filterApp
-            enabled: hub.filterApp !== ""
-        }
+        filters: [
+            ValueFilter {
+                roleName: "appId"
+                value: hub.filterApp
+                enabled: hub.filterApp !== ""
+            },
+            ValueFilter {
+                roleName: "isRead"
+                value: false
+                enabled: hub.unreadOnly
+            }
+        ]
     }
 
     // clickNotification opens the sender's app, if one is installed.
@@ -283,7 +295,7 @@ Rectangle {
             }
 
             // BB10's account list as chips: one per app, with what is
-            // unread. Only when there is more than one app to choose from.
+            // unread. Unread triage is useful even with a single source.
             Flickable {
                 objectName: "hubFilters"
                 width: parent.width + Silica.Theme.horizontalPageMargin
@@ -292,7 +304,7 @@ Rectangle {
                 flickableDirection: Flickable.HorizontalFlick
                 boundsBehavior: Flickable.StopAtBounds
                 clip: true
-                visible: hub.sources.length > 1
+                visible: hub.sources.length > 1 || NotificationService.count > 0
 
                 Row {
                     id: chips
@@ -302,6 +314,14 @@ Rectangle {
                         checked: hub.filterApp === ""
                         automaticCheck: false
                         onClicked: hub.filterApp = ""
+                    }
+
+                    Silica.FilterChip {
+                        objectName: "hubUnreadFilter"
+                        text: qsTr("Unread")
+                        checked: hub.unreadOnly
+                        automaticCheck: false
+                        onClicked: hub.unreadOnly = !hub.unreadOnly
                     }
 
                     Repeater {
@@ -321,9 +341,10 @@ Rectangle {
 
             // Only when there is nothing at all: one quiet line.
             Silica.Label {
+                objectName: "hubEmptyState"
                 width: parent.width
                 visible: hub.agenda.length === 0 && list.count === 0
-                text: qsTr("Nothing new")
+                text: hub.unreadOnly ? qsTr("No unread notifications") : qsTr("Nothing new")
                 color: Silica.Theme.secondaryColor
                 font.pixelSize: Silica.Theme.fontSizeSmall
             }
