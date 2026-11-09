@@ -403,6 +403,8 @@ fn controls_a_device_route_sink() {
     };
     let card = fake_device::start(&session.dir.join("run/pipewire-0"), 0.125);
     let audio = session.audio();
+    // Initialize the property cache before the mutation can signal a change.
+    assert_eq!(property::<String>(&audio, "DefaultSink"), "test-sink-a");
     zbus::block_on(audio.call_method("SetDefaultSink", &(fake_device::NODE_NAME))).unwrap();
     eventually("the card's node to be the default", || {
         property::<String>(&audio, "DefaultSink") == fake_device::NODE_NAME
