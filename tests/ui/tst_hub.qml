@@ -129,14 +129,57 @@ TestCase {
         tryVerify(() => hub.sources.length === 1 && hub.sources[0].unread === 1);
     }
 
+    function test_unreadFilterTracksReadChangesAndEmptyState() {
+        const list = findChild(hub, "hubList");
+        const empty = findChild(hub, "hubEmptyState");
+        compare(empty.text, "Nothing new");
+        addNotification(1, "mail");
+        addNotification(2, "messages");
+        hub.filterApp = "mail";
+        hub.unreadOnly = true;
+        tryCompare(list, "count", 1);
+
+        NotificationService.setProperty(0, "isRead", true);
+        tryCompare(list, "count", 0);
+        tryVerify(() => hub.sources[0].unread === 0);
+        compare(hub.filterApp, "mail");
+        tryCompare(empty, "visible", true);
+        compare(empty.text, "No unread notifications");
+
+        hub.unreadOnly = false;
+        tryCompare(list, "count", 1);
+        tryCompare(empty, "visible", false);
+        hub.unreadOnly = true;
+        NotificationService.setProperty(0, "isRead", false);
+        tryCompare(list, "count", 1);
+        tryVerify(() => hub.sources[0].unread === 1);
+        tryCompare(empty, "visible", false);
+    }
+
+    function test_sourceRemovalRetainsUnreadFilter() {
+        addNotification(1, "mail");
+        addNotification(2, "messages");
+        hub.filterApp = "messages";
+        hub.unreadOnly = true;
+        NotificationService.remove(1);
+        tryCompare(hub, "filterApp", "");
+        compare(hub.unreadOnly, true);
+        tryCompare(findChild(hub, "hubList"), "count", 1);
+    }
+
     function test_unreadChipTogglesWithoutChangingSource() {
         addNotification(1, "mail");
         addNotification(2, "messages");
         const unread = findChild(hub, "hubUnreadFilter");
         verify(unread.visible);
         hub.filterApp = "mail";
+        waitForPolish(findChild(hub, "hubList").headerItem);
+        tryVerify(() => unread.mapToItem(hub, 0, 0).y >= Constants.statusBarHeight);
         mouseClick(unread);
         compare(hub.unreadOnly, true);
+        compare(hub.filterApp, "mail");
+        mouseClick(unread);
+        compare(hub.unreadOnly, false);
         compare(hub.filterApp, "mail");
     }
 

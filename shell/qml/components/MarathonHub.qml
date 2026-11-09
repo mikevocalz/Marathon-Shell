@@ -295,7 +295,7 @@ Rectangle {
             }
 
             // BB10's account list as chips: one per app, with what is
-            // unread. Only when there is more than one app to choose from.
+            // unread. Unread triage is useful even with a single source.
             Flickable {
                 objectName: "hubFilters"
                 width: parent.width + Silica.Theme.horizontalPageMargin
@@ -341,6 +341,7 @@ Rectangle {
 
             // Only when there is nothing at all: one quiet line.
             Silica.Label {
+                objectName: "hubEmptyState"
                 width: parent.width
                 visible: hub.agenda.length === 0 && list.count === 0
                 text: hub.unreadOnly ? qsTr("No unread notifications") : qsTr("Nothing new")
