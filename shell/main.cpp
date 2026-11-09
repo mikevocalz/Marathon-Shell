@@ -1436,6 +1436,7 @@ int main(int argc, char *argv[]) {
     const QList<QObject *> roots = engine.rootObjects();
     for (QObject *root : roots) {
         if (auto *win = qobject_cast<QQuickWindow *>(root)) {
+            screenMetrics->attachToWindow(win);
             QObject::connect(
                 win, &QQuickWindow::frameSwapped, win,
                 [] {
