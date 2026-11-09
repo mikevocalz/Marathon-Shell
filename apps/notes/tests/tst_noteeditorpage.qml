@@ -187,16 +187,16 @@ TestCase {
             noteId: 3
         });
         findChild(page, "bodyField").text = "Call Ana\nAsk about Friday";
-        findChild(page, "makeTaskItem").clicked(null);
+        findChild(page, "makeTaskItem").clicked();
         compare(store.notes[0].id, 3);
         compare(store.notes[0].content, "Call Ana\nAsk about Friday");
         verify(store.notes[0].pinned);
         compare(store.notes[0].task, {
             completed: false
         });
-        findChild(page, "taskCompletedSwitch").clicked();
+        findChild(page, "taskCompletedSwitch").clicked(null);
         verify(store.notes[0].task.completed);
-        findChild(page, "taskCompletedSwitch").clicked();
+        findChild(page, "taskCompletedSwitch").clicked(null);
         verify(!store.notes[0].task.completed);
     }
 
@@ -251,7 +251,7 @@ TestCase {
         compare(findChild(page, "taskSourceLabel").valueTextFormat, Text.PlainText);
         compare(findChild(page, "taskDueDateButton").value, "2026-12-10");
         findChild(page, "bodyField").text = "Call tomorrow";
-        findChild(page, "clearDueDateItem").clicked(null);
+        findChild(page, "clearDueDateItem").clicked();
         compare(store.notes[0].content, "Call tomorrow");
         verify(store.notes[0].task.dueDate === undefined);
         compare(store.notes[0].source, source);
@@ -281,15 +281,28 @@ TestCase {
         }, PageStackAction.Immediate);
         const page = app.pageStack.currentPage;
         tryCompare(page, "status", PageStatus.Active);
-        findChild(page, "taskDueDateButton").clicked();
+        findChild(page, "taskDueDateButton").clicked(null);
         tryCompare(app.pageStack, "depth", 3);
         tryVerify(() => !app.pageStack.busy);
-        const picker = app.pageStack.currentPage;
+        let picker = app.pageStack.currentPage;
         compare(Qt.formatDate(picker.date, "yyyy-MM-dd"), "2026-12-10");
+        picker.date = new Date(2027, 0, 15, 12, 0);
+        picker.reject();
+        tryCompare(app.pageStack, "depth", 2);
+        tryVerify(() => !app.pageStack.busy);
+        compare(store.notes[0].task.dueDate, "2026-12-10");
+        compare(store.notes[0].content, "Call");
+        compare(store.saves, 0);
+
+        findChild(page, "taskDueDateButton").clicked(null);
+        tryCompare(app.pageStack, "depth", 3);
+        tryVerify(() => !app.pageStack.busy);
+        picker = app.pageStack.currentPage;
         picker.date = new Date(2027, 0, 15, 12, 0);
         picker.accept();
         tryCompare(app.pageStack, "depth", 2);
         compare(store.notes[0].task.dueDate, "2027-01-15");
+        compare(store.notes[0].content, "Call");
     }
 
     function test_contextIsTheNoteOnScreen() {

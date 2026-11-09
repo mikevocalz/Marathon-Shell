@@ -14,6 +14,8 @@ Page {
     property bool taskRequested: false
 
     readonly property var note: store.notes.find(n => n.id === noteId)
+    // Nested Silica dialogs also resolve this when the editor is a bound component.
+    readonly property PageStack pageStack: page.pageContainer as PageStack
 
     function commit() {
         autosaveTimer.stop();
@@ -36,7 +38,7 @@ Page {
         remorse.execute(qsTr("Deleted"), function () {
             page.discarded = true;
             page.store.save(Store.remove(page.store.notes, page.noteId));
-            (page.pageContainer as PageStack).pop();
+            page.pageStack.pop();
         });
     }
 
@@ -142,7 +144,7 @@ Page {
                 value: page.note && page.note.task && page.note.task.dueDate ? page.note.task.dueDate : qsTr("None")
                 onClicked: {
                     page.commit();
-                    const picker = pageStack.push(datePickerComponent, {
+                    const picker = page.pageStack.push(datePickerComponent, {
                         date: page.note.task.dueDate ? new Date(page.note.task.dueDate + "T12:00:00") : new Date()
                     });
                     picker.accepted.connect(function () {

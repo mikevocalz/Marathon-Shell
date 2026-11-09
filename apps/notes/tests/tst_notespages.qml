@@ -236,7 +236,7 @@ TestCase {
     function test_newTaskPulleyCreatesTaskNote() {
         const app = makeApp([], "/tasks");
         const tasks = pushed(app, 2);
-        findChild(tasks, "newTaskItem").clicked(null);
+        findChild(tasks, "newTaskItem").clicked();
         const editor = pushed(app, 3);
         verify(editor.taskRequested);
         findChild(editor, "bodyField").text = "Buy milk";
@@ -245,7 +245,7 @@ TestCase {
         compare(app.notes[0].task, {
             completed: false
         });
-        app.pageStack.pop(PageStackAction.Immediate);
+        app.pageStack.pop(undefined, PageStackAction.Immediate);
         pushed(app, 2);
         compare(findChild(tasks, "tasksView").count, 1);
     }

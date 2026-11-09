@@ -214,7 +214,10 @@ TestCase {
         ]);
         compare(t.app.notes[0].id, 42);
         t.app.save([]);
-        const restarted = makeApp(t.store.value, "[]", true, true);
+        const persisted = t.store.value;
+        t.app.destroy();
+        wait(0);
+        const restarted = makeApp(persisted, "[]", true, true);
         restarted.app.receiveShare([
             {
                 name: "",
