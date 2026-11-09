@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Window
 import QtTest
+import Keel 1.0 as Keel
 import MarathonOS.Shell
 import Sailfish.Silica 1.0 as Silica
 import "../../shell/qml/components"
@@ -11,26 +12,50 @@ TestCase {
     name: "Hub"
     when: windowShown
 
+    readonly property var hub: hubLoader.item
+
     Window {
+        id: hubWindow
+
         width: 540
         height: 1140
         visible: true
 
-        MarathonHub {
-            id: hub
+        Loader {
+            id: hubLoader
 
             anchors.fill: parent
+            active: false
+            sourceComponent: MarathonHub {}
         }
     }
 
     SignalSpy {
         id: closedSpy
 
-        target: hub
+        target: tc.hub
         signalName: "closed"
     }
 
+    function initTestCase() {
+        // Construct the real ambience before Theme attaches to it, so native
+        // text-size changes reach the labels instead of testing fallback sizes.
+        Keel.Ambience.applyForwarded("/desktop/sailfish/silica/font_size_multiplier=1");
+        hubLoader.active = true;
+        tryVerify(() => hub !== null);
+    }
+
+    function cleanupTestCase() {
+        hubLoader.active = false;
+        Keel.Ambience.applyForwarded("");
+    }
+
     function init() {
+        hubWindow.width = 540;
+        SettingsManagerCpp.timeFormat = "12h";
+        SettingsManagerCpp.store = {};
+        hub.refreshAgenda();
+        Keel.Ambience.applyForwarded("/desktop/sailfish/silica/font_size_multiplier=1");
         NotificationService.clear();
         NotificationService.read = [];
         NotificationService.clicked = [];
@@ -81,6 +106,184 @@ TestCase {
         const ten = new Date();
         ten.setDate(ten.getDate() - 10);
         compare(hub.dayLabel(isoDay(10)), Qt.formatDate(ten, "d MMMM"));
+    }
+
+    function test_agendaTextRemainsReadable_data() {
+        return [
+            {
+                tag: "12h-phone",
+                width: 540,
+                format: "12h",
+                allDay: false,
+                textScale: 1
+            },
+            {
+                tag: "12h-narrow",
+                width: 320,
+                format: "12h",
+                allDay: false,
+                textScale: 1
+            },
+            {
+                tag: "12h-wide",
+                width: 1000,
+                format: "12h",
+                allDay: false,
+                textScale: 1
+            },
+            {
+                tag: "24h-phone",
+                width: 540,
+                format: "24h",
+                allDay: false,
+                textScale: 1
+            },
+            {
+                tag: "24h-narrow",
+                width: 320,
+                format: "24h",
+                allDay: false,
+                textScale: 1
+            },
+            {
+                tag: "all-day-phone",
+                width: 540,
+                format: "12h",
+                allDay: true,
+                textScale: 1
+            },
+            {
+                tag: "all-day-narrow",
+                width: 320,
+                format: "24h",
+                allDay: true,
+                textScale: 1
+            },
+            {
+                tag: "12h-large",
+                width: 540,
+                format: "12h",
+                allDay: false,
+                textScale: 1.5
+            },
+            {
+                tag: "24h-narrow-large",
+                width: 320,
+                format: "24h",
+                allDay: false,
+                textScale: 1.5
+            },
+            {
+                tag: "all-day-narrow-large",
+                width: 320,
+                format: "12h",
+                allDay: true,
+                textScale: 1.5
+            }
+        ];
+    }
+
+    function verifyAgendaReadable(entry) {
+        const time = findChild(entry, "hubAgendaTime");
+        const title = findChild(entry, "hubAgendaTitle");
+        verify(time.visible && title.visible);
+        for (const label of [time, title]) {
+            verify(label.width > 0 && label.height > 0);
+            verify(!label.truncated, "Agenda text must remain readable: " + label.text);
+            verify(label.contentWidth <= Math.ceil(label.width), "Agenda text exceeds its label: " + label.text);
+            const rect = label.mapToItem(entry, 0, 0, label.width, label.height);
+            verify(rect.x >= 0 && rect.y >= 0);
+            verify(rect.x + rect.width <= entry.width + 0.5);
+            verify(rect.y + rect.height <= entry.height + 0.5);
+        }
+        const a = time.mapToItem(entry, 0, 0, time.contentWidth, time.contentHeight);
+        const b = title.mapToItem(entry, 0, 0, title.contentWidth, title.contentHeight);
+        verify(a.x + a.width < b.x || b.x + b.width < a.x || a.y + a.height < b.y || b.y + b.height < a.y, "The agenda time and title need separate readable bounds");
+    }
+
+    function test_agendaTextRemainsReadable(data) {
+        const normalSize = Silica.Theme.fontSizeMedium;
+        hubWindow.width = data.width;
+        SettingsManagerCpp.timeFormat = data.format;
+        Keel.Ambience.applyForwarded("/desktop/sailfish/silica/font_size_multiplier=" + data.textScale);
+        if (data.textScale > 1)
+            tryVerify(() => Silica.Theme.fontSizeMedium > normalSize);
+        SettingsManagerCpp.set("calendar/events", [
+            {
+                title: "Coffee with Maya",
+                time: "11:30",
+                date: isoDay(0),
+                allDay: data.allDay
+            }
+        ]);
+        hub.refreshAgenda();
+        tryVerify(() => findChild(hub, "hubAgendaEntry") !== null);
+        const entry = findChild(hub, "hubAgendaEntry");
+        compare(findChild(entry, "hubAgendaTime").text, data.allDay ? "All day" : data.format === "12h" ? "11:30 AM" : "11:30");
+        compare(findChild(entry, "hubAgendaTitle").text, "Coffee with Maya");
+        waitForPolish(findChild(hub, "hubList"));
+        waitForRendering(hub);
+        verifyAgendaReadable(entry);
+    }
+
+    function test_agendaReflowsWhileVisible() {
+        SettingsManagerCpp.set("calendar/events", [
+            {
+                title: "Coffee with Maya",
+                time: "11:30",
+                date: isoDay(0),
+                allDay: false
+            },
+            {
+                title: "Weekend trip planning",
+                time: "18:00",
+                date: isoDay(0),
+                allDay: false
+            }
+        ]);
+        hub.refreshAgenda();
+        const entries = findChild(hub, "hubAgendaEntries");
+        tryCompare(entries, "count", 2);
+        const first = entries.itemAt(0);
+        const second = entries.itemAt(1);
+        for (const state of [
+            {
+                width: 1000,
+                format: "24h",
+                scale: 1,
+                expected: "11:30"
+            },
+            {
+                width: 540,
+                format: "12h",
+                scale: 1,
+                expected: "11:30 AM"
+            },
+            {
+                width: 320,
+                format: "12h",
+                scale: 1.5,
+                expected: "11:30 AM"
+            },
+            {
+                width: 1000,
+                format: "24h",
+                scale: 1,
+                expected: "11:30"
+            }
+        ]) {
+            hubWindow.width = state.width;
+            SettingsManagerCpp.timeFormat = state.format;
+            Keel.Ambience.applyForwarded("/desktop/sailfish/silica/font_size_multiplier=" + state.scale);
+            tryCompare(findChild(first, "hubAgendaTime"), "text", state.expected);
+            waitForPolish(findChild(hub, "hubList"));
+            waitForRendering(hub);
+            verifyAgendaReadable(first);
+            verifyAgendaReadable(second);
+            const a = first.mapToItem(hub, 0, 0, first.width, first.height);
+            const b = second.mapToItem(hub, 0, 0, second.width, second.height);
+            verify(a.y + a.height < b.y, "Resized agenda entries must not overlap");
+        }
     }
 
     function test_unreadFilterAvailableWithSingleSource() {
@@ -197,6 +400,10 @@ TestCase {
     function row(i) {
         const list = findChild(hub, "hubList");
         list.forceLayout();
+        // Header changes also queue a new scroll origin; sample input targets
+        // only after the native layout and scene have caught up.
+        waitForPolish(list);
+        waitForRendering(hub);
         return list.itemAtIndex(i);
     }
 
