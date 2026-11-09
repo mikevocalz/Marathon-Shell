@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use cxx_qt::{CxxQtType, Threading};
 use cxx_qt_lib::{QString, QVariant};
 
-use super::{dbus, later, pool, q, Launch, Map, Tasks};
+use super::{dbus, later, pool, q, Launch, Map, Tasks, TasksRust};
 use crate::apps::{self, App};
 use crate::{app_ids, desktop, io, log, sandbox};
 
@@ -33,6 +33,33 @@ const LAUNCH_HOLD: Duration = Duration::from_secs(10);
 const UNTHEMED_FLATPAK: &str = "flatpak run --nofilesystem=xdg-config/gtk-4.0 \
     --nofilesystem=xdg-config/kdeglobals --nofilesystem=xdg-data/color-schemes \
     --unset-env=QT_QPA_PLATFORMTHEME --env=ADW_DEBUG_ACCENT_COLOR=blue ";
+
+/// Consume only the attempt that failed. A retry can use the same command,
+/// and a running replacement keeps its launch and window state.
+fn take_failed_launch(state: &mut TasksRust, request_id: &str) -> Option<(Launch, bool)> {
+    let launch = state.pending_launches.remove(request_id)?;
+    let current = !state
+        .pending_launches
+        .values()
+        .chain(state.active_by_pid.values())
+        .any(|other| other.app_id == launch.app_id)
+        && !state.exited_launches.contains_key(&launch.app_id)
+        && !state
+            .windows
+            .get(&launch.app_id)
+            .is_some_and(|windows| !windows.is_empty())
+        && !state
+            .tasks
+            .iter()
+            .any(|task| task.app_id == launch.app_id && task.surface_id >= 0);
+    if current {
+        state.launching.remove(&launch.app_id);
+        state.background_launches.remove(&launch.app_id);
+        state.expected_windows.remove(&launch.app_id);
+        state.android_handoffs.remove(&launch.app_id);
+    }
+    Some((launch, current))
+}
 
 /// Android desktop files are rewritten during a session cutover. The
 /// catalogue may still hold the old launcher until Shell restarts.
@@ -173,11 +200,20 @@ pub(super) fn serves_keel_actions(app_id: &str) -> bool {
 }
 
 impl Tasks {
+    fn track_launch(mut self: Pin<&mut Self>, launch: Launch) -> QString {
+        let request_id = super::launch_uuid();
+        self.as_mut()
+            .rust_mut()
+            .pending_launches
+            .insert(request_id.clone(), launch);
+        q(&request_id)
+    }
+
     /// Makes this app the only in-flight launch allowed to claim foreground.
     fn claim_foreground(mut self: Pin<&mut Self>, app_id: &str) -> u64 {
         let mut rust = self.as_mut().rust_mut();
         let generation = rust.foreground_launches.begin();
-        for launch in rust.pending_by_command.values_mut() {
+        for launch in rust.pending_launches.values_mut() {
             if launch.app_id == app_id {
                 launch.foreground_generation = generation;
             }
@@ -427,7 +463,7 @@ impl Tasks {
         rust.android_handoffs.remove(app_id);
         rust.launching.remove(app_id);
         rust.expected_windows.remove(app_id);
-        rust.pending_by_command
+        rust.pending_launches
             .retain(|_, launch| launch.app_id != app_id);
         rust.exited_launches.remove(app_id);
         rust.active_by_pid
@@ -481,7 +517,8 @@ impl Tasks {
             if is_android_app_id(&app.id) {
                 let exec = android_exec(&app);
                 if !exec.is_empty() {
-                    self.as_mut().spawn_requested(&q(&exec), &Map::default());
+                    self.as_mut()
+                        .spawn_requested(&QString::default(), &q(&exec), &Map::default());
                 }
             }
             self.launched(&app);
@@ -552,15 +589,13 @@ impl Tasks {
                 foreground_generation,
                 ..Launch::default()
             };
-            self.as_mut()
-                .rust_mut()
-                .pending_by_command
-                .insert(exec.clone(), launch);
+            let request_id = self.as_mut().track_launch(launch);
             if exec.starts_with(app_ids::LAUNCHER) {
                 self.as_mut().wake(&app.id);
                 self.as_mut().while_android_starts();
             }
-            self.as_mut().spawn_requested(&q(&exec), &Map::default());
+            self.as_mut()
+                .spawn_requested(&request_id, &q(&exec), &Map::default());
         }
         let id = app.id.clone();
         later(self.qt_thread(), LAUNCH_HOLD, move |mut obj| {
@@ -774,11 +809,9 @@ impl Tasks {
             pid: -1,
             foreground_generation,
         };
+        let request_id = self.as_mut().track_launch(launch);
         self.as_mut()
-            .rust_mut()
-            .pending_by_command
-            .insert(command.clone(), launch);
-        self.as_mut().spawn_requested(&q(&command), &env);
+            .spawn_requested(&request_id, &q(&command), &env);
         let id = app.id.clone();
         later(self.qt_thread(), LAUNCH_HOLD, move |mut obj| {
             obj.as_mut().rust_mut().launching.remove(&id);
@@ -790,12 +823,12 @@ impl Tasks {
         true
     }
 
-    pub(super) fn app_launched(mut self: Pin<&mut Self>, command: &QString, pid: i64) {
+    pub(super) fn app_launched(mut self: Pin<&mut Self>, request_id: &QString, pid: i64) {
         let Some(mut launch) = self
             .as_mut()
             .rust_mut()
-            .pending_by_command
-            .remove(&command.to_string())
+            .pending_launches
+            .remove(&request_id.to_string())
         else {
             return;
         };
@@ -809,6 +842,29 @@ impl Tasks {
         }
         crate::gate::remember_pid(pid, &app_id);
         self.as_mut().pid_registered(pid, &q(&app_id));
+    }
+
+    pub(super) fn app_start_failed(
+        mut self: Pin<&mut Self>,
+        request_id: &QString,
+        error: &QString,
+    ) {
+        let failed = take_failed_launch(&mut self.as_mut().rust_mut(), &request_id.to_string());
+        let Some((launch, current)) = failed else {
+            return;
+        };
+        log::warn(
+            "tasks",
+            format_args!("{} failed to start: {error}", launch.app_id),
+        );
+        if !launch.sandbox_instance.is_empty() {
+            self.as_mut()
+                .sandbox_socket_closed(&q(&launch.sandbox_instance));
+        }
+        if current {
+            self.as_mut().finish_exit(&launch.app_id);
+            self.app_launch_failed(&q(&launch.app_id), &q(&launch.name), error);
+        }
     }
 
     fn forget_registered_pid(mut self: Pin<&mut Self>, app_id: &str, pid: i64) -> bool {
@@ -1137,13 +1193,17 @@ impl Tasks {
         if !xdg.is_empty() {
             let mut launch = self.as_mut().rust_mut().exited_launches.remove(&xdg);
             let pending: Vec<String> = self
-                .pending_by_command
+                .pending_launches
                 .iter()
                 .filter(|(_, l)| l.app_id == xdg)
                 .map(|(c, _)| c.clone())
                 .collect();
-            for command in pending {
-                launch = self.as_mut().rust_mut().pending_by_command.remove(&command);
+            for request_id in pending {
+                launch = self
+                    .as_mut()
+                    .rust_mut()
+                    .pending_launches
+                    .remove(&request_id);
             }
             let active: Vec<i64> = self
                 .active_by_pid
@@ -1352,9 +1412,195 @@ mod tests {
     use std::time::{Duration, Instant};
 
     use super::{
-        discard_app_windows, is_android_app_id, is_foreground_flatpak_run, AndroidHandoff,
-        ForegroundLaunches,
+        discard_app_windows, is_android_app_id, is_foreground_flatpak_run, take_failed_launch,
+        AndroidHandoff, ForegroundLaunches, Launch, TasksRust,
     };
+
+    fn pending_launch(app_id: &str, instance: &str) -> Launch {
+        Launch {
+            app_id: app_id.into(),
+            name: "Test app".into(),
+            command: "same-command --same-arguments".into(),
+            sandbox_instance: instance.into(),
+            ..Launch::default()
+        }
+    }
+
+    #[test]
+    fn failed_attempt_clears_only_its_launch_state_once() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let mut state = TasksRust::default();
+        for app_id in ["failed-app", "other-app"] {
+            state.launching.insert(app_id.into());
+            state.background_launches.insert(app_id.into());
+            state.expected_windows.insert(app_id.into(), Instant::now());
+        }
+        state.pending_launches.insert(
+            "failed-request".into(),
+            pending_launch("failed-app", "failed-socket"),
+        );
+        state.pending_launches.insert(
+            "other-request".into(),
+            pending_launch("other-app", "other-socket"),
+        );
+
+        let (launch, current) =
+            take_failed_launch(&mut state, "failed-request").ok_or("missing attempt")?;
+        assert!(current);
+        assert_eq!(launch.app_id, "failed-app");
+        assert_eq!(launch.name, "Test app");
+        assert_eq!(launch.sandbox_instance, "failed-socket");
+        assert!(!state.launching.contains("failed-app"));
+        assert!(!state.background_launches.contains("failed-app"));
+        assert!(!state.expected_windows.contains_key("failed-app"));
+        assert!(state.launching.contains("other-app"));
+        assert!(state.background_launches.contains("other-app"));
+        assert!(state.expected_windows.contains_key("other-app"));
+        assert!(state.pending_launches.contains_key("other-request"));
+        assert!(take_failed_launch(&mut state, "failed-request").is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn failed_attempt_does_not_erase_an_identical_command_retry(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut state = TasksRust::default();
+        state.launching.insert("app".into());
+        state.background_launches.insert("app".into());
+        state.expected_windows.insert("app".into(), Instant::now());
+        state
+            .pending_launches
+            .insert("old-request".into(), pending_launch("app", "old-socket"));
+        state.pending_launches.insert(
+            "retry-request".into(),
+            pending_launch("app", "retry-socket"),
+        );
+
+        let (old, current) =
+            take_failed_launch(&mut state, "old-request").ok_or("missing attempt")?;
+        assert!(!current);
+        assert_eq!(old.sandbox_instance, "old-socket");
+        assert_eq!(state.pending_launches["retry-request"].command, old.command);
+        assert_eq!(
+            state.pending_launches["retry-request"].sandbox_instance,
+            "retry-socket"
+        );
+        assert!(state.launching.contains("app"));
+        assert!(state.background_launches.contains("app"));
+        assert!(state.expected_windows.contains_key("app"));
+        assert!(take_failed_launch(&mut state, "old-request").is_none());
+        assert!(state.pending_launches.contains_key("retry-request"));
+        Ok(())
+    }
+
+    #[test]
+    fn failed_attempt_does_not_remove_a_running_replacement(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut state = TasksRust::default();
+        state.launching.insert("app".into());
+        state.pending_launches.insert(
+            "failed-request".into(),
+            pending_launch("app", "failed-socket"),
+        );
+        state
+            .active_by_pid
+            .insert(42, pending_launch("app", "live-socket"));
+        state.pid_to_app.insert(42, "app".into());
+        state.app_to_pid.insert("app".into(), 42);
+
+        let (_, current) =
+            take_failed_launch(&mut state, "failed-request").ok_or("missing attempt")?;
+        assert!(!current);
+        assert_eq!(state.active_by_pid[&42].sandbox_instance, "live-socket");
+        assert_eq!(state.app_to_pid["app"], 42);
+        assert_eq!(state.pid_to_app[&42], "app");
+        assert!(state.launching.contains("app"));
+        Ok(())
+    }
+
+    #[test]
+    fn unknown_failure_cannot_consume_another_attempt() {
+        let mut state = TasksRust::default();
+        state.launching.insert("app".into());
+        state
+            .pending_launches
+            .insert("known-request".into(), pending_launch("app", "socket"));
+        assert!(take_failed_launch(&mut state, "unknown-request").is_none());
+        assert_eq!(state.pending_launches.len(), 1);
+        assert!(state.launching.contains("app"));
+    }
+
+    #[test]
+    fn failed_attempt_preserves_an_exited_replacement_waiting_for_its_window(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut state = TasksRust::default();
+        state.launching.insert("app".into());
+        state.expected_windows.insert("app".into(), Instant::now());
+        state
+            .pending_launches
+            .insert("old-request".into(), pending_launch("app", "old-socket"));
+        state
+            .exited_launches
+            .insert("app".into(), pending_launch("app", "handoff-socket"));
+        let (_, current) =
+            take_failed_launch(&mut state, "old-request").ok_or("missing attempt")?;
+        assert!(!current);
+        assert_eq!(
+            state.exited_launches["app"].sandbox_instance,
+            "handoff-socket"
+        );
+        assert!(state.launching.contains("app"));
+        assert!(state.expected_windows.contains_key("app"));
+        Ok(())
+    }
+
+    #[test]
+    fn mapped_replacement_window_survives_an_older_failure(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut state = TasksRust::default();
+        state
+            .pending_launches
+            .insert("old-request".into(), pending_launch("app", "old-socket"));
+        state.windows.insert("app".into(), vec![7]);
+        let (_, current) =
+            take_failed_launch(&mut state, "old-request").ok_or("missing attempt")?;
+        assert!(!current);
+        assert_eq!(state.windows["app"], [7]);
+        Ok(())
+    }
+
+    #[test]
+    fn only_a_mapped_card_prevents_failed_attempt_cleanup() -> Result<(), Box<dyn std::error::Error>>
+    {
+        for surface_id in [-1, 7] {
+            let mut state = TasksRust::default();
+            state
+                .pending_launches
+                .insert("request".into(), pending_launch("app", "socket"));
+            state.tasks.push(super::super::Task {
+                id: "card".into(),
+                app_id: "app".into(),
+                title: "Test app".into(),
+                icon: String::new(),
+                kind: "marathon".into(),
+                surface_id,
+                timestamp: 0,
+            });
+            let (_, current) =
+                take_failed_launch(&mut state, "request").ok_or("missing attempt")?;
+            assert_eq!(current, surface_id < 0);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn launch_request_ids_are_nonempty_unique_uuids() {
+        let first = super::super::launch_uuid();
+        let second = super::super::launch_uuid();
+        assert_eq!(first.len(), 36);
+        assert_ne!(first, second);
+        assert!(!cxx_qt_lib::QUuid::from(&first).is_null());
+    }
 
     #[test]
     fn stopped_android_session_discards_only_its_old_surfaces() {

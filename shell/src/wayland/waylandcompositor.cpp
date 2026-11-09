@@ -517,7 +517,8 @@ QQmlListProperty<QObject> WaylandCompositor::surfaces() {
     return QQmlListProperty<QObject>(this, &m_surfaces);
 }
 
-void WaylandCompositor::launchApp(const QString &command, const QVariantMap &extraEnv) {
+void WaylandCompositor::launchApp(const QString &command, const QVariantMap &extraEnv,
+                                  const QString &requestId) {
     if (!command.isEmpty()) {
         qDebug() << "[WaylandCompositor] Launching app:" << command;
         qDebug() << "[WaylandCompositor] Socket name:" << socketName();
@@ -579,7 +580,8 @@ void WaylandCompositor::launchApp(const QString &command, const QVariantMap &ext
         qInfo() << "[WaylandCompositor] Run 'snap connections APP' to verify wayland interface";
     }
 
-    QProcess           *process = new QProcess(this);
+    QProcess *process = new QProcess(this);
+    process->setProperty("marathonLaunchRequestId", requestId);
 
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     for (auto it = extraEnv.constBegin(); it != extraEnv.constEnd(); ++it) {
@@ -867,11 +869,11 @@ void WaylandCompositor::launchApp(const QString &command, const QVariantMap &ext
         actualCommand.contains("&&") || actualCommand.contains("||") ||
         actualCommand.contains('>') || actualCommand.contains('<');
 
-    connect(process, &QProcess::started, this, [this, command, process]() {
+    connect(process, &QProcess::started, this, [this, requestId, process]() {
         const qint64 pid = process ? process->processId() : -1;
         if (pid > 0) {
             qInfo() << "[WaylandCompositor] Started PID" << pid;
-            emit appLaunched(command, static_cast<int>(pid));
+            emit appLaunched(requestId, static_cast<int>(pid));
         }
     });
 
@@ -1993,7 +1995,10 @@ void WaylandCompositor::handleProcessError(QProcess::ProcessError error) {
     }
 
     if (error == QProcess::FailedToStart) {
-        m_processes.remove(process);
+        if (m_processes.remove(process) > 0) {
+            emit appStartFailed(process->property("marathonLaunchRequestId").toString(),
+                                process->errorString());
+        }
         process->deleteLater();
     }
 }

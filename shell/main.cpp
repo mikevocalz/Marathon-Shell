@@ -157,9 +157,10 @@ static void connectTasks(Tasks *tasks, WaylandCompositor *wc) {
     };
     viewport();
     QObject::connect(wc, &WaylandCompositor::appViewportSizeChanged, tasks, viewport);
-    QObject::connect(
-        tasks, &Tasks::spawnRequested, wc,
-        [=](const QString &command, const QVariantMap &env) { wc->launchApp(command, env); });
+    QObject::connect(tasks, &Tasks::spawnRequested, wc,
+                     [=](const QString &requestId, const QString &command, const QVariantMap &env) {
+                         wc->launchApp(command, env, requestId);
+                     });
     QObject::connect(tasks, &Tasks::closeWindowRequested, wc, &WaylandCompositor::closeWindow);
     QObject::connect(tasks, &Tasks::sandboxSocketRequested, wc,
                      [=](const QString &appId, const QString &instance) {
@@ -172,8 +173,10 @@ static void connectTasks(Tasks *tasks, WaylandCompositor *wc) {
     QObject::connect(tasks, &Tasks::nativeForwardRequested, wc,
                      &WaylandCompositor::sendNativeForward);
 
-    QObject::connect(wc, &WaylandCompositor::appLaunched, tasks,
-                     [=](const QString &command, int pid) { tasks->appLaunched(command, pid); });
+    QObject::connect(
+        wc, &WaylandCompositor::appLaunched, tasks,
+        [=](const QString &requestId, int pid) { tasks->appLaunched(requestId, pid); });
+    QObject::connect(wc, &WaylandCompositor::appStartFailed, tasks, &Tasks::appStartFailed);
     QObject::connect(wc, &WaylandCompositor::appClosed, tasks,
                      [=](int pid) { tasks->appClosed(pid); });
     QObject::connect(wc, &WaylandCompositor::nativeBackUnhandled, tasks,

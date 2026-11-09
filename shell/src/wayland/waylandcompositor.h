@@ -103,7 +103,8 @@ class WaylandCompositor : public QWaylandCompositor {
     QVariantMap      marathonSurfaces() const;
     void             setNativeScale(qreal scale);
 
-    Q_INVOKABLE void launchApp(const QString &command, const QVariantMap &env = {});
+    Q_INVOKABLE void launchApp(const QString &command, const QVariantMap &env = {},
+                               const QString &requestId = {});
     Q_INVOKABLE void closeWindow(int surfaceId);
     Q_INVOKABLE void activateSurface(int surfaceId);
     // Takes the keyboard from the app windows, so keys reach the shell and the
@@ -175,7 +176,8 @@ class WaylandCompositor : public QWaylandCompositor {
     // A Keel app's dialog window (KeelDialog), not one of its tasks.
     void dialogCreated(QWaylandSurface *surface, int surfaceId, QWaylandXdgSurface *xdgSurface);
     void surfaceDestroyed(QWaylandSurface *surface, int surfaceId);
-    void appLaunched(const QString &command, int pid);
+    void appLaunched(const QString &requestId, int pid);
+    void appStartFailed(const QString &requestId, const QString &error);
     void appClosed(int pid);
     void systemBackTriggered();
     void nativeBackUnhandled(int surfaceId);

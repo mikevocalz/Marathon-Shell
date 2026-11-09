@@ -96,6 +96,14 @@ selected launch mode, not proof that every kernel filter succeeded.
 These rules apply to Marathon QML/WebEngine runners. The native, Flatpak
 and Sailfish launch mechanisms retain the trust model described above.
 
+Every tracked cold launch has a unique request ID. QProcess start/failure
+events use that ID, so a delayed failure cannot consume a retry with an
+identical command. A failed start releases that attempt's Wayland socket
+and reports `appLaunchFailed`; it clears the app's pending/card state only
+when no other pending process, running process, window or launcher handoff
+owns that state. A process that never started does not receive a synthetic
+process-close event.
+
 Gaps:
 
 - There is no `xdg-dbus-proxy`: an app can call any session bus service,
