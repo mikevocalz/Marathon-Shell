@@ -1,0 +1,23 @@
+#!/bin/sh
+# Q25 GPU readiness for the Panfrost session; devfreq scales the clock.
+# No direct regulator/MMIO writes.
+set -eu
+state=/run/q25-gpu
+gpu=/sys/devices/platform/soc/13000000.gpu
+df=/sys/class/devfreq/13000000.gpu
+install -d -m 0755 "$state"
+rm -f "$state/ready"
+fail() { echo "q25-gpu: $*; software fallback" >&2; exit 1; }
+[ ! -e /etc/q25/gpu-disabled ] || fail 'disabled by recovery override'
+case " $(cat /proc/cmdline) " in *' q25.gpu=off '*) fail 'disabled by command line';; esac
+sha256sum -c /usr/lib/q25-gpu/SHA256SUMS || fail 'artifact identity mismatch'
+[ -e "$gpu/of_node" ] || fail 'native GPU node absent'
+modprobe panfrost
+[ "$(basename "$(readlink "$gpu/driver")")" = panfrost ] || fail 'Panfrost not bound'
+[ -c /dev/dri/renderD128 ] || fail 'render node missing'
+# mediatek-drm probes from udev's coldplug, which may still be running.
+udevadm wait --timeout=15 /dev/dri/q25-display || fail 'display is not mediatek-drm'
+echo auto > "$gpu/power/control"
+printf '%s\n' "Panfrost devfreq $(cat "$df/governor") RPM noafbc" > "$state/ready"
+chmod 0644 "$state/ready"
+echo 'q25-gpu: accepted power state ready; GPU render path enabled'

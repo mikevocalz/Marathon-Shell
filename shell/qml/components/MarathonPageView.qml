@@ -28,6 +28,25 @@ Item {
     signal framesVisible(bool visible)
     signal appLaunched(var app)
     signal uninstallFailed(string name)
+    signal uninstallPartial(string appId, string detail)
+
+    Connections {
+        target: AppModel
+        function onUninstallPartial(appId, detail) {
+            const next = Object.assign({}, pageViewContainer.removingApps);
+            delete next[appId];
+            pageViewContainer.removingApps = next;
+            pageViewContainer.uninstallPartial(appId, detail);
+        }
+        function onUninstallFailed(appId, detail) {
+            const pending = pageViewContainer.removingApps[appId];
+            const next = Object.assign({}, pageViewContainer.removingApps);
+            delete next[appId];
+            pageViewContainer.removingApps = next;
+            pageViewContainer.uninstallFailureDetail(pending ? pending.name : appId, detail);
+        }
+    }
+    signal uninstallFailureDetail(string name, string detail)
 
     function uninstall(app) {
         if (!AppModel.uninstall(app.id)) {
@@ -38,12 +57,13 @@ Item {
         const next = Object.assign({}, pageViewContainer.removingApps);
         next[app.id] = {
             "name": app.name,
-            "since": Date.now()
+            "since": Date.now(),
+            "waitForSignal": app.type === "marathon"
         };
         pageViewContainer.removingApps = next;
     }
 
-    // An uninstall that has not taken the app away after a while failed.
+    // External store handlers do not send our native lifecycle signals.
     Timer {
         interval: 1000
         repeat: true
@@ -54,7 +74,7 @@ Item {
                 const entry = pageViewContainer.removingApps[id];
                 if (!AppModel.findById(id).id)
                     continue;
-                if (Date.now() - entry.since > 60000) {
+                if (!entry.waitForSignal && Date.now() - entry.since > 60000) {
                     pageViewContainer.uninstallFailed(entry.name);
                     continue;
                 }

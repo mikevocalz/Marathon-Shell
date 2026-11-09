@@ -15,9 +15,13 @@ Rectangle {
     id: hub
 
     property bool isInPeekMode: false
+    // Peeking over the screen, what it frosts, bottom to top; empty, the ambience.
+    property list<Item> backdrops
     property var agenda: []
     // An app id narrows the list to that app; "" shows everything.
     property string filterApp: ""
+    // Independent of source filtering: both can be active at once.
+    property bool unreadOnly: false
     // The apps with notifications, newest first: { app, label, unread }.
     property var sources: []
 
@@ -97,6 +101,9 @@ Rectangle {
         function onModelReset() {
             Qt.callLater(hub.refreshSources);
         }
+        function onDataChanged() {
+            Qt.callLater(hub.refreshSources);
+        }
     }
 
     Connections {
@@ -116,11 +123,18 @@ Rectangle {
         id: shownNotifications
 
         model: NotificationService
-        filters: ValueFilter {
-            roleName: "appId"
-            value: hub.filterApp
-            enabled: hub.filterApp !== ""
-        }
+        filters: [
+            ValueFilter {
+                roleName: "appId"
+                value: hub.filterApp
+                enabled: hub.filterApp !== ""
+            },
+            ValueFilter {
+                roleName: "isRead"
+                value: false
+                enabled: hub.unreadOnly
+            }
+        ]
     }
 
     // clickNotification opens the sender's app, if one is installed.
@@ -133,7 +147,7 @@ Rectangle {
 
     signal closed
 
-    // The blurred ambience, opaque even over an app.
+    // The ambience, or the screen it peeks over, frosted.
     color: "transparent"
 
     // The window's size, not the hub's: the peek animates the hub's width,
@@ -141,6 +155,7 @@ Rectangle {
     KeelAmbienceBackground {
         id: ambience
 
+        visible: hub.backdrops.length === 0
         width: hub.Window.width
         height: hub.Window.height
         wallpaper: AmbienceService.wallpaperUrl
@@ -148,6 +163,23 @@ Rectangle {
         light: AmbienceService.light
         brightest: AmbienceService.brightest
         darkest: AmbienceService.darkest
+    }
+
+    Rectangle {
+        width: hub.Window.width
+        height: hub.Window.height
+        visible: hub.backdrops.length > 0
+        color: MColors.elev0
+    }
+    AppBackdropBlur {
+        width: hub.Window.width
+        height: hub.Window.height
+        sources: hub.backdrops
+        sourceRect: Qt.rect(0, 0, width, height)
+        blurMax: MBlur.xl
+        saturation: 0.8
+        brightness: -0.05
+        tint: Qt.rgba(0, 0, 0, 0.5)
     }
 
     Silica.SilicaListView {
@@ -283,7 +315,7 @@ Rectangle {
             }
 
             // BB10's account list as chips: one per app, with what is
-            // unread. Only when there is more than one app to choose from.
+            // unread. Unread triage is useful even with a single source.
             Flickable {
                 objectName: "hubFilters"
                 width: parent.width + Silica.Theme.horizontalPageMargin
@@ -292,7 +324,7 @@ Rectangle {
                 flickableDirection: Flickable.HorizontalFlick
                 boundsBehavior: Flickable.StopAtBounds
                 clip: true
-                visible: hub.sources.length > 1
+                visible: hub.sources.length > 1 || NotificationService.count > 0
 
                 Row {
                     id: chips
@@ -302,6 +334,14 @@ Rectangle {
                         checked: hub.filterApp === ""
                         automaticCheck: false
                         onClicked: hub.filterApp = ""
+                    }
+
+                    Silica.FilterChip {
+                        objectName: "hubUnreadFilter"
+                        text: qsTr("Unread")
+                        checked: hub.unreadOnly
+                        automaticCheck: false
+                        onClicked: hub.unreadOnly = !hub.unreadOnly
                     }
 
                     Repeater {
@@ -321,9 +361,10 @@ Rectangle {
 
             // Only when there is nothing at all: one quiet line.
             Silica.Label {
+                objectName: "hubEmptyState"
                 width: parent.width
                 visible: hub.agenda.length === 0 && list.count === 0
-                text: qsTr("Nothing new")
+                text: hub.unreadOnly ? qsTr("No unread notifications") : qsTr("Nothing new")
                 color: Silica.Theme.secondaryColor
                 font.pixelSize: Silica.Theme.fontSizeSmall
             }
@@ -360,7 +401,7 @@ Rectangle {
 
             unread: !isRead
             avatarText: appIcon ? "" : hub.monogramFor(title, appKey)
-            avatarIcon: appKey === "phone" ? "phone" : ""
+            avatarIcon: appKey === "phone" ? "phone" : appKey === "messages" ? "user" : ""
             image: icon || appIcon
             glyphReplacesMonogram: appKey !== "messages"
             actions: model.actions || []
@@ -442,7 +483,8 @@ Rectangle {
     }
 
     function monogramFor(name, appId) {
-        if (appId === "phone" || appId === "call")
+        // A bare number has no initials: the person glyph, as phones show it.
+        if (appId === "phone" || appId === "call" || /^[+\d\s().#*-]+$/.test(name || ""))
             return "";
         const parts = (name || "").split(/\s+/).map(p => hub.initialsOf(p)).filter(p => p.length > 0);
         if (parts.length === 0)

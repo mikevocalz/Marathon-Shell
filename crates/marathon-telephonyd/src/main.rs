@@ -225,7 +225,12 @@ impl SmsService {
         number: String,
     ) -> fdo::Result<String> {
         admit(&self.0.bus, &h, "Sms", SMS).await?;
-        Ok(store::conversation_id(&number))
+        Ok(self.0.store.with(move |s| s.conversation_id(&number)).await)
+    }
+
+    /// Pure formatting, so open to any caller: apps ask per number shown.
+    async fn format_number(&self, number: String) -> String {
+        self.0.store.with(move |s| s.display_number(&number)).await
     }
 
     #[zbus(name = "SimulateIncomingSMS")]

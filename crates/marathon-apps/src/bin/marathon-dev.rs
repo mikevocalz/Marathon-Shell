@@ -39,6 +39,8 @@ enum Command {
     },
     /// Check a package's signature.
     Verify { package: PathBuf },
+    /// Create a minisign key pair; the secret key has no password.
+    Keygen { secret: PathBuf, public: PathBuf },
     /// Install an app locally.
     Install {
         path: PathBuf,
@@ -46,6 +48,8 @@ enum Command {
         #[arg(long)]
         approve_permissions: bool,
     },
+    /// Remove an app or retry its recorded cleanup after restarting the device.
+    Uninstall { app_id: String },
     /// Check apps against the manifest contract.
     Lint {
         #[arg(long)]
@@ -225,6 +229,10 @@ fn install(path: &Path, approve: bool) -> ExitCode {
             fail(&format!("Still held for: {}", plan.added.join(", ")))
         }
         Err(install::Refusal::Failed(e)) => fail(&e),
+        Err(install::Refusal::Committed { plan, detail }) => fail(&format!(
+            "{} {} is visible. {detail}",
+            plan.id, plan.version
+        )),
     }
 }
 
@@ -288,6 +296,27 @@ fn main() -> ExitCode {
             sign(&package, &key)
         }
         Command::Verify { package } => verify(&package),
+        Command::Keygen { secret, public } => match signature::keygen(&secret, &public) {
+            Ok(id) => {
+                ok(&format!("Key {id}: {}", public.display()));
+                ExitCode::SUCCESS
+            }
+            Err(e) => fail(&e),
+        },
+        Command::Uninstall { app_id } => match install::uninstall(&app_id) {
+            Ok(report) => {
+                match serde_json::to_string_pretty(&report) {
+                    Ok(json) => println!("{json}"),
+                    Err(e) => return fail(&e.to_string()),
+                }
+                if report.complete() {
+                    ExitCode::SUCCESS
+                } else {
+                    ExitCode::from(2)
+                }
+            }
+            Err(e) => fail(&e),
+        },
         Command::Install {
             path,
             approve_permissions,

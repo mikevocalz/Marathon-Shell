@@ -44,6 +44,12 @@ target_link_libraries(test_shell_processtree Qt6::Test Qt6::Core)
 target_include_directories(test_shell_processtree PRIVATE ${CMAKE_SOURCE_DIR}/shell/src/services)
 add_test(NAME Shell_ProcessTree COMMAND test_shell_processtree)
 
+# Marathon runners pass literal program/arguments to the real QProcess API.
+add_executable(test_shell_processcommand test_processcommand.cpp)
+target_link_libraries(test_shell_processcommand Qt6::Test Qt6::Core)
+target_include_directories(test_shell_processcommand PRIVATE ${CMAKE_SOURCE_DIR}/shell/src/wayland)
+add_test(NAME Shell_ProcessCommand COMMAND test_shell_processcommand)
+
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBDRM REQUIRED libdrm)
 

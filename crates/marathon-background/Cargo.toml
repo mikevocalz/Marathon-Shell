@@ -6,6 +6,7 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+keel-actions-schema = { path = "../keel-actions-schema" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 zbus = { version = "=6.1.0", default-features = false, features = ["default-rt", "proxy"] }

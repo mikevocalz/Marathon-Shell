@@ -79,7 +79,7 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "getBackgroundCapabilities"]
         fn get_background_capabilities(self: &AppRegistry, app_id: &QString) -> QStringList;
-        /// The installer removed it.
+        /// The installer removed its user copy; keep a bundled OS fallback.
         #[qinvokable]
         #[cxx_name = "unregisterApp"]
         fn unregister_app(self: Pin<&mut AppRegistry>, app_id: &QString);
@@ -294,7 +294,10 @@ impl AppRegistry {
     fn unregister_app(self: Pin<&mut Self>, app_id: &QString) {
         let id = app_id.to_string();
         if self.apps.iter().any(|a| a.id == id) {
-            let rest = self.apps.iter().filter(|a| a.id != id).cloned().collect();
+            let mut rest: Vec<_> = self.apps.iter().filter(|a| a.id != id).cloned().collect();
+            if let Some(system) = apps::system(&id) {
+                rest.push(system);
+            }
             self.set(rest);
         }
     }

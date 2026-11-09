@@ -151,6 +151,19 @@ TestCase {
         compare([ny.getHours(), ny.getMinutes(), ny.getDate()], [22, 4, 31]);
     }
 
+    function test_offsetLabel() {
+        compare(Logic.offsetLabel(0), "Same time");
+        compare(Logic.offsetLabel(9 * 3600), "+9h");
+        compare(Logic.offsetLabel(-5 * 3600), "-5h");
+        compare(Logic.offsetLabel(5.5 * 3600), "+5:30h");
+        compare(Logic.offsetLabel(-3.5 * 3600), "-3:30h");
+    }
+
+    function test_zoneCity() {
+        compare(Logic.zoneCity("Europe/Dublin"), "Dublin");
+        compare(Logic.zoneCity("America/New_York"), "New York");
+    }
+
     function test_moveCity() {
         const c = [
             {
@@ -231,13 +244,13 @@ TestCase {
                 tag: "hours and minutes",
                 when: at(6, 7, 0),
                 now: now,
-                out: "Alarm in 7 h 20 min"
+                out: "Alarm in 7 h 19 min"
             },
             {
                 tag: "minutes",
                 when: at(6, 0, 5),
                 now: now,
-                out: "Alarm in 25 min"
+                out: "Alarm in 24 min"
             },
             {
                 tag: "exact hours",
@@ -256,6 +269,12 @@ TestCase {
                 when: at(8, 7, 0),
                 now: now,
                 out: "Alarm in 2 d 7 h"
+            },
+            {
+                tag: "just under a day",
+                when: at(6, 23, 40),
+                now: now,
+                out: "Alarm in 23 h 59 min"
             }
         ];
     }

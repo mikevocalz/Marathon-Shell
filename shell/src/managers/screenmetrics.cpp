@@ -1,20 +1,58 @@
 #include "screenmetrics.h"
 
 #include <QByteArray>
+#include <QEvent>
 #include <QGuiApplication>
 #include <QScreen>
+#include <QWindow>
 
 ScreenMetrics::ScreenMetrics(QObject *parent)
     : QObject(parent) {
     attachToScreen(QGuiApplication::primaryScreen());
 
-    QObject::connect(qApp, &QGuiApplication::primaryScreenChanged, this,
-                     [this](QScreen *screen) { attachToScreen(screen); });
+    QObject::connect(qApp, &QGuiApplication::primaryScreenChanged, this, [this](QScreen *screen) {
+        if (!m_window)
+            attachToScreen(screen);
+    });
+}
+
+void ScreenMetrics::attachToWindow(QWindow *window) {
+    if (m_window == window) {
+        attachToScreen(window ? window->screen() : QGuiApplication::primaryScreen());
+        return;
+    }
+
+    if (m_window) {
+        m_window->removeEventFilter(this);
+        m_window->disconnect(this);
+    }
+    m_window = window;
+
+    if (m_window) {
+        m_window->installEventFilter(this);
+        QObject::connect(m_window, &QWindow::widthChanged, this, [this] { updateMetrics(); });
+        QObject::connect(m_window, &QWindow::heightChanged, this, [this] { updateMetrics(); });
+        QObject::connect(m_window, &QWindow::screenChanged, this, &ScreenMetrics::attachToScreen);
+        QObject::connect(m_window, &QObject::destroyed, this, [this] {
+            m_window = nullptr;
+            attachToScreen(QGuiApplication::primaryScreen());
+        });
+    }
+
+    attachToScreen(window ? window->screen() : QGuiApplication::primaryScreen());
+}
+
+bool ScreenMetrics::eventFilter(QObject *watched, QEvent *event) {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 6, 0)
+    if (watched == m_window && event->type() == QEvent::DevicePixelRatioChange)
+        updateMetrics();
+#endif
+    return QObject::eventFilter(watched, event);
 }
 
 void ScreenMetrics::attachToScreen(QScreen *screen) {
     if (m_screen == screen) {
-        updateFromScreen();
+        updateMetrics();
         return;
     }
 
@@ -25,18 +63,15 @@ void ScreenMetrics::attachToScreen(QScreen *screen) {
     m_screen = screen;
 
     if (m_screen) {
-        QObject::connect(m_screen, &QScreen::geometryChanged, this, [this] { updateFromScreen(); });
-        QObject::connect(m_screen, &QScreen::availableGeometryChanged, this,
-                         [this] { updateFromScreen(); });
+        QObject::connect(m_screen, &QScreen::geometryChanged, this, [this] { updateMetrics(); });
         QObject::connect(m_screen, &QScreen::physicalDotsPerInchChanged, this,
-                         [this] { updateFromScreen(); });
+                         [this] { updateMetrics(); });
         QObject::connect(m_screen, &QScreen::logicalDotsPerInchChanged, this,
-                         [this] { updateFromScreen(); });
-        QObject::connect(m_screen, &QScreen::refreshRateChanged, this,
-                         [this] { updateFromScreen(); });
+                         [this] { updateMetrics(); });
+        QObject::connect(m_screen, &QScreen::refreshRateChanged, this, [this] { updateMetrics(); });
     }
 
-    updateFromScreen();
+    updateMetrics();
 }
 
 qreal ScreenMetrics::computeDpi(QScreen *screen) {
@@ -67,7 +102,7 @@ qreal ScreenMetrics::computeDpi(QScreen *screen) {
     return dpi;
 }
 
-void ScreenMetrics::updateFromScreen() {
+void ScreenMetrics::updateMetrics() {
     int   newWidth            = 0;
     int   newHeight           = 0;
     qreal newDpi              = 0.0;
@@ -81,6 +116,12 @@ void ScreenMetrics::updateFromScreen() {
         newDpi              = computeDpi(m_screen);
         newRefreshRate      = m_screen->refreshRate();
         newDevicePixelRatio = m_screen->devicePixelRatio();
+    }
+
+    if (m_window) {
+        newWidth            = m_window->width();
+        newHeight           = m_window->height();
+        newDevicePixelRatio = m_window->devicePixelRatio();
     }
 
     if (newWidth == m_width && newHeight == m_height && qFuzzyCompare(newDpi, m_dpi) &&
