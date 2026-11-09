@@ -3,12 +3,22 @@
 cmake_minimum_required(VERSION 3.21)
 enable_testing()
 
-find_package(Qt6 REQUIRED COMPONENTS Test Core DBus Gui Network)
+find_package(Qt6 REQUIRED COMPONENTS Test Core DBus Gui Network Qml)
+
+# Shell bounds and scale follow the window through resize and lifetime changes.
+add_executable(test_core_screenmetrics
+    test_screenmetrics.cpp
+    ../../shell/src/managers/screenmetrics.cpp
+)
+set_target_properties(test_core_screenmetrics PROPERTIES AUTOMOC ON)
+target_link_libraries(test_core_screenmetrics Qt6::Test Qt6::Gui Qt6::Qml)
+target_include_directories(test_core_screenmetrics PRIVATE ${CMAKE_SOURCE_DIR}/shell/src)
+add_test(NAME Core_ScreenMetrics COMMAND test_core_screenmetrics)
+set_tests_properties(Core_ScreenMetrics PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 # Permissions1 authorisation: self-only, except Settings
 
 # Marathon.Platform: the runner's service clients under their QML names
-find_package(Qt6 REQUIRED COMPONENTS Qml)
 add_executable(test_core_platformtypes
     test_platformtypes.cpp
     ../../tools/marathon-app-runner/platformtypes.cpp
