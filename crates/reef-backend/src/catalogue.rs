@@ -1305,8 +1305,13 @@ pub(crate) mod tests {
     #[test]
     fn disclosures_parse_and_old_catalogues_have_none() {
         let old = Catalogue::parse(SAMPLE.as_bytes(), "aarch64").unwrap();
-        assert!(old.components.is_empty());
-        assert!(old.packages[0].services.is_empty() && old.packages[0].requires.is_empty());
+        assert!(old.components.is_empty(), "{:?}", old.components);
+        assert!(
+            old.packages[0].services.is_empty() && old.packages[0].requires.is_empty(),
+            "services: {:?}; requires: {:?}",
+            old.packages[0].services,
+            old.packages[0].requires
+        );
 
         let long = "x".repeat(MAX_DISCLOSURE_CHARS + 50);
         let json = SAMPLE
