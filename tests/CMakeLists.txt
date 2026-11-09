@@ -91,6 +91,7 @@ if(Python3_FOUND)
     # devices/ and socs/ manifests (needs the jsonschema module)
     add_test(NAME Devices_Check COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/devices/devices.py check)
     add_test(NAME Devices_Tests COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/devices/test_devices.py)
+    add_test(NAME Passport_Inspection COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/passport/test_passport.py)
 endif()
 
 # OTA feed publisher, and the image's sysupdate transfers run against its feed
