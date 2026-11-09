@@ -4,11 +4,12 @@ import MarathonOS.Shell 1.0
 import QtQuick
 import Sailfish.Silica 1.0 as Silica
 import Marathon.Silica 1.0 as Silica
+import "../core/OverviewGrid.js" as OverviewGrid
 
 Item {
     id: taskSwitcher
 
-    readonly property bool haveWayland: HAVE_WAYLAND
+    readonly property bool haveWayland: typeof HAVE_WAYLAND !== "undefined" && HAVE_WAYLAND
     // TaskCard's cover corners.
     readonly property real coverRadius: Silica.Theme.paddingMedium
     // Whether this page is the one on screen. `visible` cannot answer that:
@@ -38,7 +39,7 @@ Item {
         for (var i = 0; i < taskGrid.count; ++i) {
             var card = taskGrid.itemAtIndex(i) as TaskCard;
             if (card && card.appId === appId) {
-                taskGrid.showPage(Math.floor(i / 4));
+                taskGrid.showPage(OverviewGrid.pageForIndex(i, taskGrid.columns, taskGrid.rowsPerPage));
                 return;
             }
         }
@@ -196,21 +197,37 @@ Item {
     GridView {
         id: taskGrid
 
-        // Two by two cards a page, as BB10's active frames, filling their
-        // cells whatever the screen's shape; pages scroll vertically. The
-        // gap between cards and at the edges is paddingMedium.
+        objectName: "taskGrid"
+        // Two columns on phones; use the additional width of tablets and
+        // desktop windows for more live covers without shrinking their content.
         readonly property real gap: Silica.Theme.paddingMedium
         readonly property real bannerHeight: Silica.Theme.iconSizeSmall + 2 * Silica.Theme.paddingSmall
-        readonly property int rows: Math.ceil(count / 2)
-        readonly property int pages: Math.max(1, Math.ceil(rows / 2))
-        readonly property real pageHeight: 2 * cellHeight
-        // Every card's cover area; Keel covers are laid out at this size.
+        readonly property int columns: OverviewGrid.columns(width, Constants.scaleFactor)
+        readonly property int rowsPerPage: 2
+        readonly property int itemsPerPage: OverviewGrid.itemsPerPage(columns, rowsPerPage)
+        readonly property int rows: Math.ceil(count / columns)
+        readonly property int pages: OverviewGrid.pageCount(count, columns, rowsPerPage)
+        readonly property real pageHeight: rowsPerPage * cellHeight
         readonly property size coverSize: Qt.size(Math.max(0, cellWidth - gap), Math.max(0, cellHeight - gap - bannerHeight))
         property int dragStartPage: 0
+        property int pageAnchorIndex: 0
 
         function showPage(page) {
             pageAnimation.stop();
-            contentY = originY + Math.max(0, Math.min(page, pages - 1)) * pageHeight;
+            const bounded = OverviewGrid.clampPage(page, count, columns, rowsPerPage);
+            pageAnchorIndex = bounded * itemsPerPage;
+            contentY = originY + bounded * pageHeight;
+        }
+
+        function realignPage() {
+            if (width <= 0 || height <= 0)
+                return;
+            pageAnimation.stop();
+            cancelFlick();
+            forceLayout();
+            const page = OverviewGrid.clampPage(OverviewGrid.pageForIndex(pageAnchorIndex, columns, rowsPerPage), count, columns, rowsPerPage);
+            dragStartPage = page;
+            contentY = originY + page * pageHeight;
         }
 
         function settle() {
@@ -220,7 +237,8 @@ Item {
                 page++;
             else if (verticalVelocity < -500 || moved < -pageHeight * 0.25)
                 page--;
-            page = Math.max(0, Math.min(page, pages - 1));
+            page = OverviewGrid.clampPage(page, count, columns, rowsPerPage);
+            pageAnchorIndex = page * itemsPerPage;
             pageAnimation.to = originY + page * pageHeight;
             pageAnimation.restart();
         }
@@ -228,12 +246,18 @@ Item {
         anchors.fill: parent
         anchors.margins: gap / 2
         anchors.bottomMargin: Constants.bottomBarHeight + gap / 2
-        cellWidth: Math.floor(width / 2)
-        cellHeight: Math.floor(height / 2)
+        cellWidth: Math.floor(width / columns)
+        cellHeight: Math.floor(height / rowsPerPage)
+        onCellWidthChanged: realignPage()
+        onCellHeightChanged: realignPage()
+        onCountChanged: {
+            pageAnchorIndex = Math.max(0, Math.min(pageAnchorIndex, count - 1));
+            Qt.callLater(realignPage);
+        }
         // Pads a part-filled last page so it can be paged to.
         footer: Item {
             width: 1
-            height: (taskGrid.pages * 2 - taskGrid.rows) * taskGrid.cellHeight
+            height: (taskGrid.pages * taskGrid.rowsPerPage - taskGrid.rows) * taskGrid.cellHeight
         }
         clip: true
         Component.onCompleted: {
