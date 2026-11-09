@@ -146,6 +146,8 @@ Acceptance: the note/task remains linked across restart and event edits; missing
 
 ## Initial PR sequence
 
+The [remediation queue and 37-package tracker](REMEDIATION_QUEUE.md) records ready-to-file repairs while GitHub Issues is disabled, plus the bounded evidence and remaining gates for draft PRs #4–#8. None of those drafts is merged or completes a whole work package.
+
 The [November 9 v1 audit](V1_GAP_AUDIT.md) identifies 548 newer upstream commits and separates fixed upstream behavior from remaining source defects and unrun device gates. Reconcile that intake through V2-001 before duplicating implementation. Its data-loss, app-trust, accessibility and recovery findings are concrete acceptance work within the existing packages below.
 
 1. `docs(v2): define native successor modernization plan` — these documents only.

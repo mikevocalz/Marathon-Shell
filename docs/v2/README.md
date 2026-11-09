@@ -15,6 +15,7 @@ The product should make it unusually easy to read, reply, capture, search and re
 - [Implementation backlog](BACKLOG.md): ordered work packages and acceptance evidence.
 - [Engineering workflow and skills](ENGINEERING_WORKFLOW.md): native/API guidance, source versions, agent responsibilities and validation.
 - [V1 gap audit and upstream intake](V1_GAP_AUDIT.md): complete open-item inventory, current-versus-inherited source findings, dated Reddit feedback and repair priorities.
+- [Remediation queue and programme tracker](REMEDIATION_QUEUE.md): eight ready-to-file repair tickets, detailed acceptance and all 37 packages linked to the current draft PRs; the issue board is disabled.
 
 ## Approved 2.0 scope
 
