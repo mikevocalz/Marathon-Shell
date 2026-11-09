@@ -12,6 +12,8 @@ The product should make it unusually easy to read, reply, capture, search and re
 
 - [Modernization programme](MODERNIZATION_PLAN.md): features, architecture, dependencies, delivery phases and release gates.
 - [UI and interaction specification](UI_SPEC.md): visual language, screen inventory, adaptive rules and motion.
+- [Visual refresh research](VISUAL_REFRESH_RESEARCH_2026-11-09.md): inspected Mobbin references, existing theme ownership and a restrained native visual lift.
+- [Design influence roster](DESIGN_INFLUENCES.md): TAT/The Astonishing Tribe, named UX work and the existing BlackBerry/Sailfish references.
 - [Implementation backlog](BACKLOG.md): ordered work packages and acceptance evidence.
 - [Engineering workflow and skills](ENGINEERING_WORKFLOW.md): native/API guidance, source versions, agent responsibilities and validation.
 - [V1 gap audit and upstream intake](V1_GAP_AUDIT.md): complete open-item inventory, current-versus-inherited source findings, dated Reddit feedback and repair priorities.
