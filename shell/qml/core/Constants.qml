@@ -157,6 +157,10 @@ QtObject {
     readonly property real iconSizeXLarge: Math.round(64 * scaleFactor)
 
     function updateScreenSize(width, height, deviceDpi) {
+        // Native metrics follow the live shell window. Assigning here would
+        // replace those bindings and leave later display/DPI changes stale.
+        if (typeof ScreenMetricsCpp !== "undefined" && ScreenMetricsCpp)
+            return;
         // Before the first expose the shell is 0x0; keep the ScreenMetrics binding.
         if (width > 0 && height > 0) {
             screenWidth = width;

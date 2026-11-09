@@ -16,6 +16,8 @@
 #include <QDebug>
 #include <QUrl>
 #include <QTimer>
+#include <QDBusArgument>
+#include <QDBusMessage>
 #include <QQuickItem>
 #include <QFile>
 #include <QTextStream>
@@ -195,6 +197,30 @@ static bool subtreeHasFocus(const QQuickItem *item) {
     return false;
 }
 
+// Keel takes the host's ambience from an asynchronous reply, after the
+// window maps; there it counts as a change, and the app fades out and back
+// in, its first frames in the default colours. Hand it over before then.
+static void applyHostAmbience(QQmlEngine *engine) {
+    const QString address = qEnvironmentVariable("KEEL_SHELL_DBUS");
+    QObject      *shell   = engine->singletonInstance<QObject *>(qmlTypeId("Keel", 1, 0, "Shell"));
+    if (address.isEmpty() || !shell)
+        return;
+    const QString   name = QStringLiteral("marathon-runner-ambience");
+    QDBusConnection peer = QDBusConnection::connectToPeer(address, name);
+    QDBusMessage    call = QDBusMessage::createMethodCall(
+        QString(), QStringLiteral("/org/shipwright/keel/Shell"),
+        QStringLiteral("org.shipwright.keel.Shell1"), QStringLiteral("GetAmbience"));
+    const QDBusMessage reply = peer.call(call, QDBus::Block, 250);
+    QDBusConnection::disconnectFromPeer(name);
+    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty())
+        return;
+    QVariantMap ambience;
+    reply.arguments().constFirst().value<QDBusArgument>() >> ambience;
+    if (!ambience.isEmpty())
+        QMetaObject::invokeMethod(shell, "onAmbienceChanged", Qt::DirectConnection,
+                                  Q_ARG(QVariantMap, ambience));
+}
+
 // MarathonOS.Shell roots, ahead of Qt's defaults. App-independent, so a pool
 // spare sets them up before it is adopted.
 static int  sharedImportPathCount = 0;
@@ -218,6 +244,8 @@ int main(int argc, char *argv[]) {
     // the pool, so STAGE 1 is skipped entirely.
     marathon::runner::Launch launch   = marathon::runner::launch();
     const bool               poolMode = launch.pool;
+    // Before any thread or app code; a spare with a spare's paths.
+    marathon::runner::confine(launch.app_id);
 
     // STAGE 1: Pre-QGuiApplication. We peek at the manifest to learn
     // which Qt modules this app needs at process scope (currently just
@@ -430,6 +458,8 @@ int main(int argc, char *argv[]) {
                     [](QtMsgType, const QMessageLogContext &, const QString &) {});
                 for (qsizetype i = 0; i < types.count(); ++i)
                     delete qobject_cast<QQmlComponent *>(types.at(i))->create();
+                // PageHeader's Qt.callLater, which then finds its header gone.
+                QCoreApplication::sendPostedEvents();
                 qInstallMessageHandler(logged);
             }
         }
@@ -1060,6 +1090,7 @@ int main(int argc, char *argv[]) {
 
                 if (logStartup)
                     marathon::runner::log_startup(appId, "created", startupTimer.elapsed());
+                applyHostAmbience(view.engine());
                 // Map only once the app's content exists: an earlier show() hands
                 // the shell empty frames, which it reveals as a black window.
                 view.show();

@@ -26,8 +26,8 @@ QtObject {
     function hasPermission(appId, permission) {
         return !!granted[appId + "/" + permission];
     }
-    function setPermission(appId, permission, value) {
-        calls = calls.concat([[appId, permission, value]]);
+    function setPermission(appId, permission, value, remember) {
+        calls = calls.concat([[appId, permission, value, remember]]);
         if (fail)
             return false;
         const next = Object.assign({}, granted);

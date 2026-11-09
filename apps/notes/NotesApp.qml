@@ -23,11 +23,13 @@ ApplicationWindow {
     // The MarathonUI app kept its notes in the shell's settings store.
     property var legacySettings: typeof Settings !== "undefined" ? Settings : null
     property var permissions: typeof Permissions !== "undefined" ? Permissions : null
-    readonly property var notes: Store.parse(store.value)
+    readonly property var savedState: Store.decode(store.value)
+    readonly property var notes: savedState.notes
+    readonly property double nextNoteId: savedState.nextId
     property string route: typeof MARATHON_APP_ROUTE !== "undefined" ? MARATHON_APP_ROUTE : ""
 
     function save(next) {
-        store.value = JSON.stringify(next);
+        store.value = Store.serialize(next, nextNoteId);
     }
 
     // Asking without the storage grant would prompt for it, and without it
@@ -37,7 +39,7 @@ ApplicationWindow {
             return;
         const old = Store.parse(legacySettings.get("notes/data", "[]"));
         if (old.length > 0)
-            save(Store.merge(notes, old));
+            save(Store.merge(notes, old, nextNoteId));
         imported.value = true;
     }
 
@@ -46,7 +48,7 @@ ApplicationWindow {
         const text = Store.sharedText(resources);
         if (text === "")
             return;
-        const next = Store.create(notes, text, Date.now());
+        const next = Store.create(notes, text, Date.now(), nextNoteId);
         save(next);
         activate();
         pageStack.push(Qt.resolvedUrl("pages/NoteEditorPage.qml"), {

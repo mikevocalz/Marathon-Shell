@@ -39,20 +39,25 @@
 #   MARATHON_IMAGE_SRC      packaging tree (default: in-tree packaging/)
 #   FORCE_REBUILD           "1" → drop cached apks before rebuild
 #   MARATHON_DEV_SSH_KEY    public key allowed to log in over SSH (root and
-#                           user, key only). Defaults to ~/.ssh/id_ed25519.pub;
-#                           empty builds an image with no remote login.
+#                           user, key only), for a developer's own phone.
+#                           Unset or empty builds an image with no remote
+#                           login, as one for other people must be;
+#                           marathon-ota publish refuses any other.
 #   MARATHON_IMAGE_LAYOUT   "single" (default) or "ab": A/B /usr slots with
 #                           signed OTA updates and rollback (docs/OTA.md)
-#   MARATHON_OTA_URL        update feed root for A/B images
-#                           (default https://thrivelobal.com/marathon/updates)
-#   MARATHON_OTA_PUBKEY     armored public signing key for A/B images
+#   MARATHON_OTA_CHANNEL    "stable" (default) or "test": which of
+#                           marathon-updates' release feeds the image follows
+#   MARATHON_OTA_URL        update feed root for A/B and Zinwa Q25 images
+#                           (default https://github.com/patrickjquinn/marathon-updates/releases/download/$MARATHON_OTA_CHANNEL)
+#   MARATHON_OTA_PUBKEY     armored public signing key for those images
 #                           (default packaging/ota/marathon-ota.asc)
 
 set -euo pipefail
 
 # Resolve repo root (this script lives at $repo/scripts/).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-export MARATHON_SHELL_SRC="$(dirname "$SCRIPT_DIR")"
+MARATHON_SHELL_SRC="$(dirname "$SCRIPT_DIR")"
+export MARATHON_SHELL_SRC
 LIB="$SCRIPT_DIR/qemu/lib"
 
 # Pluck the target device off the front of the arg list. Everything
@@ -138,6 +143,7 @@ build_if_missing() {
         local pkgver pkgrel pkgname expected
         # Sourced, not grepped: pkgname can be built from other variables
         # (linux-$_flavor-marathon).
+        # shellcheck source=/dev/null
         read -r pkgname pkgver pkgrel < <(set +u; . "$aport_apkbuild" >/dev/null 2>&1
                                           echo "$pkgname $pkgver $pkgrel")
         if [ -n "$pkgver" ] && [ -n "$pkgrel" ] && [ -n "$pkgname" ]; then
@@ -148,7 +154,7 @@ build_if_missing() {
             fi
             if compgen -G "$MKOSI_PKG_DIR/$glob" >/dev/null; then
                 local stale
-                stale=$(ls -1 "$MKOSI_PKG_DIR"/$glob | xargs -n1 basename | tr '\n' ' ')
+                stale=$(for f in "$MKOSI_PKG_DIR"/$glob; do printf '%s ' "${f##*/}"; done)
                 echo "==> $label: cache STALE (want $expected, have $stale) — rebuilding"
                 rm -f "$MKOSI_PKG_DIR"/$glob
             fi
@@ -166,6 +172,12 @@ build_if_missing() {
         bash "$script"
 }
 
+# The fork builders below trust postmarketOS's key from pmaports, which
+# build-image.py would otherwise clone only at stage 4.
+if [ ! -d "$DURANIUM_DIR/pmaports" ]; then
+    (cd "$DURANIUM_DIR/scripts" && python3 -c 'from pmaports import prepare_pmaports; prepare_pmaports("edge")')
+fi
+
 echo "==> stage 3: build apks"
 APORTS_DIR="$MARATHON_IMAGE_DIR/packages"
 build_if_missing "marathon-base-config"      'marathon-base-config-*.apk'     "$LIB/build-marathon-base-config-apk.sh"      "$APORTS_DIR/marathon-base-config/APKBUILD"
@@ -173,6 +185,8 @@ build_if_missing "marathon-plymouth-theme"   'marathon-plymouth-theme-*.apk'  "$
 build_if_missing "keel-silica"               'keel-silica-*.apk'              "$LIB/build-keel-silica-apk.sh"               "$APORTS_DIR/keel-silica/APKBUILD"
 APORT=wpewebkit \
 build_if_missing "wpewebkit"                 'wpewebkit-[0-9]*.apk'           "$LIB/build-aport-apk.sh"                     "$APORTS_DIR/wpewebkit/APKBUILD"
+APORT=libjxl0.11 NO_DEPS=1 \
+build_if_missing "libjxl0.11"                'libjxl0.11-[0-9]*.apk'          "$LIB/build-aport-apk.sh"                     "$APORTS_DIR/libjxl0.11/APKBUILD"
 # Pilot (its daemon and app) and keel-mcp, from this tree.
 PILOT_PKGS=keel-mcp \
 build_if_missing "keel-mcp"                  'keel-mcp-*.apk'                 "$LIB/build-pilot-apk.sh"                     "$APORTS_DIR/keel-mcp/APKBUILD"
@@ -198,13 +212,38 @@ build_if_missing "marathon-shipwright-apps"  'marathon-shipwright-apps-*.apk' "$
 else
 bash "$SCRIPT_DIR/vendor/fetch-shipwright-apks.sh" "$MKOSI_PKG_DIR"
 fi
-# Deckard from a local Marathon-Deckard checkout when there is one.
-DECKARD_SRC="${DECKARD_SRC-$([ -d "$HOME/Developer/Marathon-Deckard/host/deckard-bridge" ] && echo "$HOME/Developer/Marathon-Deckard")}" \
+# Deckard at the APKBUILD's pinned commit; DECKARD_SRC=<checkout> builds a
+# local Marathon-Deckard instead.
+DECKARD_SRC="${DECKARD_SRC-}" \
 build_if_missing "deckard"                   'deckard-[0-9]*.apk'             "$LIB/build-deckard-apk.sh"                   "$APORTS_DIR/deckard/APKBUILD"
-# Android's images, for the HackberryPi overlay on the Pi 5 (mkosi-configure.py).
-if [ "$DEVICE" = raspberry-pi5 ]; then
-APORT=deckard-images \
+# Android's images, for the HackberryPi overlay on the Pi 5 and for the Q25
+# (mkosi-configure.py).
+if [ "$DEVICE" = raspberry-pi5 ] || [ "$DEVICE" = zinwa-q25 ]; then
+APORT=deckard-images NO_DEPS=1 \
 build_if_missing "deckard-images"            'deckard-images-*.apk'           "$LIB/build-aport-apk.sh"                     "$APORTS_DIR/deckard-images/APKBUILD"
+fi
+# Zinwa Q25: its device package and every q25-* and *-q25 aport, the kernel
+# (linux-zinwa-q25) among them, which depend on each other; the modem's
+# ModemManager depends only on Alpine packages, which abuild needs installed
+# to trace libmm-glib.
+if [ "$DEVICE" = zinwa-q25 ]; then
+    for aport in "$APORTS_DIR"/device-zinwa-q25 "$APORTS_DIR"/q25-* "$APORTS_DIR"/*-q25; do
+        [ -f "$aport/APKBUILD" ] || continue
+        name="$(basename "$aport")"
+        APORT="$name" NO_DEPS=1 build_if_missing "$name" "$name-[0-9]*.apk" \
+            "$LIB/build-aport-apk.sh" "$aport/APKBUILD"
+    done
+    # Satellite positioning, from this tree.
+    PILOT_PKGS=marathon-gnssd build_if_missing "marathon-gnssd" 'marathon-gnssd-[0-9]*.apk' \
+        "$LIB/build-pilot-apk.sh" "$APORTS_DIR/marathon-gnssd/APKBUILD"
+    APORT=modemmanager-mtk-ccci build_if_missing "modemmanager-mtk-ccci" 'modemmanager-mtk-ccci-[0-9]*.apk' \
+        "$LIB/build-aport-apk.sh" "$APORTS_DIR/modemmanager-mtk-ccci/APKBUILD"
+    # Its cameras need the software ISP patches, which postmarketOS's lacks.
+    APORT=libcamera build_if_missing "libcamera" 'libcamera-[0-9]*.apk' \
+        "$LIB/build-aport-apk.sh" "$APORTS_DIR/libcamera/APKBUILD"
+    # Panfrost's, without the import of every client buffer into mediatek-drm.
+    APORT=mesa build_if_missing "mesa" 'mesa-[0-9]*.apk' \
+        "$LIB/build-aport-apk.sh" "$APORTS_DIR/mesa/APKBUILD"
 fi
 build_if_missing "marathon-shell"            'marathon-shell-*.apk'           "$LIB/build-marathon-shell-apk.sh"            "$APORTS_DIR/marathon-shell/APKBUILD"
 build_if_missing "postmarketos-ui-marathon"  'postmarketos-ui-marathon-*.apk' "$LIB/build-postmarketos-ui-marathon-apk.sh"  "$APORTS_DIR/postmarketos-ui-marathon/APKBUILD"
@@ -217,6 +256,7 @@ DEVICE_OVERLAY_APORT="$APORTS_DIR/device-$MARATHON_TARGET_DEVICE-marathon"
 if [ -d "$DEVICE_OVERLAY_APORT" ]; then
     # Forks the overlay depends on (kernel, U-Boot, ...); apk takes them
     # from mkosi.packages in place of the pmaports packages they replace.
+    # shellcheck source=/dev/null disable=SC2154 # depends comes from the APKBUILD
     for fork in $(set +u; . "$DEVICE_OVERLAY_APORT/APKBUILD"; echo $depends); do
         # A device overlay it depends on (CM5 on Pi 5) has its own builder.
         case "$fork" in device-*) continue ;; *-marathon) [ -d "$APORTS_DIR/$fork" ] || continue ;; *) continue ;; esac
@@ -231,11 +271,16 @@ fi
 
 # A/B images update over the air (docs/OTA.md): sysupdate transfers for the
 # feed at $MARATHON_OTA_URL and the keyring that verifies it go into the
-# image through mkosi.extra. Single-root images get neither.
+# image through mkosi.extra. Single-root images get neither, except the
+# Q25's, whose root is a file on its carrier with room for the next one.
 export MARATHON_IMAGE_LAYOUT="${MARATHON_IMAGE_LAYOUT:-single}"
-# Remote login for the builder's own phone, by their key; an image for other
-# people is built with MARATHON_DEV_SSH_KEY= (empty) and has none.
-export MARATHON_DEV_SSH_KEY="${MARATHON_DEV_SSH_KEY-$(cat "$HOME/.ssh/id_ed25519.pub" 2>/dev/null)}"
+OTA=0
+if [ "$MARATHON_IMAGE_LAYOUT" = "ab" ] || [ "$MARATHON_TARGET_DEVICE" = zinwa-q25 ]; then
+    OTA=1
+fi
+export MARATHON_DEV_SSH_KEY="${MARATHON_DEV_SSH_KEY:-}"
+[ -z "$MARATHON_DEV_SSH_KEY" ] ||
+    echo "==> developer image: SSH as root and user with $MARATHON_DEV_SSH_KEY; not for other people" >&2
 OTA_TRANSFERS="$DURANIUM_DIR/mkosi.extra/usr/lib/sysupdate.d"
 OTA_KEYRING="$DURANIUM_DIR/mkosi.extra/usr/lib/systemd/import-pubring.pgp"
 # Raspberry Pi A/B (mkosi.repart.ab-pi): autoboot.txt for partition 1, the
@@ -249,12 +294,13 @@ for d in $PI_AB_EXTRA; do rm -rf "${DURANIUM_DIR:?}/mkosi.extra/$d"; done
 OTA_TEMPLATES="$MARATHON_IMAGE_SRC/ota/sysupdate.d"
 case "$MARATHON_TARGET_DEVICE" in
     raspberry-pi*) OTA_TEMPLATES="$MARATHON_IMAGE_SRC/ota/pi/sysupdate.d" ;;
+    zinwa-q25) OTA_TEMPLATES="$MARATHON_IMAGE_SRC/ota/q25/sysupdate.d" ;;
 esac
-if [ "$MARATHON_IMAGE_LAYOUT" = "ab" ]; then
-    OTA_URL="${MARATHON_OTA_URL:-https://thrivelobal.com/marathon/updates}"
+if [ "$OTA" = 1 ]; then
+    OTA_URL="${MARATHON_OTA_URL:-https://github.com/patrickjquinn/marathon-updates/releases/download/${MARATHON_OTA_CHANNEL:-stable}}"
     OTA_PUBKEY="${MARATHON_OTA_PUBKEY:-$MARATHON_IMAGE_SRC/ota/marathon-ota.asc}"
     if [ ! -s "$OTA_PUBKEY" ]; then
-        echo "error: A/B image needs the update signing key's public half at $OTA_PUBKEY" >&2
+        echo "error: an updatable image needs the update signing key's public half at $OTA_PUBKEY" >&2
         echo "       create one: scripts/ota/marathon-ota keygen --gnupghome ~/.marathon-secrets/ota/gnupg --export $OTA_PUBKEY" >&2
         exit 1
     fi
@@ -282,12 +328,22 @@ if [ "$MARATHON_IMAGE_LAYOUT" = "ab" ]; then
             install -Dm644 -t "$EXTRA/usr/lib/systemd/system/systemd-repart.service.d" "$PI_SRC"/systemd-repart.service.d/*.conf
             ;;
     esac
-    echo "==> A/B layout: updates from $OTA_URL, signed by $(basename "$OTA_PUBKEY")"
+    echo "==> OTA: updates from $OTA_URL, signed by $(basename "$OTA_PUBKEY")"
 fi
 
 if [ "$BUMP" -eq 1 ]; then
     (cd "$DURANIUM_DIR" && PATH="$(dirname "$MKOSI_BIN"):$PATH" "$MKOSI_BIN" bump)
 fi
+
+# A Pi 5 image with the HackberryPi overlay (mkosi-configure.py installs it
+# when its apk is in mkosi.packages) is a HackberryPi image: its own image
+# id, and so its own update feed (pipeline patch 0056).
+IMAGE_DEVICE="$MARATHON_TARGET_DEVICE"
+if [ "$MARATHON_TARGET_DEVICE" = raspberry-pi5 ] \
+        && compgen -G "$DURANIUM_DIR/mkosi.packages/device-hackberrypi-cm5-marathon-*.apk" >/dev/null; then
+    IMAGE_DEVICE=hackberrypi-cm5
+fi
+export MARATHON_IMAGE_DEVICE="$IMAGE_DEVICE"
 
 echo "==> stage 4: bake image for device=$MARATHON_TARGET_DEVICE (layout $MARATHON_IMAGE_LAYOUT, version $(cat "$DURANIUM_DIR/mkosi.version" 2>/dev/null || echo new))"
 cd "$DURANIUM_DIR"
@@ -296,9 +352,10 @@ PATH="$(dirname "$MKOSI_BIN"):$PATH" \
 
 # mkosi names its output dir + raw artifacts by the device + ui
 # pair. Find the freshly written one.
-OUT_DIR_GLOB="$DURANIUM_DIR/mkosi.output/${MARATHON_TARGET_DEVICE}_marathon_edge"
-LATEST_IMG=$(ls -1t "$OUT_DIR_GLOB"/${MARATHON_TARGET_DEVICE}_marathon_edge_*.raw 2>/dev/null \
-    | grep -E "/${MARATHON_TARGET_DEVICE}_marathon_edge_[0-9]+\.raw$" | head -1)
+OUT_DIR_GLOB="$DURANIUM_DIR/mkosi.output/${IMAGE_DEVICE}_marathon_edge"
+# shellcheck disable=SC2010 # newest by mtime; mkosi's names have no spaces
+LATEST_IMG=$(ls -1t "$OUT_DIR_GLOB"/${IMAGE_DEVICE}_marathon_edge_*.raw 2>/dev/null \
+    | grep -E "/${IMAGE_DEVICE}_marathon_edge_[0-9]+\.raw$" | head -1)
 [ -z "$LATEST_IMG" ] && { echo "no image produced for device-$MARATHON_TARGET_DEVICE" >&2; exit 1; }
 echo "==> image ready: $LATEST_IMG"
 
@@ -315,12 +372,13 @@ echo "==> image ready: $LATEST_IMG"
 # the live split. Newest-per-family has no such race — whatever this bake
 # just wrote is by definition the newest.
 prune_splits() {
-    local dir="$1" fam base kept=0 pruned=0
+    local dir="$1" fam kept=0 pruned=0
     # Family = filename with the hash segment removed, e.g.
     # qemu-aarch64_marathon_edge_26083101.root-arm64
     for fam in $(ls -1 "$dir"/*.*-*.*.raw "$dir"/*.boot.*.raw "$dir"/*.root.*.raw 2>/dev/null \
                  | sed -E 's|.*/||; s|\.[0-9a-f]{32}\.raw$||' | sort -u); do
         local first=1
+        # shellcheck disable=SC2045 # newest first by mtime; mkosi's names have no spaces
         for f in $(ls -1t "$dir/$fam".*.raw 2>/dev/null); do
             if [ "$first" = 1 ]; then first=0; kept=$((kept + 1)); continue; fi
             rm -f "$f"; pruned=$((pruned + 1))
@@ -635,7 +693,7 @@ PLYDEF
         # at the ESP root. Extract it next to the .raw so
         # flash-oneplus6.sh can pick it up without slicing the GPT
         # image at flash time.
-        ESP_RAW=$(ls -1t "$OUT_DIR_GLOB"/${MARATHON_TARGET_DEVICE}_marathon_edge_*.esp.raw 2>/dev/null | head -1 || true)
+        ESP_RAW=$(ls -1t "$OUT_DIR_GLOB"/${IMAGE_DEVICE}_marathon_edge_*.esp.raw 2>/dev/null | head -1 || true)
         if [ -n "$ESP_RAW" ]; then
             if command -v mcopy >/dev/null; then
                 BOOT_IMG="$OUT_DIR_GLOB/boot.img"

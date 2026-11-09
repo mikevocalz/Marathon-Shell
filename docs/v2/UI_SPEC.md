@@ -1,12 +1,14 @@
 # Native UI and interaction specification
 
-Status: proposed design contract, not implemented visuals. Read alongside [the programme](MODERNIZATION_PLAN.md).
+Status: approved 2.0 design direction, not implemented visuals. Scope revised November 9, 2026. Read alongside [the programme](MODERNIZATION_PLAN.md). Work/Personal Spaces, including organizational-only views, are entirely deferred to 2.1.
 
 ## Character
 
 Sailfish provides ambience, typography and fluid covers; BB10 provides communication density and continuity. The visual result should feel premium and original: strong hierarchy, restrained depth, precise alignment, tactile feedback and confident use of space. Avoid a generic dashboard, decorative neon, excessive blur and rows of interchangeable rounded cards.
 
 Use atmosphere behind content and stable readable surfaces beneath text. A wallpaper should influence accent and ambience without determining contrast. Light, dark, high-contrast and reduced-transparency states are designed together. Maintain compact communication lists while allowing editorial typography where geometry permits.
+
+See [the November 9 visual refresh research](VISUAL_REFRESH_RESEARCH_2026-11-09.md) for inspected Mobbin references, current theme ownership and the proposed visual refinements, alongside [TAT and the design influence roster](DESIGN_INFLUENCES.md). That brief distinguishes the implemented dark palette from light-theme design targets.
 
 ## One token system
 
@@ -32,6 +34,14 @@ Use the existing icon theme as the migration baseline. Specify consistent outlin
 | Settings | Clear hierarchy, search, protection status and per-app controls | Navigation/detail; preserve selection across resize |
 | Onboarding | Navigation practice, account setup, accessibility and honest device status | Same sequence adapted to touch/keyboard; never promise unverified security |
 | Update/recovery | Understandable staging, restart, failure and recovery state | Consistent status across displays; critical actions stay reachable |
+| Tasks/capture | Durable task, source message/file, due date and attachment state | List/detail with the same task identity in Notes, Hub and Calendar |
+| Meeting context | Related messages/files, note, time zone and follow-up | Agenda/detail with user-selected context; retain the originating task |
+| Instant Actions | Local command discovery, target/account preview and explicit activation | Keyboard-first action chooser with collisions and unavailable actions explained |
+| Personal scenes | Travel/Bedside/Focus, effective settings, end time and manual override | Compact control near invocation; no work-mode or profile selector |
+| Companion devices | Pairing identity, per-capability grants, transfer progress and revoke | Transfer/detail view; no implicit remote command or filesystem permission |
+| Credentials | Origin/app identity, authenticator choice, verification and recovery status | Native focused prompt; never disguise a browser origin as an app identity |
+| Secure conversations/calls | Recipient/device trust, delivery state, microphone/camera and end-call controls | Conversation/call panes with reliable focus and route changes |
+| Migration/export | Import preview, duplicate choices, export scope and restore results | Compare conflicts without losing the original data or selection |
 
 ## Interaction grammar
 
@@ -41,6 +51,8 @@ Use the existing icon theme as the migration baseline. Specify consistent outlin
 - Reversible destructive operations use remorse/undo with accessible feedback. Operations that cannot be undone need clear consequence and deliberate action.
 - Selection mode has obvious scope and exit. Drag/drop exposes a target and operation, with keyboard equivalents for essential transfers.
 - Every control has hover, pressed, focused, disabled and loading states as applicable. Errors explain what remains saved and how to recover.
+- Account badges identify ordinary personal accounts in 2.0. Work/Personal filters, work badges, profile switching and profile-based security indicators are 2.1 only.
+- Companion, credential and secure-conversation prompts show the actual target and capability. A cancelled/failed step returns to its caller without losing the draft; a pending operation never reports success prematurely.
 
 ## Motion and micro-interactions
 
@@ -63,3 +75,5 @@ Mobbin searches did not yield direct Sailfish/Jolla OS screens. Treat app refere
 ## Design acceptance
 
 No clipped translated labels or unreachable controls at large text; no content under hinge/cutout; readable wallpaper-derived themes; screen-reader names/roles/order; visible keyboard focus; stable resume position; no duplicate shell navigation; no app state loss during layout changes. Review all empty/loading/offline/error/permission-denied states, not just the populated happy path.
+
+The expanded 2.0 review also covers unavailable/revoked task sources, conflicting imports, interrupted transfers, unpaired devices, locked credentials, unverified recipients, media-permission revocation and manual scene overrides. Show personal scenes as preferences, not identities. Do not show Work/Personal Space mockups as a 2.0 deliverable; keep that future design in the programme's 2.1 appendix.

@@ -1,0 +1,67 @@
+# Q25 bring-up device policy.
+schema = 1
+vendor = "zinwa"
+codename = "q25"
+id = "zinwa-q25"
+name = "Zinwa Q25 Pro"
+manufacturer = "Zinwa"
+soc = "mt6789"
+status = "bring-up"
+package = "device-zinwa-q25-marathon"
+
+# mkosi builds the root alone; the wrapper puts it on the userdata carrier
+# beside an ESP made from the root's /boot, and builds U-Boot for lk_a/lk_b.
+[build]
+target = "zinwa-q25"
+wrapper = "scripts/build-zinwa-q25-image.sh"
+flash = "scripts/flash/flash-zinwa-q25.sh"
+bootloader = "none"
+
+# U-Boot (lk_a) boots systemd-boot from the nested-GPT ESP inside userdata.
+[boot]
+method = "uefi"
+partition_table = "gpt"
+
+# 7.0.0-q25, built from source; every module package is pinned
+# to it.
+[kernel]
+package = "linux-zinwa-q25"
+version = "7.0.0"
+
+[display]
+interface = "dsi"
+width = 720
+height = 720
+# UI policy (1.5x), not a measurement of the panel's physical density.
+scale_dpi = 240
+
+[input]
+touch = "unvalidated by this profile"
+keyboard = "RP2040 I2C QWERTY"
+
+[hardware]
+modem = "unvalidated by this profile"
+gps = "unvalidated by this profile"
+wifi = "unvalidated by this profile"
+sensors = []
+
+# Copied from the phone's stock vendor partition at build time. The modem
+# image is copied from its md1img partition on first boot (q25-modem).
+[[firmware]]
+package = "q25-connsys-firmware"
+version = "20261030"
+
+[profile]
+# Constants.scaleFactor = DPI / 160. Do not use QT_SCALE_FACTOR.
+force_dpi = 240
+# The true pitch, 720 px over the stock panel driver's 62 mm, for the
+# wl_output size: the DT gives the panel no size.
+panel_dpi = 295
+# ondemand ramps only past 95% load; schedutil follows the foreground uclamp.
+cpu_governor = "schedutil"
+# Level 1 of 20 (4.1 V bias), the stock minimum, stays clean.
+brightness_floor = 0.05
+gpu_stack = "mesa-panfrost"
+# PanVK rejects the Mali-G57, so the loader finds no Vulkan device and GTK 4
+# renders with GL instead of on the CPU through lavapipe.
+vulkan_driver = "panfrost"

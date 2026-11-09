@@ -9,9 +9,9 @@ use std::pin::Pin;
 use std::time::{Duration, Instant};
 
 use cxx_qt::{CxxQtType, Threading};
-use cxx_qt_lib::{QString, QVariant};
+use cxx_qt_lib::{QString, QStringList, QVariant};
 
-use super::{dbus, later, pool, q, Launch, Map, Tasks};
+use super::{dbus, later, pool, q, Launch, Map, Tasks, TasksRust};
 use crate::apps::{self, App};
 use crate::{app_ids, desktop, io, log, sandbox};
 
@@ -26,6 +26,61 @@ const EXPECT_WINDOW: Duration = Duration::from_secs(10);
 const ANDROID_HANDOFF_GRACE: Duration = Duration::from_secs(45);
 /// A second tap within this of the first starts no second copy.
 const LAUNCH_HOLD: Duration = Duration::from_secs(10);
+
+/// A Flatpak left on its toolkit's own colours: no generated gtk.css or KDE
+/// palette, no KDE platform theme, libadwaita's own accent. The portal still
+/// gives it the light or dark scheme.
+const UNTHEMED_FLATPAK: &str = "flatpak run --nofilesystem=xdg-config/gtk-4.0 \
+    --nofilesystem=xdg-config/kdeglobals --nofilesystem=xdg-data/color-schemes \
+    --unset-env=QT_QPA_PLATFORMTHEME --env=ADW_DEBUG_ACCENT_COLOR=blue ";
+
+/// Consume only the attempt that failed. A retry can use the same command,
+/// and a running replacement keeps its launch and window state.
+fn take_failed_launch(state: &mut TasksRust, request_id: &str) -> Option<(Launch, bool)> {
+    let launch = state.pending_launches.remove(request_id)?;
+    let current = !state
+        .pending_launches
+        .values()
+        .chain(state.active_by_pid.values())
+        .any(|other| other.app_id == launch.app_id)
+        && !state.exited_launches.contains_key(&launch.app_id)
+        && state.windows.get(&launch.app_id).is_none_or(Vec::is_empty)
+        && !state
+            .tasks
+            .iter()
+            .any(|task| task.app_id == launch.app_id && task.surface_id >= 0);
+    if current {
+        state.launching.remove(&launch.app_id);
+        state.background_launches.remove(&launch.app_id);
+        state.expected_windows.remove(&launch.app_id);
+        state.android_handoffs.remove(&launch.app_id);
+    }
+    Some((launch, current))
+}
+
+/// Remove only this registration: a newer PID keeps the app's lifecycle,
+/// and a reused PID keeps its new app's gate identity.
+fn forget_pid_registration(state: &mut TasksRust, app_id: &str, pid: i64) -> (bool, bool) {
+    let current = state.app_to_pid.get(app_id) == Some(&pid);
+    let reverse = state.pid_to_app.get(&pid).is_some_and(|id| id == app_id);
+    if current {
+        state.app_to_pid.remove(app_id);
+    }
+    if reverse {
+        state.pid_to_app.remove(&pid);
+        crate::gate::forget_pid(pid);
+    }
+    (current, reverse)
+}
+
+/// Android desktop files are rewritten during a session cutover. The
+/// catalogue may still hold the old launcher until Shell restarts.
+fn android_exec(app: &App) -> String {
+    desktop_entry(&app.id)
+        .map(|entry| entry.exec)
+        .filter(|command| !command.is_empty())
+        .unwrap_or_else(|| app.exec.clone())
+}
 
 pub(super) fn is_android_app_id(app_id: &str) -> bool {
     app_ids::android_package(app_id).is_some_and(|package| package.contains('.'))
@@ -157,11 +212,20 @@ pub(super) fn serves_keel_actions(app_id: &str) -> bool {
 }
 
 impl Tasks {
+    fn track_launch(mut self: Pin<&mut Self>, launch: Launch) -> QString {
+        let request_id = super::launch_uuid();
+        self.as_mut()
+            .rust_mut()
+            .pending_launches
+            .insert(request_id.clone(), launch);
+        q(&request_id)
+    }
+
     /// Makes this app the only in-flight launch allowed to claim foreground.
     fn claim_foreground(mut self: Pin<&mut Self>, app_id: &str) -> u64 {
         let mut rust = self.as_mut().rust_mut();
         let generation = rust.foreground_launches.begin();
-        for launch in rust.pending_by_command.values_mut() {
+        for launch in rust.pending_launches.values_mut() {
             if launch.app_id == app_id {
                 launch.foreground_generation = generation;
             }
@@ -224,6 +288,13 @@ impl Tasks {
 
     pub(super) fn pid_for(&self, app_id: &str) -> i64 {
         self.app_to_pid.get(app_id).copied().unwrap_or(-1)
+    }
+
+    fn has_app_launch(&self, app_id: &str) -> bool {
+        self.pending_launches
+            .values()
+            .chain(self.active_by_pid.values())
+            .any(|launch| launch.app_id == app_id)
     }
 
     pub(super) fn pid_for_app_id(&self, app_id: &QString) -> i64 {
@@ -411,7 +482,7 @@ impl Tasks {
         rust.android_handoffs.remove(app_id);
         rust.launching.remove(app_id);
         rust.expected_windows.remove(app_id);
-        rust.pending_by_command
+        rust.pending_launches
             .retain(|_, launch| launch.app_id != app_id);
         rust.exited_launches.remove(app_id);
         rust.active_by_pid
@@ -459,6 +530,16 @@ impl Tasks {
             self.as_mut().open(&app, true);
             self.as_mut().show(&app, &task.kind, task.surface_id);
             self.as_mut().rust_mut().launching.remove(&app.id);
+            // An Android card can outlive its app (force-stopped under
+            // another app's prompt); only Android knows whether to front
+            // the task or start the app, and its window takes the card.
+            if is_android_app_id(&app.id) {
+                let exec = android_exec(&app);
+                if !exec.is_empty() {
+                    self.as_mut()
+                        .spawn_requested(&QString::default(), &q(&exec), &Map::default());
+                }
+            }
             self.launched(&app);
             return true;
         }
@@ -510,13 +591,10 @@ impl Tasks {
             self.as_mut().open(app, false);
             self.as_mut().show(app, "native", -1);
         }
-        // Android desktop files are rewritten during a session cutover. The
-        // catalogue may still hold the old launcher until Shell restarts.
         let exec = if is_android_app_id(&app.id) {
-            desktop_entry(&app.id)
-                .map(|entry| entry.exec)
-                .filter(|command| !command.is_empty())
-                .unwrap_or_else(|| app.exec.clone())
+            android_exec(app)
+        } else if app.kind == "flatpak" && !crate::settings::themed(&app.id) {
+            app.exec.replacen("flatpak run ", UNTHEMED_FLATPAK, 1)
         } else {
             app.exec.clone()
         };
@@ -530,15 +608,13 @@ impl Tasks {
                 foreground_generation,
                 ..Launch::default()
             };
-            self.as_mut()
-                .rust_mut()
-                .pending_by_command
-                .insert(exec.clone(), launch);
+            let request_id = self.as_mut().track_launch(launch);
             if exec.starts_with(app_ids::LAUNCHER) {
                 self.as_mut().wake(&app.id);
                 self.as_mut().while_android_starts();
             }
-            self.as_mut().spawn_requested(&q(&exec), &Map::default());
+            self.as_mut()
+                .spawn_requested(&request_id, &q(&exec), &Map::default());
         }
         let id = app.id.clone();
         later(self.qt_thread(), LAUNCH_HOLD, move |mut obj| {
@@ -610,6 +686,7 @@ impl Tasks {
         sandbox::Runner {
             app_id: app_id.to_owned(),
             permissions: permissions.to_vec(),
+            install_root: std::path::PathBuf::new(),
             requires_qt: Vec::new(),
             storage_spare,
             wayland_socket: String::new(),
@@ -639,17 +716,74 @@ impl Tasks {
         path.exists().then(|| path.to_string_lossy().into_owned())
     }
 
+    fn reject_launch(mut self: Pin<&mut Self>, app: &App, error: &str) {
+        log::warn("tasks", format_args!("cannot launch {}: {error}", app.id));
+        self.as_mut().rust_mut().launching.remove(&app.id);
+        self.app_launch_failed(&q(&app.id), &q(&app.name), &q(error));
+    }
+
+    /// Prepare one catalogue snapshot before opening its launch placeholder.
+    fn runner_for_app(
+        &self,
+        app: &App,
+        policy: &sandbox::LaunchPolicy,
+    ) -> Result<(sandbox::Runner, Map), &'static str> {
+        if !policy.is_sandboxed() {
+            log::warn(
+                "tasks",
+                format_args!(
+                    "launching {} without confinement: MARATHON_DISABLE_SANDBOX=1 was explicitly set",
+                    app.id
+                ),
+            );
+        }
+        let mut runner = self.runner(&app.id, &app.permissions, false);
+        runner.install_root.clone_from(&app.install_root);
+        if !runner.install_root.as_os_str().is_empty() {
+            runner
+                .install_root
+                .file_name()
+                .and_then(|s| s.to_str())
+                .filter(|token| token.starts_with("gen-"))
+                .ok_or("Legacy app requires migration and a device restart")?;
+        }
+        // environment() and the bwrap argument builder both use variables()
+        // for the selected generation's ID/token; keep one source of truth.
+        let env = sandbox::environment(&runner, policy);
+        Ok((runner, env))
+    }
+
     fn launch_marathon(mut self: Pin<&mut Self>, app: &App, foreground_generation: u64) -> bool {
+        let policy = match sandbox::LaunchPolicy::from_environment() {
+            Ok(policy) => policy,
+            Err(error) => {
+                self.as_mut().reject_launch(app, &error.to_string());
+                return false;
+            }
+        };
+        let (mut runner, mut env) = match self.runner_for_app(app, &policy) {
+            Ok(prepared) => prepared,
+            Err(error) => {
+                self.as_mut().reject_launch(app, error);
+                return false;
+            }
+        };
+        let webengine = sandbox::uses_webengine(&runner);
+        let camera = sandbox::uses_camera(&runner);
         if !self.background_launches.contains(&app.id) {
             self.as_mut().open(app, false);
             self.as_mut().show(app, &app.kind, -1);
         }
-        let mut runner = self.runner(&app.id, &app.permissions, false);
-        let webengine = sandbox::uses_webengine(&runner);
-        let mut env = sandbox::environment(&runner);
         // A spare can write every app's data: it takes only Marathon's own,
-        // and not WebEngine's, whose environment is per app.
-        if !sandbox::is_user_installed(&app.id) && !webengine {
+        // and not WebEngine's, the camera's or a terminal's, whose
+        // environment or home is per app.
+        let terminal = app.permissions.iter().any(|p| p == "terminal");
+        if policy.is_sandboxed()
+            && runner.install_root.as_os_str().is_empty()
+            && !webengine
+            && !camera
+            && !terminal
+        {
             let storage = app.permissions.iter().any(|p| p == "storage");
             let launch = Launch {
                 app_id: app.id.clone(),
@@ -660,7 +794,7 @@ impl Tasks {
                 foreground_generation,
                 ..Launch::default()
             };
-            if self.as_mut().adopt_spare(storage, launch, &env) {
+            if self.as_mut().adopt_spare(storage, launch, &env, &policy) {
                 let qt = self.qt_thread();
                 let id = app.id.clone();
                 later(qt, LAUNCH_HOLD, move |mut obj| {
@@ -671,23 +805,21 @@ impl Tasks {
             }
         }
         let mut instance = String::new();
-        if sandbox::bwrap().is_some() {
+        if policy.is_sandboxed() {
             instance = super::launch_uuid();
             if let Some(socket) = self.as_mut().open_sandbox_socket(&app.id, &instance) {
                 runner.wayland_socket = socket;
             } else {
-                log::warn(
-                    "tasks",
-                    format_args!("no sandbox Wayland socket for {}", app.id),
-                );
-                self.as_mut().rust_mut().launching.remove(&app.id);
-                self.app_launch_failed(&q(&app.id), &q(&app.name), &q("No sandbox Wayland socket"));
+                self.as_mut()
+                    .reject_launch(app, "No sandbox Wayland socket");
                 return false;
             }
         }
-        let mut command = sandbox::command_line(&sandbox::argv(&runner, &pool::runner_path()));
+        let mut command = sandbox::command(&runner, &pool::runner_path(), &policy);
         if let Some((route, params)) = self.as_mut().take_route() {
-            command = format!("{command} --route \"{route}\"");
+            command
+                .arguments
+                .extend(["--route".to_owned(), route.clone()]);
             env.insert(q("MARATHON_APP_ROUTE"), QVariant::from(&q(&route)));
             if !params.is_empty() {
                 env.insert(q("MARATHON_APP_ROUTE_PARAMS"), QVariant::from(&q(&params)));
@@ -698,16 +830,19 @@ impl Tasks {
             name: app.name.clone(),
             icon: app.icon.clone(),
             kind: app.kind.clone(),
-            command: command.clone(),
+            command: command.description(),
             sandbox_instance: instance,
             pid: -1,
             foreground_generation,
         };
+        let request_id = self.as_mut().track_launch(launch);
+        let arguments: QStringList = command
+            .arguments
+            .iter()
+            .map(|argument| q(argument))
+            .collect();
         self.as_mut()
-            .rust_mut()
-            .pending_by_command
-            .insert(command.clone(), launch);
-        self.as_mut().spawn_requested(&q(&command), &env);
+            .spawn_runner_requested(&request_id, &q(&command.program), &arguments, &env);
         let id = app.id.clone();
         later(self.qt_thread(), LAUNCH_HOLD, move |mut obj| {
             obj.as_mut().rust_mut().launching.remove(&id);
@@ -719,12 +854,12 @@ impl Tasks {
         true
     }
 
-    pub(super) fn app_launched(mut self: Pin<&mut Self>, command: &QString, pid: i64) {
+    pub(super) fn app_launched(mut self: Pin<&mut Self>, request_id: &QString, pid: i64) {
         let Some(mut launch) = self
             .as_mut()
             .rust_mut()
-            .pending_by_command
-            .remove(&command.to_string())
+            .pending_launches
+            .remove(&request_id.to_string())
         else {
             return;
         };
@@ -740,21 +875,33 @@ impl Tasks {
         self.as_mut().pid_registered(pid, &q(&app_id));
     }
 
-    fn forget_registered_pid(mut self: Pin<&mut Self>, app_id: &str, pid: i64) -> bool {
-        let (current, reverse) = {
-            let mut rust = self.as_mut().rust_mut();
-            let current = rust.app_to_pid.get(app_id) == Some(&pid);
-            let reverse = rust.pid_to_app.get(&pid).is_some_and(|id| id == app_id);
-            if current {
-                rust.app_to_pid.remove(app_id);
-            }
-            if reverse {
-                rust.pid_to_app.remove(&pid);
-            }
-            (current, reverse)
+    pub(super) fn app_start_failed(
+        mut self: Pin<&mut Self>,
+        request_id: &QString,
+        error: &QString,
+    ) {
+        let failed = take_failed_launch(&mut self.as_mut().rust_mut(), &request_id.to_string());
+        let Some((launch, current)) = failed else {
+            return;
         };
+        log::warn(
+            "tasks",
+            format_args!("{} failed to start: {error}", launch.app_id),
+        );
+        if !launch.sandbox_instance.is_empty() {
+            self.as_mut()
+                .sandbox_socket_closed(&q(&launch.sandbox_instance));
+        }
+        if current {
+            self.as_mut().finish_exit(&launch.app_id);
+            self.app_launch_failed(&q(&launch.app_id), &q(&launch.name), error);
+        }
+    }
+
+    pub(super) fn forget_registered_pid(mut self: Pin<&mut Self>, app_id: &str, pid: i64) -> bool {
+        let (current, reverse) =
+            forget_pid_registration(&mut self.as_mut().rust_mut(), app_id, pid);
         if reverse {
-            crate::gate::forget_pid(pid);
             self.as_mut().pid_unregistered(pid, &q(app_id));
         }
         if current {
@@ -796,6 +943,11 @@ impl Tasks {
                 }
             });
         }
+        // An accepted replacement owns the placeholder and lifecycle even
+        // before its process reports appLaunched.
+        if self.has_app_launch(&launch.app_id) {
+            return;
+        }
         // Exited before any window: a launcher, unless no window comes.
         if !self.windows.contains_key(&launch.app_id) && self.task(&launch.app_id).is_none() {
             let app_id = launch.app_id.clone();
@@ -810,7 +962,10 @@ impl Tasks {
                     .is_some_and(|l| l.pid == pid)
                 {
                     obj.as_mut().rust_mut().exited_launches.remove(&app_id);
-                    obj.finish_exit(&app_id);
+                    // Closed from the switcher and opened again meanwhile.
+                    if !obj.has_app_launch(&app_id) {
+                        obj.finish_exit(&app_id);
+                    }
                 }
             });
             return;
@@ -1059,13 +1214,17 @@ impl Tasks {
         if !xdg.is_empty() {
             let mut launch = self.as_mut().rust_mut().exited_launches.remove(&xdg);
             let pending: Vec<String> = self
-                .pending_by_command
+                .pending_launches
                 .iter()
                 .filter(|(_, l)| l.app_id == xdg)
                 .map(|(c, _)| c.clone())
                 .collect();
-            for command in pending {
-                launch = self.as_mut().rust_mut().pending_by_command.remove(&command);
+            for request_id in pending {
+                launch = self
+                    .as_mut()
+                    .rust_mut()
+                    .pending_launches
+                    .remove(&request_id);
             }
             let active: Vec<i64> = self
                 .active_by_pid
@@ -1274,9 +1433,271 @@ mod tests {
     use std::time::{Duration, Instant};
 
     use super::{
-        discard_app_windows, is_android_app_id, is_foreground_flatpak_run, AndroidHandoff,
-        ForegroundLaunches,
+        discard_app_windows, forget_pid_registration, is_android_app_id, is_foreground_flatpak_run,
+        take_failed_launch, AndroidHandoff, ForegroundLaunches, Launch, TasksRust,
     };
+
+    fn pending_launch(app_id: &str, instance: &str) -> Launch {
+        Launch {
+            app_id: app_id.into(),
+            name: "Test app".into(),
+            command: "same-command --same-arguments".into(),
+            sandbox_instance: instance.into(),
+            ..Launch::default()
+        }
+    }
+
+    #[test]
+    fn failed_adoption_revokes_its_pid_and_gate_registration_once() {
+        let mut state = TasksRust::default();
+        let pid = 4_000_000_001;
+        state.app_to_pid.insert("notes".into(), pid);
+        state.pid_to_app.insert(pid, "notes".into());
+        state.pending_route = Some(("compose".into(), "{\"text\":\"retained\"}".into()));
+        crate::gate::remember_pid(pid, "notes");
+        assert_eq!(
+            crate::gate::resolve(4_000_000_001).as_deref(),
+            Some("notes")
+        );
+
+        assert_eq!(
+            forget_pid_registration(&mut state, "notes", pid),
+            (true, true)
+        );
+        assert!(!state.app_to_pid.contains_key("notes"));
+        assert!(!state.pid_to_app.contains_key(&pid));
+        assert!(crate::gate::resolve(4_000_000_001).is_none());
+        assert_eq!(
+            state.pending_route,
+            Some(("compose".into(), "{\"text\":\"retained\"}".into()))
+        );
+        assert_eq!(
+            forget_pid_registration(&mut state, "notes", pid),
+            (false, false)
+        );
+    }
+
+    #[test]
+    fn old_adoption_cleanup_preserves_the_replacement_registration() {
+        let mut state = TasksRust::default();
+        let old_pid = 4_000_000_002;
+        let new_pid = 4_000_000_003;
+        state.app_to_pid.insert("notes".into(), new_pid);
+        state.pid_to_app.insert(old_pid, "notes".into());
+        state.pid_to_app.insert(new_pid, "notes".into());
+        crate::gate::remember_pid(old_pid, "notes");
+        crate::gate::remember_pid(new_pid, "notes");
+
+        assert_eq!(
+            forget_pid_registration(&mut state, "notes", old_pid),
+            (false, true)
+        );
+        assert_eq!(state.app_to_pid["notes"], new_pid);
+        assert_eq!(state.pid_to_app[&new_pid], "notes");
+        assert!(crate::gate::resolve(4_000_000_002).is_none());
+        assert_eq!(
+            crate::gate::resolve(4_000_000_003).as_deref(),
+            Some("notes")
+        );
+        crate::gate::forget_pid(new_pid);
+    }
+
+    #[test]
+    fn stale_cleanup_cannot_revoke_a_reused_pid() {
+        let mut state = TasksRust::default();
+        let pid = 4_000_000_004;
+        state.app_to_pid.insert("camera".into(), pid);
+        state.pid_to_app.insert(pid, "camera".into());
+        crate::gate::remember_pid(pid, "camera");
+
+        assert_eq!(
+            forget_pid_registration(&mut state, "notes", pid),
+            (false, false)
+        );
+        assert_eq!(state.app_to_pid["camera"], pid);
+        assert_eq!(state.pid_to_app[&pid], "camera");
+        assert_eq!(
+            crate::gate::resolve(4_000_000_004).as_deref(),
+            Some("camera")
+        );
+        crate::gate::forget_pid(pid);
+    }
+
+    #[test]
+    fn failed_attempt_clears_only_its_launch_state_once() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let mut state = TasksRust::default();
+        for app_id in ["failed-app", "other-app"] {
+            state.launching.insert(app_id.into());
+            state.background_launches.insert(app_id.into());
+            state.expected_windows.insert(app_id.into(), Instant::now());
+        }
+        state.pending_launches.insert(
+            "failed-request".into(),
+            pending_launch("failed-app", "failed-socket"),
+        );
+        state.pending_launches.insert(
+            "other-request".into(),
+            pending_launch("other-app", "other-socket"),
+        );
+
+        let (launch, current) =
+            take_failed_launch(&mut state, "failed-request").ok_or("missing attempt")?;
+        assert!(current);
+        assert_eq!(launch.app_id, "failed-app");
+        assert_eq!(launch.name, "Test app");
+        assert_eq!(launch.sandbox_instance, "failed-socket");
+        assert!(!state.launching.contains("failed-app"));
+        assert!(!state.background_launches.contains("failed-app"));
+        assert!(!state.expected_windows.contains_key("failed-app"));
+        assert!(state.launching.contains("other-app"));
+        assert!(state.background_launches.contains("other-app"));
+        assert!(state.expected_windows.contains_key("other-app"));
+        assert!(state.pending_launches.contains_key("other-request"));
+        assert!(take_failed_launch(&mut state, "failed-request").is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn failed_attempt_does_not_erase_an_identical_command_retry(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut state = TasksRust::default();
+        state.launching.insert("app".into());
+        state.background_launches.insert("app".into());
+        state.expected_windows.insert("app".into(), Instant::now());
+        state
+            .pending_launches
+            .insert("old-request".into(), pending_launch("app", "old-socket"));
+        state.pending_launches.insert(
+            "retry-request".into(),
+            pending_launch("app", "retry-socket"),
+        );
+
+        let (old, current) =
+            take_failed_launch(&mut state, "old-request").ok_or("missing attempt")?;
+        assert!(!current);
+        assert_eq!(old.sandbox_instance, "old-socket");
+        assert_eq!(state.pending_launches["retry-request"].command, old.command);
+        assert_eq!(
+            state.pending_launches["retry-request"].sandbox_instance,
+            "retry-socket"
+        );
+        assert!(state.launching.contains("app"));
+        assert!(state.background_launches.contains("app"));
+        assert!(state.expected_windows.contains_key("app"));
+        assert!(take_failed_launch(&mut state, "old-request").is_none());
+        assert!(state.pending_launches.contains_key("retry-request"));
+        Ok(())
+    }
+
+    #[test]
+    fn failed_attempt_does_not_remove_a_running_replacement(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut state = TasksRust::default();
+        state.launching.insert("app".into());
+        state.pending_launches.insert(
+            "failed-request".into(),
+            pending_launch("app", "failed-socket"),
+        );
+        state
+            .active_by_pid
+            .insert(42, pending_launch("app", "live-socket"));
+        state.pid_to_app.insert(42, "app".into());
+        state.app_to_pid.insert("app".into(), 42);
+
+        let (_, current) =
+            take_failed_launch(&mut state, "failed-request").ok_or("missing attempt")?;
+        assert!(!current);
+        assert_eq!(state.active_by_pid[&42].sandbox_instance, "live-socket");
+        assert_eq!(state.app_to_pid["app"], 42);
+        assert_eq!(state.pid_to_app[&42], "app");
+        assert!(state.launching.contains("app"));
+        Ok(())
+    }
+
+    #[test]
+    fn unknown_failure_cannot_consume_another_attempt() {
+        let mut state = TasksRust::default();
+        state.launching.insert("app".into());
+        state
+            .pending_launches
+            .insert("known-request".into(), pending_launch("app", "socket"));
+        assert!(take_failed_launch(&mut state, "unknown-request").is_none());
+        assert_eq!(state.pending_launches.len(), 1);
+        assert!(state.launching.contains("app"));
+    }
+
+    #[test]
+    fn failed_attempt_preserves_an_exited_replacement_waiting_for_its_window(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut state = TasksRust::default();
+        state.launching.insert("app".into());
+        state.expected_windows.insert("app".into(), Instant::now());
+        state
+            .pending_launches
+            .insert("old-request".into(), pending_launch("app", "old-socket"));
+        state
+            .exited_launches
+            .insert("app".into(), pending_launch("app", "handoff-socket"));
+        let (_, current) =
+            take_failed_launch(&mut state, "old-request").ok_or("missing attempt")?;
+        assert!(!current);
+        assert_eq!(
+            state.exited_launches["app"].sandbox_instance,
+            "handoff-socket"
+        );
+        assert!(state.launching.contains("app"));
+        assert!(state.expected_windows.contains_key("app"));
+        Ok(())
+    }
+
+    #[test]
+    fn mapped_replacement_window_survives_an_older_failure(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut state = TasksRust::default();
+        state
+            .pending_launches
+            .insert("old-request".into(), pending_launch("app", "old-socket"));
+        state.windows.insert("app".into(), vec![7]);
+        let (_, current) =
+            take_failed_launch(&mut state, "old-request").ok_or("missing attempt")?;
+        assert!(!current);
+        assert_eq!(state.windows["app"], [7]);
+        Ok(())
+    }
+
+    #[test]
+    fn only_a_mapped_card_prevents_failed_attempt_cleanup() -> Result<(), Box<dyn std::error::Error>>
+    {
+        for surface_id in [-1, 7] {
+            let mut state = TasksRust::default();
+            state
+                .pending_launches
+                .insert("request".into(), pending_launch("app", "socket"));
+            state.tasks.push(super::super::Task {
+                id: "card".into(),
+                app_id: "app".into(),
+                title: "Test app".into(),
+                icon: String::new(),
+                kind: "marathon".into(),
+                surface_id,
+                timestamp: 0,
+            });
+            let (_, current) =
+                take_failed_launch(&mut state, "request").ok_or("missing attempt")?;
+            assert_eq!(current, surface_id < 0);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn launch_request_ids_are_nonempty_unique_uuids() {
+        let first = super::super::launch_uuid();
+        let second = super::super::launch_uuid();
+        assert_eq!(first.len(), 36);
+        assert_ne!(first, second);
+        assert!(!cxx_qt_lib::QUuid::from(&first).is_null());
+    }
 
     #[test]
     fn stopped_android_session_discards_only_its_old_surfaces() {

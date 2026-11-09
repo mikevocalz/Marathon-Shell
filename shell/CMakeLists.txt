@@ -220,6 +220,7 @@ set(QML_FILES
     qml/core/Clock.js
     qml/core/Scales.js
     qml/core/LauncherGrid.js
+    qml/core/OverviewGrid.js
 )
 
 set(JSON_FILES
@@ -289,7 +290,7 @@ foreach(singleton_file ${SINGLETON_FILES})
     )
 endforeach()
 # Imported by path; a qmldir entry makes the module ambiguous.
-set_source_files_properties(qml/ui/PhosphorGlyphs.js qml/core/Agenda.js qml/core/LauncherGrid.js
+set_source_files_properties(qml/ui/PhosphorGlyphs.js qml/core/Agenda.js qml/core/LauncherGrid.js qml/core/OverviewGrid.js
     qml/core/BatteryWarning.js qml/core/Weather.js qml/core/Clock.js qml/core/Scales.js PROPERTIES
     QT_QML_SKIP_QMLDIR_ENTRY TRUE
 )
@@ -329,6 +330,7 @@ qt_add_resources(marathon-shell "shell_images"
     FILES
         resources/images/camera.svg
         resources/images/calendar.svg
+        resources/images/cursor.svg
 )
 # Baked with shaders/build-shaders.sh; the device build roots have no qsb.
 qt_add_resources(marathon-shell "shell_shaders"
@@ -338,6 +340,8 @@ qt_add_resources(marathon-shell "shell_shaders"
         shaders/windowcorner.vert.qsb
         shaders/windowcorner.frag.qsb
         shaders/glassplatter.frag.qsb
+        shaders/nightlight.vert.qsb
+        shaders/nightlight.frag.qsb
 )
 qt_add_resources(marathon-shell "shell_wallpapers"
     PREFIX "/wallpapers"
@@ -386,6 +390,8 @@ qt6_add_qml_module(marathon-shell
         src/services/gesturetracker.h
         src/components/backdropprobe.cpp
         src/components/backdropprobe.h
+        src/components/nightlightitem.cpp
+        src/components/nightlightitem.h
         src/components/windowtexturegeometry.h
         src/components/windowtextureitem.cpp
         src/components/windowtextureitem.h
@@ -428,7 +434,7 @@ set_property(TARGET marathon-shell PROPERTY QT_QML_MODULE_NO_IMPORT_SCAN TRUE)
 # Link the big resources (sounds-only qrc) to the target
 target_sources(marathon-shell PRIVATE ${SHELL_SOUNDS})
 
-# Add qmllint validation target - runs BEFORE building
+# Explicit strict QML validation target; depends on generated type metadata.
 if(QMLLINT_AVAILABLE)
     add_qmllint_target(marathon-shell ${QML_FILES})
 endif()
@@ -453,6 +459,7 @@ find_package(Qt6 REQUIRED COMPONENTS Gui)
 
 # GuiPrivate is Qt-internal; only link it when enabled and available.
 if(TARGET Qt6::GuiPrivate)
+    target_sources(marathon-shell PRIVATE src/services/trackpadinput.h src/services/trackpadinput.cpp)
     target_link_libraries(marathon-shell PRIVATE Qt6::GuiPrivate)
     target_compile_definitions(marathon-shell PRIVATE MARATHON_HAVE_QT_GUI_PRIVATE=1)
 else()
