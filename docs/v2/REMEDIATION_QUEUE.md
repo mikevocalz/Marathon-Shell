@@ -15,6 +15,7 @@ The PR states below were checked through GitHub on November 9. **Every linked PR
 | [#6: approved scope and audit][pr6] | 37-package programme, 2.1-only Work/Personal boundary, engineering workflow and current-source audit | Documentation/source review. No runtime package is complete because this PR exists. |
 | [#7: live shell metrics][pr7] | Tracks the actual shell window and preserves native `Constants.qml` bindings; keeps the runner fallback | 10 Qt 6.11.3 checks reported, including real `Constants.qml`. Existing/cold/warm app propagation and physical display changes remain under R07. |
 | [#8: durable task slice][pr8] | Task notes, completion, optional local due dates, bounded inert source metadata, typed task actions and persistent ID allocation; real DatePicker owning-stack fix | 43 store checks across Qt/time-zone combinations, 32 real Keel.Actions checks and the later complete Notes host suite (127 checks) passed. Production storage/bus and device qualification, reminders, Hub capture, source navigation, attachment grants and downgrade qualification remain. See the exact checkpoint below. |
+| [#9: integrated reliability foundation][pr9] | Assembles the #4–#8 source and adds bounded R01/R02 lifecycle repairs, R03 launch/confinement repairs and R08 native validation | See the implementation and exact verification record below and in [native validation](NATIVE_VALIDATION.md). The complete R-tickets, app boundaries, integrated image and device qualification remain open. |
 
 Earlier [#2: cover layout][pr2] and [#3: Hub triage][pr3] are also draft prototypes awaiting real native UI validation. [#1: managed native client RFC][pr1] is a documentation draft targeting `main`; it establishes no implemented runtime and must be scoped explicitly for any later `v2` integration.
 
@@ -22,7 +23,7 @@ The local integrated candidate `7cfc5479f3c2ba1ec861db5dfdcdc082ae4256fa` combin
 
 **Later native UI checkpoint:** the complete existing Notes `tests/run.sh`, invoked through CTest, passed **127 checks, zero failures and zero skips** on combined-upstream commit `14b70b8f19ecabd2f5d71ccfca8b5e4418788e53`, tree `2865ee7ec008018e4875e2e415fa3af958c71e5f`. The breakdown is Editor 15, Actions 32, App 13, Cover 6, Pages 18 and Store 43, including suite initialization/cleanup; these counts overlap the earlier isolated logic/action checks and must not be added as wholly independent coverage. The first complete UI run exposed a real due-date dialog owning-PageStack scope bug and test signature/lifetime issues; the corrected suite covers native DatePicker accept/cancel and restart behavior.
 
-That run used **Qt 6.11.3** and real pinned Keel `0df499bf` Silica, Share and Configuration sources, with the upstream JSON Configuration fallback isolated through `KEEL_DCONF_FILE` and the existing repository Platform test fixture. It did not exercise production mlite/dconf, an external sharing/session bus, device interaction or downgrade-reader compatibility. The actual toolkit build passed; those remaining backends are not silently covered by it. Published draft #8 follow-up `7a9fabbf705112299134320b3e039a07f560c167` matches the tested task tree `3364d94e4b5182f5852dd8348b31e7d01417c2cb`; the later combined tree above includes the upstream intake and companion changes. The QML-validator repair and required hosted native UI gate under R08 remain open, as do the broader work-package gates.
+That run used **Qt 6.11.3** and real pinned Keel `0df499bf` Silica, Share and Configuration sources, with the upstream JSON Configuration fallback isolated through `KEEL_DCONF_FILE` and the existing repository Platform test fixture. It did not exercise production mlite/dconf, an external sharing/session bus, device interaction or downgrade-reader compatibility. The actual toolkit build passed; those remaining backends are not silently covered by it. Published draft #8 follow-up `7a9fabbf705112299134320b3e039a07f560c167` matches the tested task tree `3364d94e4b5182f5852dd8348b31e7d01417c2cb`; the later combined tree above includes the upstream intake and companion changes. The subsequent R08 repair and hosted result are recorded under #9 below; broader work-package gates remain open.
 
 **Hosted CI checkpoint, November 9 at 09:23 UTC:** these results supersede the earlier in-progress observations for #5/#7. They are not an all-green CI claim.
 
@@ -36,6 +37,20 @@ The #5/#7 failure is the same four terminal key labels (`Esc`, `Tab`, `Ctrl`, `A
 
 ## Repair order
 
+### Current implementation: draft #9
+
+The first R01/R02 slice publishes a complete staged generation and matching receipt by atomic pointer replacement, keeps the exact selected generation through launch, and serializes mutation with a per-app lock. Uninstall records durable intent and per-category outcomes, preserves running generations until a later boot, and exposes pending filesystem cleanup in Settings after the launcher entry disappears. Shared settings/secret deletion and generation-scoped D-Bus identity remain unfinished. Legacy directory migration requires a restart before replacement/removal; the generation count cap is not a disk-space quota. See [the transaction contract](APP_LIFECYCLE_TRANSACTIONS.md).
+
+The R03 slice resolves an explicit confinement policy: unset/`0` requires executable bwrap, `1` is the explicit development override, and malformed values refuse launch. It carries that policy through cold and warm launches, disables warm adoption for selected user generations, correlates process-start outcomes by request UUID, and passes runner program/arguments directly to QProcess. App-specific session-bus mediation, narrowing the existing pool's shared mounts/network access, generation-based grants and the existing pool stdin-write failure cleanup remain open.
+
+R08 now uses Qt 6 structured lint diagnostics and strict failure propagation, plus six required CTests for the real toolkit, complete Notes suite, changed Settings AppPages, changed shell PageViewHub, and validator/gate failure contracts. Service fixtures remain explicit; no toolkit doubles replace Keel. This is bounded required coverage, not a clean full-source lint claim or whole-shell/device certification.
+
+**Combined local verification:** final code [commit `1558a065`](https://github.com/mikevocalz/Marathon-Shell/commit/1558a065ca5c1f559dfb500cab912e57802903a2), tree `103b97d210d8846dfcfe486cd5916c359451a690`, has passing app-platform (52), background (38), store-handler (41, plus one existing ignored case), focused native sandbox/generation (14) and launch-lifecycle (13) results, strict Clippy, a real QProcess regression and generated signal/slot compilation. The final six native UI CTests passed on preserved UI checkpoint `066fbccf`, including Notes 127, Settings 23 and PageViewHub 6 results with no failures/skips. [Native validation](NATIVE_VALIDATION.md) records exact source boundaries, toolchains, commands and counts; initialization/cleanup and overlapping runs are not additional independent coverage. Three full native host-suite failures also reproduce unchanged on the baseline and remain recorded, rather than hidden behind the passing focused gates.
+
+**Hosted checkpoint:** PR #9 head `32b182497f7b19963c65e6bd25805964beb15064`, tree `84bd1d7ac0dc39c4902f560c3c63b3cdf02d8945`, passed its first **4/4 native CTests** on Alpine/arm64 with Qt 6.11.1 and pinned Keel `0df499bf`; [native-ui job 129098591385](https://github.com/mikevocalz/Marathon-Shell/actions/runs/42598985222/job/129098591385). The separate [build-and-test job 129098591086](https://github.com/mikevocalz/Marathon-Shell/actions/runs/42598985222/job/129098591086) subsequently passed **53/53 registered CTests**; format and commit-subject checks also passed. The build/test job explicitly did not register the optional real Keel UI suites, which are covered by the separate native-ui job. These counts overlap. This checkpoint precedes the Settings/PageViewHub gate extensions and lifecycle/launch changes, which require their own candidate result; it is not a latest-candidate or device qualification claim.
+
+### Remaining integration order
+
 Review/integrate #4 and qualify the affected source before duplicating upstream fixes. R01–R04 protect installation integrity and app boundaries; R08 makes the native UI gate dependable and should proceed in parallel. R05 supplies reference-device evidence throughout. R06 and R07 extend the bounded foundation slices in #5 and #7. Independent work can run in separate worktrees; integration and boundary review are sequential gates.
 
 The native/API skills, source/version verification, multiagent implementation and independent review requirements in [ENGINEERING_WORKFLOW.md](ENGINEERING_WORKFLOW.md) apply to every ticket. Preserve Qt/Keel; use non-premium fixtures; target `v2`. Pick exact supported APIs from the selected source/SDK before coding.
@@ -46,11 +61,11 @@ The [QNX reference crosswalk](QNX_REFERENCE_CROSSWALK.md) adds specific lifetime
 
 **Owner:** app platform + storage. **Independent review:** filesystem/recovery + app lifecycle. **Priority:** P0. **Programme:** V2-017/026/027. **Dependencies:** current-source intake (V2-001); coordinate with R02 and the app lifecycle owner.
 
-**Problem/evidence:** current `crates/marathon-apps/src/install.rs::place` removes the existing install before copying the replacement and writing its receipt. A copy/receipt failure can leave no working app. The audit verifies this in both the inherited fork and upstream `567f1faa`. Preserve the existing private-copy signature/archive verification while changing installation. [Pinned source][install-source].
+**Problem/evidence in the audited baseline:** `crates/marathon-apps/src/install.rs::place` removes the existing install before copying the replacement and writing its receipt. A copy/receipt failure can leave no working app. The audit verifies this in both the inherited fork and upstream `567f1faa`. Preserve the existing private-copy signature/archive verification while changing installation. Draft #9 repairs the bounded publication path described above. [Pinned source][install-source].
 
 **First implementable slice:** stage a fully verified package and matching approved receipt on the destination filesystem, then replace one inactive installed app under a per-app transaction lock. The lock must live outside the directory being exchanged and coordinate install, uninstall and superseded-generation cleanup. Revalidate app identity, protected/system status, installed version and permission consent while holding it.
 
-**Implementation contract:** commit with an atomic same-filesystem directory exchange on a verified supported platform, or refuse intact before live mutation when that capability is unavailable. Do not fall back to deleting the live app then copying. Specify file/directory synchronization, commit/recovery records and rollback states. A post-exchange synchronization failure must expose the actual recoverable state rather than reporting an unverified rollback. Keep swapped-out generations while a running runner's mount or lazy asset loading still uses them; define a safe retention/release contract and bounded cleanup before extending the slice to active apps.
+**Implementation contract:** publish a complete generation by atomic same-filesystem pointer replacement; use atomic directory exchange for legacy directory migration. Refuse intact before live mutation when a required filesystem capability is unavailable. Do not fall back to deleting the live app then copying. Specify file/directory synchronization, commit/recovery records and rollback states. A post-publication synchronization failure must expose the actual recoverable state rather than reporting an unverified rollback. Keep retired generations while a running runner's mount or lazy asset loading still uses them; define a safe retention/release contract and bounded cleanup before extending the slice to active apps. Draft #9 implements the bounded contract described above; live-device and power-loss qualification remain.
 
 **Acceptance:**
 
@@ -67,7 +82,7 @@ The [QNX reference crosswalk](QNX_REFERENCE_CROSSWALK.md) adds specific lifetime
 
 **Owner:** app platform + identity/storage. **Independent review:** security + data lifecycle. **Priority:** P0. **Programme:** V2-023/027/031/032. **Dependencies:** R01 transaction coordination; R03 mediation for secret ownership.
 
-**Problem/evidence:** uninstall discards some cache/data/config deletion errors. `dataLifecycle.secrets` is documented but not acted on because Secret Service items lack app identity. [Installer][install-source], [manifest contract][manifest-source].
+**Problem/evidence in the audited baseline:** uninstall discards some cache/data/config deletion errors. Draft #9 adds explicit filesystem outcomes and retries. `dataLifecycle.secrets` is documented but is still not acted on because Secret Service items lack verified app identity. [Installer][install-source], [manifest contract][manifest-source].
 
 **First implementable slice:** return explicit outcomes for app files, cache, app data, configuration and retained user files. Preserve a durable cleanup/retry record after app code is removed. Distinguish removal, intentional retention, not found, denied and failed outcomes; do not report “data removed” when an I/O error was discarded.
 
@@ -101,7 +116,7 @@ The [QNX reference crosswalk](QNX_REFERENCE_CROSSWALK.md) adds specific lifetime
 - Authorize each exposed operation against the actual peer and current permissions; invalidate cached authority on owner/generation replacement. Malformed or oversized boundary requests fail without unbounded allocation or bypassing the same checks.
 - Revoke a permission during an operation and after adoption; subsequent calls fail consistently. A network-denied app cannot inherit the spare's network access.
 - Test absence/failure of each enforcement mechanism. The release does not silently advertise a boundary that was not established.
-- Define and test the sandbox override for unset, `0`, `1` and malformed values. Current `sandbox.rs` disables bwrap whenever `MARATHON_DISABLE_SANDBOX` is present, including `0`; parsing, diagnostics and reported protection must agree. [Launcher source][sandbox-source].
+- Define and test the sandbox override for unset, `0`, `1` and malformed values. The audited `sandbox.rs` disables bwrap whenever `MARATHON_DISABLE_SANDBOX` is present, including `0`; draft #9 replaces that behavior with the explicit policy above. Parsing, diagnostics and reported protection must agree. [Audited launcher source][sandbox-source].
 - Validate the cooperating R04 accessibility path without exposing other apps' text to an ordinary app.
 
 **Closing evidence:** native process/bus/mount/network boundary tests against real service mediation, including negative cases and actual launch paths. Measure pool launch overhead after the boundary is correct.
@@ -194,7 +209,7 @@ Include a controlled death/hang/restart test for an allowlisted provider used by
 
 **Problem/evidence:** the session's repository-wide `scripts/validate-qml.sh` run reported **405 checked files, 313 warning counts and one error count**. Its unanchored `Error:` match can match the source excerpt `mmscError:` in `apps/settings/pages/MmsDialog.qml`. The script also swallows the `qmllint` status with `|| true`; a missing tool can be misreported as a clean file because its diagnostic does not match that filter. The full Sailfish.Silica, Nemo.Configuration and Sailfish.Share UI stack was unavailable in that validation environment. The result was not a green full-UI run. [Validator][validator-source].
 
-The later complete native toolkit build and 127-check Notes pass are recorded above. They resolve that host suite's earlier import/build blockage and qualify its bounded UI slice; they do not fix `validate-qml.sh`, test the production dconf/share-bus backends or establish a successful mandatory hosted UI job.
+The later build of Notes' required native modules and its 127-check pass resolved that host suite's earlier import/build blockage. Draft #9 subsequently repairs `validate-qml.sh` and has a successful first mandatory hosted native UI checkpoint, recorded above. Production dconf/share-bus backends, expanded candidate coverage and full-source warning cleanup remain open.
 
 Initial PR checks were observed empty, and runs subsequently appeared for #5, including a successful format check and an in-progress CI run. This does **not** establish why any initial run was absent, that workflows are disabled, or that complete native UI CI has passed. Gate the actual emitted jobs and their coverage.
 
@@ -219,7 +234,7 @@ Initial PR checks were observed empty, and runs subsequently appeared for #5, in
 
 | Package | Capability | Current programme state | Next gate / linked work |
 |---|---|---|---|
-| V2-001 | Reproducible platform/device baseline | Draft intake #4 | Integrate and build exact source; R05/R08 evidence |
+| V2-001 | Reproducible platform/device baseline | Draft intake #4; integrated native gate #9 | Full candidate image and current device matrix; R05/R08 |
 | V2-002 | Adaptive display/input contract | Draft shell slice #7 | R07 cold/warm/running propagation and device display changes |
 | V2-003 | Semantic theme and controls | Planned | Token/icon/state parity, accessible contrast/scale and native review |
 | V2-004 | Flow/Peek and gesture arbitration | Planned | Interruption/cancel/reverse/focus tests across lock/call/rotation |
@@ -235,17 +250,17 @@ Initial PR checks were observed empty, and runs subsequently appeared for #5, in
 | V2-014 | Native RN host/service inventory | Planned | Actual Fabric/window/input/lifecycle proof; #1 remains only RFC |
 | V2-015 | Separate native NYC-Tron adapter | Planned | Generic native controls/token/input/accessibility parity |
 | V2-016 | Native package/app compatibility | Planned | Non-premium fixtures; separate authorized commercial-app qualification |
-| V2-017 | Signed native SDK sample/template | Planned | R01 safe package lifecycle, clean install/update/restart/uninstall |
+| V2-017 | Signed native SDK sample/template | Planned; lifecycle foundation #9 | Complete SDK sample and real-device install/update/restart/uninstall |
 | V2-018 | Split screen/task pairs | Planned | R07 plus retained task/focus state and window constraints |
 | V2-019 | External displays/mixed DPI | Planned | R07 hot-plug and reachable-window recovery |
 | V2-020 | Drag/drop/pointer/pen | Planned | Narrow grants, keyboard alternatives and observed hardware capabilities |
 | V2-021 | Core apps/onboarding/settings | Planned | R05/R08 app-device-accessibility matrix and alarm behavior |
 | V2-022 | Optional selected-context Pilot | Planned | Permission-bound actions, outbound confirmation and hostile-content tests |
-| V2-023 | App/IPC/secret/pool security | Planned | R02/R03/R04 enforcement and revocation evidence |
+| V2-023 | App/IPC/secret/pool security | Draft bounded launch policy #9 | R02/R03/R04 mediation, secret ownership and revocation evidence |
 | V2-024 | Encryption/recovery/boot assessment | Planned | R05 actual image/layout status, enrollment failure and recovery |
 | V2-025 | Telephony/media/power/device QA | Planned; #5 is bounded foundation | R05 current-device matrix and R06 lifecycle/power evidence |
-| V2-026 | Signed updates/migration/recovery | Planned | R01/R05 installation integrity and per-device rollback |
-| V2-027 | Reef/app trust/Deckard parity | Planned | R01/R02; real signed install/update/uninstall and declared compatibility |
+| V2-026 | Signed updates/migration/recovery | Draft app transaction foundation #9 | R01/R05 device durability, OS update and rollback qualification |
+| V2-027 | Reef/app trust/Deckard parity | Draft app install/uninstall slice #9 | R01/R02 remaining lifecycle boundaries and declared compatibility |
 | V2-028 | Frame/latency/memory/energy harness | Planned; isolated tests exist | R05/R06/R07/R08 reproducible integrated measurements |
 | V2-029 | Device release readiness/docs | Planned | All OS-scoped gates; truthful published limits and recovery; no commercial prerequisite |
 | V2-030 | Paired-device continuity | Planned | Peer trust/revocation and one real interrupted transfer before remote actions |
@@ -273,6 +288,7 @@ When 2.1 planning begins, write identity, storage, app, notification, clipboard/
 [pr6]: https://github.com/mikevocalz/Marathon-Shell/pull/6
 [pr7]: https://github.com/mikevocalz/Marathon-Shell/pull/7
 [pr8]: https://github.com/mikevocalz/Marathon-Shell/pull/8
+[pr9]: https://github.com/mikevocalz/Marathon-Shell/pull/9
 [install-source]: https://github.com/patrickjquinn/Marathon-Shell/blob/567f1faa8bfdf31611dd401134c293daa160221c/crates/marathon-apps/src/install.rs
 [manifest-source]: https://github.com/patrickjquinn/Marathon-Shell/blob/567f1faa8bfdf31611dd401134c293daa160221c/docs/APP_MANIFEST_SCHEMA.md
 [security-source]: https://github.com/patrickjquinn/Marathon-Shell/blob/567f1faa8bfdf31611dd401134c293daa160221c/docs/SECURITY_MODEL.md
