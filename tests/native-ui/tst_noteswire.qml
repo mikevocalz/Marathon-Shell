@@ -33,8 +33,7 @@ Item {
             tryVerify(() => notes.workspace !== null, 5000);
             console.log("MARATHON_NOTES_WIRE_READY");
 
-            tryVerify(() => notes.notes.length === 2, 90000,
-                      "Two actual wire create calls must reach the real Notes store");
+            tryVerify(() => notes.notes.length === 2, 90000, "Two actual wire create calls must reach the real Notes store");
             const capture = notes.notes.find(note => note.id === 1);
             const decoy = notes.notes.find(note => note.id === 2);
             verify(capture !== undefined);
@@ -49,9 +48,7 @@ Item {
             compare(decoy.title, "Newer decoy");
             compare(notes.nextNoteId, 3);
 
-            tryVerify(() => !!notes.workspace.currentEditor
-                      && notes.workspace.currentEditor.noteId === capture.id, 30000,
-                      "The real notes.open handler must select the requested older note");
+            tryVerify(() => !!notes.workspace.currentEditor && notes.workspace.currentEditor.noteId === capture.id, 30000, "The real notes.open handler must select the requested older note");
             tryCompare(notes.workspace.currentEditor, "status", PageStatus.Active, 10000);
             compare(notes.workspace.currentEditor.draftText, capture.content);
             const sourceLabel = findChild(notes.workspace.currentEditor, "taskSourceLabel");

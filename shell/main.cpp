@@ -1260,7 +1260,7 @@ int main(int argc, char *argv[]) {
     // One capture shared by home Hub and Peek, independent of recyclable pages.
     auto *notesTasks = new marathon::NotesTaskClient(&app);
     qmlRegisterSingletonInstance<marathon::NotesTaskClient>("MarathonOS.Shell", 1, 0,
-                                                          "NotesTaskClient", notesTasks);
+                                                            "NotesTaskClient", notesTasks);
 
     createObject<CursorManager>(ctx, "CursorManager", &app);
     // Started at boot: Plymouth's last frame is still on screen, and the

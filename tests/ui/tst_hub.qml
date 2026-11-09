@@ -39,7 +39,9 @@ TestCase {
 
     Component {
         id: additionalHub
-        MarathonHub { isInPeekMode: true }
+        MarathonHub {
+            isInPeekMode: true
+        }
     }
 
     function initTestCase() {
@@ -495,18 +497,27 @@ TestCase {
         const sheet = startCapture();
         const client = NotesTaskClient;
         clickCapture("hubTaskCaptureCreate");
-        client.snapshot = {state: "creating"};
+        client.snapshot = {
+            state: "creating"
+        };
         verify(hub.closeOverlay());
         compare(sheet.open, false);
         compare(sheet.hasDraft, true);
-        client.snapshot = {state: "created", taskId: 812};
+        client.snapshot = {
+            state: "created",
+            taskId: 812
+        };
         const resume = findChild(hub, "hubResumeTaskCapture");
         waitForPolish(findChild(hub, "hubList"));
         mouseClick(resume);
         tryCompare(sheet, "open", true);
         clickCapture("hubTaskCaptureOpen");
         compare(client.opened, [812]);
-        client.snapshot = {state: "open-failed", taskId: 812, error: "transport"};
+        client.snapshot = {
+            state: "open-failed",
+            taskId: 812,
+            error: "transport"
+        };
         clickCapture("hubTaskCaptureOpen");
         compare(client.opened, [812, 812]);
         compare(client.created.length, 1);
@@ -518,7 +529,10 @@ TestCase {
         const sheet = startCapture();
         const client = NotesTaskClient;
         clickCapture("hubTaskCaptureCreate");
-        client.snapshot = {state: "unknown", error: "timeout"};
+        client.snapshot = {
+            state: "unknown",
+            error: "timeout"
+        };
         compare(sheet.canCreate, false);
         verify(!findChild(sheet, "hubTaskCaptureCreate").visible);
         sheet.submit();
@@ -541,9 +555,15 @@ TestCase {
     function test_capturePreparationFailureAndCancellationKeepEdits() {
         const sheet = startCapture();
         const client = NotesTaskClient;
-        client.updateDraft({title: "Review notes", body: sheet.draftBody});
+        client.updateDraft({
+            title: "Review notes",
+            body: sheet.draftBody
+        });
         clickCapture("hubTaskCaptureCreate");
-        client.snapshot = {state: "rejected", error: "unavailable"};
+        client.snapshot = {
+            state: "rejected",
+            error: "unavailable"
+        };
         compare(sheet.draftTitle, "Review notes");
         compare(sheet.canCreate, true);
         clickCapture("hubTaskCaptureCreate");
@@ -554,7 +574,9 @@ TestCase {
         client.dispatchWon = true;
         clickCapture("hubTaskCaptureCancelPreparation");
         compare(sheet.state, "preparing");
-        client.snapshot = {state: "creating"};
+        client.snapshot = {
+            state: "creating"
+        };
         verify(!findChild(sheet, "hubTaskCaptureCancelPreparation").visible);
         compare(client.created.length, 3);
     }
@@ -573,10 +595,15 @@ TestCase {
     function test_captureSharedAcrossPeekAndRecycledHub() {
         let sheet = startCapture();
         const client = NotesTaskClient;
-        client.updateDraft({title: "Retained edits", body: "Snapshot survives recycling"});
+        client.updateDraft({
+            title: "Retained edits",
+            body: "Snapshot survives recycling"
+        });
         const originalSource = sheet.sourceId;
         const peek = createTemporaryObject(additionalHub, hubWindow.contentItem, {
-            width: hubWindow.width, height: hubWindow.height, visible: false
+            width: hubWindow.width,
+            height: hubWindow.height,
+            visible: false
         });
         verify(peek !== null);
         const peekSheet = findChild(peek, "hubTaskCapture");
@@ -588,12 +615,17 @@ TestCase {
         peekSheet.open = false;
 
         clickCapture("hubTaskCaptureCreate");
-        client.snapshot = {state: "creating"};
+        client.snapshot = {
+            state: "creating"
+        };
         hubLoader.active = false;
         tryCompare(hubLoader, "item", null);
         compare(client.draft.title, "Retained edits");
         compare(peekSheet.state, "creating");
-        client.snapshot = {state: "created", taskId: 351};
+        client.snapshot = {
+            state: "created",
+            taskId: 351
+        };
         compare(peekSheet.hasTask, true);
         hubLoader.active = true;
         tryVerify(() => hub !== null);
@@ -605,14 +637,20 @@ TestCase {
         clickCapture("hubTaskCaptureOpen");
         compare(client.opened, [351]);
         compare(client.created.length, 1);
-        client.snapshot = {state: "opened", taskId: 351};
+        client.snapshot = {
+            state: "opened",
+            taskId: 351
+        };
     }
 
     function test_captureUnknownSurvivesEveryViewBeingDestroyed() {
         let sheet = startCapture();
         const client = NotesTaskClient;
         clickCapture("hubTaskCaptureCreate");
-        client.snapshot = {state: "unknown", error: "timeout"};
+        client.snapshot = {
+            state: "unknown",
+            error: "timeout"
+        };
         const source = sheet.sourceId;
         hubLoader.active = false;
         tryCompare(hubLoader, "item", null);
@@ -642,7 +680,10 @@ TestCase {
         const position = title.cursorPosition;
         // A source publication while the native editor is active must not set
         // its text/selection again. Real IME preedit remains a device gate.
-        client.updateDraft({title: "Published elsewhere", body: sheet.draftBody});
+        client.updateDraft({
+            title: "Published elsewhere",
+            body: sheet.draftBody
+        });
         compare(title.text, "Ada!");
         compare(title.cursorPosition, position);
         keyClick("x");
@@ -655,12 +696,17 @@ TestCase {
         let sheet = startCapture();
         const client = NotesTaskClient;
         const peek = createTemporaryObject(additionalHub, hubWindow.contentItem, {
-            width: hubWindow.width, height: hubWindow.height, visible: false
+            width: hubWindow.width,
+            height: hubWindow.height,
+            visible: false
         });
         verify(peek !== null);
         const other = findChild(peek, "hubTaskCapture");
         clickCapture("hubTaskCaptureCreate");
-        client.snapshot = {state: "unknown", error: "timeout"};
+        client.snapshot = {
+            state: "unknown",
+            error: "timeout"
+        };
         clickCapture("hubTaskCaptureCheckedNotes");
         compare(sheet.checkedNotes, true);
         sheet.confirmingDiscard = true;
@@ -673,7 +719,10 @@ TestCase {
         compare(sheet.notesLaunchRejected, false);
         other.capture(98, 999, "Another task", "A different flow", "Chat");
         client.createTask();
-        client.snapshot = {state: "unknown", error: "timeout"};
+        client.snapshot = {
+            state: "unknown",
+            error: "timeout"
+        };
         sheet.open = true;
         verify(!findChild(sheet, "hubTaskCaptureAcknowledge").enabled);
         compare(sheet.draftTitle, "Another task");

@@ -86,7 +86,10 @@ Item {
         // Qt's input-method commit is public. Read the native fields after it,
         // before moving focus, so the final composing text joins the snapshot.
         Qt.inputMethod.commit();
-        client.updateDraft({title: titleField.text, body: bodyField.text});
+        client.updateDraft({
+            title: titleField.text,
+            body: bodyField.text
+        });
     }
 
     onOpenChanged: {
@@ -201,7 +204,10 @@ Item {
                 errorHighlight: text.trim().length === 0 || text.length > 200
                 onTextChanged: {
                     if (activeFocus && sheet.open && sheet.editable)
-                        sheet.client.updateDraft({title: text, body: sheet.draftBody});
+                        sheet.client.updateDraft({
+                            title: text,
+                            body: sheet.draftBody
+                        });
                 }
                 Binding {
                     target: titleField
@@ -222,7 +228,10 @@ Item {
                 errorHighlight: text.length > 20000
                 onTextChanged: {
                     if (activeFocus && sheet.open && sheet.editable)
-                        sheet.client.updateDraft({title: sheet.draftTitle, body: text});
+                        sheet.client.updateDraft({
+                            title: sheet.draftTitle,
+                            body: text
+                        });
                 }
                 Binding {
                     target: bodyField
