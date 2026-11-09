@@ -41,6 +41,9 @@ restricted permissions.
 | `protected` | only Marathon's own apps are protected |
 | `permission` | restricted permissions (`system`, `terminal`) only in Marathon's own apps |
 | `permission-reason` | every sensitive permission has a reason in `permissionReasons`, and every reason is for a requested permission |
+| `background-tasks` | scheduled work is supported only for OS-installed apps; user packages must not advertise schedules that cannot run |
+| `background-task` | scheduled task ids are unique within the app |
+| `background-action` | each scheduled action is declared once in the app's Keel Actions manifest, accepts empty arguments and requires no confirmation |
 | `files` | `entryPoint` and `icon` exist in the app |
 | `tested-on` | each width in `testedOn.widths` is laid out by a test under `tests/` (`width: N`), and `keyboard` is only declared when a test sends key events |
 | `id-cmake` | `add_marathon_app(...)` and `install_keel_actions(...)` in `CMakeLists.txt` use the app id, which names the install directory and the `org.marathonos.<id>` D-Bus name |
@@ -105,6 +108,7 @@ Required: `manifestVersion`, `id`, `name`, `version`, `entryPoint`, `icon`,
 | `searchKeywords` | array | Extra search terms for the app. |
 | `deepLinks` | object | Route → `{ title, description, keywords }`, indexed by search (below). |
 | `backgroundCapabilities` | array | Categories the app may hold `AppLifecycle1.BeginBackgroundTask` for: `active-call`, `active-navigation`, `audio-playback`, `countdown-timer`, `download`, `location-tracking`, `periodic-sync`, `recording`. |
+| `backgroundTasks` | array | Up to eight periodic Keel actions, currently for OS-installed apps only. Each has a unique `id`, an `action` and a supported `intervalMinutes`; optional constraints and bounds are in [BACKGROUND_WORK.md](BACKGROUND_WORK.md). A network constraint requires the `network` permission. This field schedules invocations; it grants no permission or background lifetime claim. |
 | `requiresQtModules` | array | `webengine`: the runner loads QtWebEngine before the app starts. |
 | `chromiumFlags` | string | Space-separated Chromium switches over the device default. Needs `requiresQtModules: ["webengine"]`. |
 | `testedOn` | object | Below. |
@@ -205,6 +209,10 @@ running, emits `NavigationRouter.deepLinkRequested(appId, route, params)`.
   and `icon`, and that the entry point exists.
 
 Neither runs the full contract; `marathon-dev lint` does.
+
+The user installer additionally rejects nonempty or malformed
+`backgroundTasks`: it cannot yet register, revoke and remove third-party
+schedules. The system-app lint mode does not change this install policy.
 
 The installer also shows each declared permission to the user in words, refuses
 a package that declares one it can't describe, and holds an update that adds

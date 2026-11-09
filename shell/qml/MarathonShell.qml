@@ -513,11 +513,11 @@ Item {
         }
     }
     onWidthChanged: {
-        if (Constants.screenWidth > 0)
+        if ((typeof ScreenMetricsCpp === "undefined" || !ScreenMetricsCpp) && Constants.screenWidth > 0)
             resizeDebounceTimer.restart();
     }
     onHeightChanged: {
-        if (Constants.screenHeight > 0)
+        if ((typeof ScreenMetricsCpp === "undefined" || !ScreenMetricsCpp) && Constants.screenHeight > 0)
             resizeDebounceTimer.restart();
     }
     // Pass --skip-lock on the command line to force shell straight to

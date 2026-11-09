@@ -1,5 +1,7 @@
 # Modernization programme
 
+Scope decision: November 9, 2026. All capabilities below are in the approved 2.0 programme unless explicitly listed in the [2.1 appendix](#15-version-21-appendix-workpersonal-spaces). Approval is authorization to implement; it is not implementation or device-validation evidence. Work/Personal Spaces, including organizational-only views, are deferred in full to 2.1.
+
 ## 1. Baseline: extend what exists
 
 | Area | Upstream foundation | v2 work |
@@ -32,7 +34,7 @@ Extend notification aggregation with accounts, conversations, messages, attachme
 
 Features: unified and per-account views; unread/follow-up/attachment filters; source badges; local search; supported inline reply; reversible triage; durable drafts; queued operations; clear queued/sent/failed/delivered states. Keep agenda and weather subordinate to communication. Always show the sending account before sending.
 
-The local service must support stable provider IDs, idempotency keys, sync cursors, conflict handling, retries with limits and permission-aware indexes. Notification dismissal must not delete a message. Offline sending must never create duplicate sends after restart.
+The local service must support stable provider IDs, provider-supported idempotency keys, sync cursors, conflict handling, retries with limits and permission-aware indexes. Notification dismissal must not delete a message. After an ambiguous send or restart, reconcile with the provider rather than blindly replaying; if the provider cannot resolve delivery, retain an explicit unknown outcome and let the user decide. Do not claim universal exactly-once delivery from a local outbox alone.
 
 ## 4. Live covers, activities and task continuity
 
@@ -40,7 +42,7 @@ Evolve existing covers into semantic summaries shared by overview, ongoing activ
 
 Examples: mail draft state; next event; music playback; timer; download progress; navigation instruction where supported; a separately installed app's saved/unsaved document; Moyo session resume with protected student details. These are integration targets, not claims those applications already run on Marathon.
 
-Keep cover positions stable during selection. Prefer semantic state or cached thumbnails to continuously rendering background video surfaces. Distinguish closing a view from stopping audio/navigation/background work. Redact sensitive content immediately on lock, profile unavailability or permission revocation.
+Keep cover positions stable during selection. Prefer semantic state or cached thumbnails to continuously rendering background video surfaces. Distinguish closing a view from stopping audio/navigation/background work. Redact sensitive content immediately on lock, account unavailability or permission revocation. Work/Personal profile state is outside the 2.0 contract.
 
 ## 5. Native adaptive OS
 
@@ -65,6 +67,8 @@ Build local type-to-search and a command launcher spanning apps, contacts, setti
 
 Complete trackpad activation/selection where exposed; predictable Tab order; IME composition; multilingual dictionaries; accents/emoji; native selection/clipboard; password-field handling; physical/software keyboard switching and focus restoration. Pilot may extend search but is not required for it.
 
+V2-036 extends this with deterministic **Instant Actions**: type a command, inspect its target/account and activate an existing advertised action. The initial slice uses the declared Notes action rather than a new parallel command bus. Then cover message/event creation, shortcut discovery, collisions, layout changes and local suggestion acceptance. Distinguish focus navigation from text composition: command keys must not consume text while the IME owns it. Never learn from protected fields; offer a local prediction reset. Touch-sensitive hardware keyboard gestures require an exposed capability and are not promised on ordinary keyboards.
+
 ## 7. App-to-app invocation
 
 Build on existing Keel actions, sharing and portals. Define versioned typed input/output schemas, MIME support, caller/task identity, permission requirements, deadlines, cancellation and result delivery. Grant narrow file access; do not expose arbitrary paths.
@@ -77,7 +81,29 @@ Apply the shared UI specification to Phone, Messages, Mail, Contacts, Calendar, 
 
 Every supported app needs a coherent cover, adaptive layout, text scaling, keyboard operation, useful empty/offline/error states and durable user work. Prioritize Mail/Messages/Calendar/Notes and attachment handling for the first end-to-end experience. Keep camera, telephony and map capabilities tied to actual hardware/provider support.
 
-Add Focus/quiet schedules, bedside charging presentation, controlled alarm exceptions and notification privacy. Work/personal organization is an initial UX feature; security-isolated profiles are a separate architecture and validation milestone.
+Add personal Focus/quiet schedules, bedside charging presentation, controlled alarm exceptions and notification privacy. All Work/Personal organization and isolation are deferred to 2.1; no work account partition, work-mode toggle or profile switcher belongs in the 2.0 UI.
+
+### Remember-style tasks and attachment provenance — V2-033
+
+Extend the existing Notes app and its checkbox-task view with durable task identity, due dates, completion, tags, source links and permission-scoped attachments. Define migration from existing note lines before moving task storage. Notes, Hub and Calendar should show the same task state instead of copying it into three independent records. A removed source or revoked grant must leave an understandable unavailable-source state, not a dangling file path or lost task. Keep creation and completion usable offline; add sync only with an explicit conflict and retry contract. Recurrence, voice notes and project organization remain part of the staged 2.0 scope and each needs its own evidence.
+
+### Meeting preparation and follow-up — V2-037
+
+Connect a meeting to explicitly selected messages, files, notes and follow-up tasks. Show event and device time zones and preserve all-day/recurrence meaning through changes. A running-late action prepares a message with recipients and sending account visible; sending remains a deliberate user action. Conference joining advertises only supported link handlers. Offline preparation must retain the event context and explain unavailable remote attachments. Build on Calendar actions, DAV and the Hub/task contracts; no speculative provider API or mandatory AI service.
+
+### Personal scenes — V2-035
+
+Travel, Bedside and Focus are personal presentation/notification presets. Start with a reversible manual scene using existing ambience and quiet-state boundaries, then qualify scheduled and charging triggers. Show the effective settings, which values the scene controls and when it ends. Preserve alarms and declared urgent-call exceptions, handle overlapping schedules deterministically and respect a user's manual override. Travel can collect user-selected itinerary details and local/away times; location-based triggers require an independently granted capability. Scenes do not create work/personal groups, profiles or isolated storage.
+
+### Secure messaging, voice and video — V2-034
+
+Restore the earlier BB10 successor's secure communication goal as a phased native 2.0 workstream. Keep ordinary SMS/MMS distinct from end-to-end encrypted messaging. Select a maintained protocol/provider and native implementation only after checking its current APIs, encryption guarantees, licenses, account lifecycle and device support. Reuse existing contacts, notifications, permissions, audio routing and lifecycle interfaces; encryption and a packet transport are not present merely because those seams exist.
+
+Sequence a two-party encrypted text session and verified device identity first, then attachment delivery and restart recovery, then voice, then video and group behavior. Include recipient/device verification, blocked users, account/device revocation, history/key recovery, call interruption, camera/microphone indicators, audio-route changes, reconnect and background resource ownership. For multi-party media, document exactly which links are encrypted and whether any relay can access content. Never label transport encryption alone as end-to-end encryption. Use a controlled test service and test accounts before real provider qualification; do not make promises of arbitrary third-party chat interoperability.
+
+### Paired-device continuity — V2-030
+
+Give the personal phone and a separately running computer/tablet an explicit pairing, capability and revocation flow. This is distinct from external-monitor windowing. Begin with user-approved file/link delivery, cancellation, integrity checks and interrupted-transfer recovery. Add opt-in notification actions and finally app-advertised continuation of a draft/document/task. Do not expose arbitrary filesystem access or execute remote commands under a generic pairing permission. Prevent duplicate actions on reconnect and stop future access immediately after unpairing. App-specific continuation requires versioned state, permission revalidation and an explicit conflict policy. KDE Connect is a reference to evaluate, not a claimed dependency or existing Marathon integration.
 
 ## 9. Native application SDK and optional commercial packages
 
@@ -109,18 +135,28 @@ Treat messages, pages and attachments as untrusted content. Enforce permissions 
 - Updates: signed artifacts, interrupted staging, bad signature/full disk, failed boot, migration compatibility and tested recovery/rollback semantics per device.
 - Ecosystem: runtime/dependency/device metadata, verified install/update/uninstall, supported push behaviour and truthful compatibility limits. No universal banking, DRM or payment promise.
 
+### Credentials and passkeys — V2-031
+
+Specify a native credential capability separately from the mail/DAV keyring and Bluetooth pairing codes. Inventory the actual browser engine, platform APIs and target-device authenticators before selecting an implementation. First prove a supported external security-key path and origin/relying-party binding; then implement native app requests and any platform authenticator/provider through a reviewed contract. Include user verification, cancellation, locked/unavailable authenticators, deletion, device loss and recovery. Report hardware-backed, device-bound and syncable properties only when the selected backend proves them. Hardware-bound credentials must not be silently copied into backup archives. Core OS use must not require a new Marathon cloud account.
+
+### Migration, export and restore — V2-032
+
+Make entry to and exit from Marathon a complete user workflow beyond a backup button. Import standard contacts/calendar data and supported notes/files with preview, duplicate/conflict choices, provenance and undo. Keep arbitrary source files as untrusted input; use a bounded native parser off the UI thread. Publish a versioned backup manifest listing each included/excluded category, its schema and restoration result. Separate application reinstall, user-data restore and account reauthentication. Recover attachments and task links where supported and explain unavailable sources. Restore into a clean installation, check incomplete/full-disk/corrupt archives and preserve existing data on failure. Portable export and recovery must work without depending on a Marathon-hosted service.
+
 ## 12. Delivery phases
 
 | Phase | Deliverables | Exit evidence |
 |---|---|---|
 | P0 — baseline | Fork/branch, reproducible reference image, gap ledger, device matrix, adaptive contracts | Known source/image/dependency SHAs; recorded failures; repeatable boot |
 | P1 — visual/interaction foundation | Tokens, native screen prototypes, Flow state, accessible controls, compact/expanded/hinged layouts | Home→Peek→Hub→resume across phone and tablet geometry without state loss |
-| P2 — communication | Durable Hub providers, offline queue, activity schema, invocation | Real account journey with exactly-once send and attachment return |
-| P3 — native ecosystem | RN host, public platform adapters, non-premium sample, SDK packaging; separate commercial-app compatibility validation | Clean install-to-uninstall lifecycle on a reference device |
-| P4 — expanded workspace | Split/window policy, paired apps, drag/drop, keyboard/pen, external display | Resize/posture/hot-plug journey preserves work and focus |
-| P5 — release qualification | Security, cellular, power, accessibility, OTA, core app/store completion | Published device evidence; no critical release blockers |
+| P2 — communication | Durable Hub providers, offline queue, activities, invocation, task provenance, Instant Actions, meeting workflows; secure-communication protocol decision | Real account journey with deduplicated send/recovery, attachment return and durable linked task |
+| P3 — native ecosystem and trust | RN host, public platform adapters, non-premium sample, SDK packaging; credentials, migration manifests, encrypted text proof; separate commercial-app validation | Clean install-to-uninstall lifecycle; verified credential and encrypted-text failure cases |
+| P4 — expanded use | Split/window policy, paired apps, drag/drop, keyboard/pen, external display; companion transfer/continuation, personal scenes, secure voice/video | Resize/posture/hot-plug preserves work; pairing/revocation and call lifecycle journeys |
+| P5 — release qualification | Security, cellular, power, accessibility, OTA, core app/store completion, full restore/migration and all approved 2.0 capability gates | Published per-device/provider evidence; no critical release blockers; no 2.1 Spaces dependency |
 
 Security, performance, accessibility and adaptive design begin at P0 and continue in every phase. P4 expands windowing depth; it is not the first tablet/foldable design work. Estimates follow baseline reproduction; this plan does not promise calendar dates.
+
+These phases stage the approved 2.0 programme; secure communication, companion continuity and credentials are not postponed to 2.1 by their position in the sequence. A limited demonstration can show completed slices with a truthful capability ledger. It cannot be called completion of the full programme. Optional commercial app qualification stays separate from OS release readiness.
 
 ## 13. Release gates
 
@@ -129,6 +165,8 @@ Track proposed, implemented, CI-verified and device-verified separately. Do not 
 Provisional core-gesture goal: fewer than 1% missed presentation deadlines in repeatable reference-device tests; calibrate against baseline. Report refresh rate, content freshness, p95/p99 timing, input latency, memory, thermal state and idle drain. At 60 Hz the frame interval is 16.67 ms. Define launch/resume and power budgets from actual P0 measurements before committing to numerical release thresholds.
 
 Required journeys: draft→Peek→reply→return; annotate→return result; offline send→restart→reconnect without duplicate; lock→private previews disappear; fold/unfold and rotate with keyboard open; plug/unplug external display; incoming call during drag; low-memory app termination→restore; revoked permission→safe failure; interrupted update→documented recovery.
+
+Additional 2.0 journeys: message→linked task→meeting follow-up; Instant Action→preview→existing action→return focus; personal scene→manual override→scheduled exit; paired transfer→disconnect→resume once→unpair; credential registration→reboot→authentication→loss/recovery; encrypted text→attachment→voice/video with verified endpoints and denied/revoked media permission; import preview→deduplication→undo; clean-device restore with a category-by-category result. Work/Personal Space journeys belong only to 2.1.
 
 Use upstream CTest registration and relevant QML/import/icon checks for implementation. Keep visual evidence for light/dark/ambience, compact/square/expanded/hinged, text scaling and reduced motion. A documentation-only commit requires document/link/scope checks, not an OS build claim.
 
@@ -141,5 +179,23 @@ Use upstream CTest registration and relevant QML/import/icon checks for implemen
 - [Q25 release integration candidate](https://github.com/patrickjquinn/Marathon-Shell/tree/release/q25-v1)
 - [Sailfish UI principles](https://docs.sailfishos.org/Develop/Apps/UI/)
 - [BlackBerry 10 UI guidelines](https://developer.blackberry.com/devzone/files/design/bb10/UI_Guidelines_BlackBerry_10.pdf)
+- [BlackBerry Remember and Calendar user guide](https://www.att.com/support_static_files/manuals/BlackBerry_Q10.pdf)
+- [BlackBerry Blend announcement, filed with the SEC](https://www.sec.gov/Archives/edgar/data/1070235/000107023514000126/pr092414.htm)
+- [KDE Connect capabilities](https://kdeconnect.kde.org/)
+- [FIDO passkey concepts](https://fidoalliance.org/passkeys/)
+- [Sailfish contact import](https://docs.sailfishos.org/Support/Help_Articles/Importing_Contacts/)
+- [Sailfish backup scope and limitations](https://docs.sailfishos.org/Support/Help_Articles/Backup/Backup_and_Restore/)
+- [Applied engineering skills and source inventory](ENGINEERING_WORKFLOW.md)
 
 The earlier research remains supporting evidence, not a live device certification. Update the gap ledger as new upstream changes are imported.
+
+## 15. Version 2.1 appendix: Work/Personal Spaces
+
+The user deferred **all** Work/Personal Spaces to 2.1 on November 9. This supersedes the earlier suggestion to ship organizational work/personal views in 2.0. Do not add a work-mode toggle, profile picker, work account grouping, enterprise enrollment, separate work storage/credentials or profile-based notification rules to a 2.0 slice. Normal multiple accounts and personal Travel/Bedside/Focus scenes remain in 2.0.
+
+| 2.1 ID | Work package | Prerequisites | Acceptance target |
+|---|---|---|---|
+| V21-001 | Work/Personal organization and switching | Qualified personal Hub, account identity, navigation and credential contracts | Explicit space membership, understandable switching and preserved drafts; no claim that UI grouping isolates data |
+| V21-002 | Enforced profile isolation and management | V21-001; reviewed storage, IPC, keys, clipboard/file grants, backup and lock architecture | Denied cross-space access, explicit approved transfer, independent lock/pause/revocation and qualified restore behavior |
+
+Owner roles: product + native shell for V21-001; security + platform for V21-002. Human assignments remain unassigned. Neither package is a dependency of V2-001–037 or a condition of the 2.0 release. Reuse stable public contracts where possible, but do not build speculative profile machinery into the 2.0 implementation.

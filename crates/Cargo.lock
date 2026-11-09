@@ -3288,6 +3288,7 @@ dependencies = [
  "clap",
  "dirs",
  "jsonschema",
+ "keel-actions-schema",
  "libc",
  "marathon-permissions",
  "minisign",
@@ -3313,6 +3314,7 @@ dependencies = [
 name = "marathon-background"
 version = "0.1.0"
 dependencies = [
+ "keel-actions-schema",
  "serde",
  "serde_json",
  "tempfile",

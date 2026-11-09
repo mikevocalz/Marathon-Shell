@@ -97,6 +97,8 @@ fn check_manifest(manifest: &Value) -> Result<String, Refusal> {
     {
         return Err("Invalid or missing manifest.json".to_owned().into());
     }
+    crate::manifest::check_third_party_background(manifest)
+        .map_err(|message| Refusal::Failed(message.to_owned()))?;
     if id.contains("..") || id.contains(['/', '\\']) || id.starts_with('.') {
         audit(
             libc::LOG_ALERT,
@@ -451,4 +453,25 @@ pub fn migrate_legacy_installs() -> Vec<String> {
         }
     }
     claimed
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn user_installs_cannot_silently_accept_unsupported_schedules() {
+        let mut manifest =
+            json!({"id": "com.example.notes", "name": "Notes", "entryPoint": "NotesApp.qml"});
+        assert!(check_manifest(&manifest).is_ok());
+        manifest["backgroundTasks"] = json!([]);
+        assert!(check_manifest(&manifest).is_ok());
+        manifest["backgroundTasks"] =
+            json!([{ "id": "sync", "action": "notes.sync", "intervalMinutes": 60 }]);
+        assert!(
+            matches!(check_manifest(&manifest), Err(Refusal::Failed(message)) if message.contains("third-party task registration is not supported"))
+        );
+        manifest["backgroundTasks"] = json!(true);
+        assert!(check_manifest(&manifest).is_err());
+    }
 }
