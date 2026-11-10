@@ -1,5 +1,7 @@
 //! An app's `backgroundTasks`, read from its manifest.json and checked.
 
+use std::collections::BTreeSet;
+
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -20,6 +22,7 @@ const INTERVALS: [(u32, &str); 9] = [
 ];
 const MIN_WAKE_INTERVAL: u32 = 60;
 const MAX_TIMEOUT: u32 = 600;
+const MAX_TASKS: usize = 8;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -27,15 +30,18 @@ struct Manifest {
     id: String,
     name: String,
     #[serde(default)]
+    permissions: Vec<String>,
+    #[serde(default)]
     background_tasks: Vec<Value>,
 }
 
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Declared {
     id: String,
     action: String,
     interval_minutes: u32,
+    #[serde(default, deserialize_with = "network")]
     network: Option<Network>,
     #[serde(default)]
     requires_charging: bool,
@@ -49,6 +55,12 @@ struct Declared {
 
 fn default_timeout() -> u32 {
     60
+}
+
+// A missing constraint is optional; an explicit null is a malformed
+// declaration, as it is in the manifest schema.
+fn network<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Network>, D::Error> {
+    Network::deserialize(d).map(Some)
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -74,16 +86,15 @@ impl Task {
     }
 }
 
-/// Each element is `[A-Za-z_][A-Za-z0-9_-]*`, so `org.marathonos.<id>` is a
-/// bus name and the id is safe in a unit name.
+/// Match the manifest-v1 id contract; its prefixed name fits D-Bus and
+/// systemd's unit-name limits, including a maximum-length task id.
 fn valid_app_id(id: &str) -> bool {
-    id.len() <= 64
+    (2..=128).contains(&id.len())
         && id.split('.').all(|part| {
             let mut chars = part.chars();
-            chars
-                .next()
-                .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
-                && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+            chars.next().is_some_and(|c| c.is_ascii_lowercase())
+                && chars
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-')
         })
 }
 
@@ -114,18 +125,40 @@ fn plain_name(name: &str) -> String {
 }
 
 /// The app's tasks, and one message for each declaration that was refused.
+/// Duplicate identities reject the whole schedule rather than picking a winner.
 pub fn parse(manifest: &str) -> Result<(Vec<Task>, Vec<String>), String> {
     let manifest: Manifest =
         serde_json::from_str(manifest).map_err(|e| format!("manifest: {e}"))?;
     if !valid_app_id(&manifest.id) {
         return Err(format!("app id {:?} cannot name a unit", manifest.id));
     }
+    if manifest.background_tasks.len() > MAX_TASKS {
+        return Err(format!("backgroundTasks permits at most {MAX_TASKS} tasks"));
+    }
+    let mut ids = BTreeSet::new();
+    for id in manifest
+        .background_tasks
+        .iter()
+        .filter_map(|task| task.get("id").and_then(Value::as_str))
+    {
+        if !ids.insert(id) {
+            return Err(format!(
+                "task {id:?} is declared twice; refusing backgroundTasks"
+            ));
+        }
+    }
     let mut tasks: Vec<Task> = Vec::new();
     let mut refused = Vec::new();
     for value in manifest.background_tasks {
         match validate(&manifest.id, &manifest.name, value) {
-            Ok(task) if tasks.iter().any(|t| t.id == task.id) => {
-                refused.push(format!("task {:?} is declared twice", task.id));
+            Ok(task)
+                if task.network.is_some()
+                    && !manifest.permissions.iter().any(|p| p == "network") =>
+            {
+                refused.push(format!(
+                    "task {:?}: a network constraint requires the network permission",
+                    task.id
+                ));
             }
             Ok(task) => tasks.push(task),
             Err(e) => refused.push(e),
@@ -174,19 +207,32 @@ fn validate(app_id: &str, app_name: &str, value: Value) -> Result<Task, String> 
     })
 }
 
-/// Whether the app's Keel Actions manifest (actions.json) declares `action`
-/// as one that runs unattended: no one is there to confirm it.
-pub fn keel_declares(keel_manifest: &str, action: &str) -> bool {
+/// An unattended action must belong to this app, be unambiguous, and accept
+/// the empty argument object the generated service actually passes.
+pub fn keel_declares(keel_manifest: &str, app_id: &str, action: &str) -> bool {
     let Ok(value) = serde_json::from_str::<Value>(keel_manifest) else {
         return false;
     };
-    value["tools"].as_array().is_some_and(|tools| {
-        tools.iter().any(|tool| {
-            let meta = &tool["_meta"];
-            meta["org.shipwright.keel/action"] == action
-                && meta["org.shipwright.keel/confirm"] != true
-        })
-    })
+    if value["appId"] != format!("org.marathonos.{app_id}") {
+        return false;
+    }
+    let Some(tools) = value["tools"].as_array() else {
+        return false;
+    };
+    let mut matching = tools
+        .iter()
+        .filter(|tool| tool["_meta"]["org.shipwright.keel/action"] == action);
+    let Some(tool) = matching.next() else {
+        return false;
+    };
+    matching.next().is_none()
+        && matches!(
+            tool["_meta"].get("org.shipwright.keel/confirm"),
+            None | Some(Value::Bool(false))
+        )
+        && tool["inputSchema"]["type"] == "object"
+        && keel_actions_schema::validate::validate(&tool["inputSchema"], &serde_json::json!({}))
+            .is_ok()
 }
 
 #[cfg(test)]
@@ -195,7 +241,29 @@ mod tests {
     use super::*;
 
     fn manifest(tasks: &str) -> String {
-        format!(r#"{{"id": "email", "name": "Mail", "backgroundTasks": [{tasks}]}}"#)
+        format!(
+            r#"{{"id": "email", "name": "Mail", "permissions": ["network"], "backgroundTasks": [{tasks}]}}"#
+        )
+    }
+
+    #[test]
+    fn generator_accepts_the_manifest_contract_fixtures() {
+        let cases: Vec<Value> =
+            serde_json::from_str(include_str!("../tests/fixtures/background-contract.json"))
+                .unwrap();
+        for case in cases {
+            let value = serde_json::json!({
+                "id": "email", "name": "Mail", "permissions": case["permissions"],
+                "backgroundTasks": case["tasks"]
+            });
+            let accepted = parse(&value.to_string()).is_ok_and(|(_, refused)| refused.is_empty());
+            assert_eq!(
+                accepted,
+                case["valid"].as_bool().unwrap(),
+                "{}",
+                case["name"]
+            );
+        }
     }
 
     #[test]
@@ -299,11 +367,25 @@ mod tests {
 
     #[test]
     fn app_ids_must_be_bus_name_elements() {
-        for id in ["", "1app", "a..b", "a b", "a/b", "../x"] {
+        for id in [
+            "",
+            "a",
+            "1app",
+            "a..b",
+            "a b",
+            "a/b",
+            "../x",
+            "org.example.My_App",
+            "_app",
+        ] {
             let json = serde_json::json!({"id": id, "name": "x"});
             assert!(parse(&json.to_string()).is_err(), "{id:?}");
         }
-        assert!(parse(r#"{"id": "org.example.My_App-2", "name": "x"}"#).is_ok());
+        assert!(parse(r#"{"id": "org.example.my_app-2", "name": "x"}"#).is_ok());
+        for (length, valid) in [(128, true), (129, false)] {
+            let json = serde_json::json!({"id": "a".repeat(length), "name": "x"});
+            assert_eq!(parse(&json.to_string()).is_ok(), valid);
+        }
     }
 
     #[test]
@@ -311,12 +393,26 @@ mod tests {
         let (tasks, refused) = parse(&manifest(
             r#"{"id": "a", "action": "x", "intervalMinutes": 60},
                {"id": "b", "action": "x", "intervalMinutes": 7},
-               {"id": "a", "action": "y", "intervalMinutes": 30},
+               {"id": "c", "action": "y", "intervalMinutes": 30, "timeoutSeconds": 0},
                {"action": "x"}"#,
         ))
         .unwrap();
         assert_eq!(tasks.len(), 1);
         assert_eq!(refused.len(), 3);
+    }
+
+    #[test]
+    fn duplicate_ids_reject_the_whole_schedule_even_if_one_declaration_is_invalid() {
+        for duplicate in [
+            r#"{"id": "a", "action": "y", "intervalMinutes": 60, "wake": true}"#,
+            r#"{"id": "a", "action": "y", "intervalMinutes": 7}"#,
+        ] {
+            let error = parse(&manifest(&format!(
+                r#"{{"id": "a", "action": "x", "intervalMinutes": 60}}, {duplicate}"#
+            )))
+            .unwrap_err();
+            assert!(error.contains("declared twice"), "{error}");
+        }
     }
 
     #[test]
@@ -330,21 +426,86 @@ mod tests {
     }
 
     #[test]
+    fn unknown_fields_and_null_constraints_are_refused() {
+        for field in [
+            r#""wakeDevice": true"#,
+            r#""network": null"#,
+            r#""wake": "true""#,
+        ] {
+            let (tasks, refused) = parse(&manifest(&format!(
+                r#"{{"id": "sync", "action": "mail.sync", "intervalMinutes": 60, {field}}}"#
+            )))
+            .unwrap();
+            assert!(tasks.is_empty(), "{field}");
+            assert_eq!(refused.len(), 1);
+        }
+    }
+
+    #[test]
+    fn task_count_is_bounded_without_truncating_the_schedule() {
+        for (count, accepted) in [(8, true), (9, false)] {
+            let tasks: Vec<_> = (0..count)
+                .map(|i| serde_json::json!({"id": format!("sync-{i}"), "action": "mail.sync", "intervalMinutes": 60}))
+                .collect();
+            let value =
+                serde_json::json!({"id": "email", "name": "Mail", "backgroundTasks": tasks});
+            assert_eq!(parse(&value.to_string()).is_ok(), accepted);
+        }
+    }
+
+    #[test]
+    fn network_constraints_do_not_grant_permission() {
+        let value = r#"{"id": "email", "name": "Mail", "backgroundTasks": [
+            {"id": "sync", "action": "mail.sync", "intervalMinutes": 60, "network": "any"}]}"#;
+        let (tasks, refused) = parse(value).unwrap();
+        assert_eq!(tasks, Vec::<Task>::new());
+        assert!(refused[0].contains("network permission"));
+    }
+
+    fn action_manifest() -> Value {
+        serde_json::json!({
+            "appId": "org.marathonos.email",
+            "tools": [{
+                "_meta": {"org.shipwright.keel/action": "mail.sync", "org.shipwright.keel/confirm": false},
+                "inputSchema": {"type": "object", "properties": {}, "additionalProperties": false}
+            }]
+        })
+    }
+
+    #[test]
     fn keel_manifests_are_searched_for_the_action() {
-        let keel = r#"{"tools": [{"_meta": {"org.shipwright.keel/action": "mail.sync"}}]}"#;
-        assert!(keel_declares(keel, "mail.sync"));
-        assert!(!keel_declares(keel, "mail.send"));
-        assert!(!keel_declares("not json", "mail.sync"));
-        assert!(!keel_declares(r#"{"tools": 3}"#, "mail.sync"));
+        let keel = action_manifest().to_string();
+        assert!(keel_declares(&keel, "email", "mail.sync"));
+        assert!(!keel_declares(&keel, "email", "mail.send"));
+        assert!(!keel_declares(&keel, "notes", "mail.sync"));
+        assert!(!keel_declares("not json", "email", "mail.sync"));
+        assert!(!keel_declares(r#"{"tools": 3}"#, "email", "mail.sync"));
     }
 
     #[test]
     fn actions_that_ask_for_confirmation_cannot_run_in_the_background() {
-        let keel = r#"{"tools": [{"_meta": {"org.shipwright.keel/action": "mail.purge",
-                                            "org.shipwright.keel/confirm": true}},
-                                 {"_meta": {"org.shipwright.keel/action": "mail.sync",
-                                            "org.shipwright.keel/confirm": false}}]}"#;
-        assert!(!keel_declares(keel, "mail.purge"));
-        assert!(keel_declares(keel, "mail.sync"));
+        for confirmation in [
+            Value::Bool(true),
+            Value::String("false".into()),
+            Value::Null,
+        ] {
+            let mut keel = action_manifest();
+            keel["tools"][0]["_meta"]["org.shipwright.keel/confirm"] = confirmation;
+            assert!(!keel_declares(&keel.to_string(), "email", "mail.sync"));
+        }
+    }
+
+    #[test]
+    fn ambiguous_or_argument_requiring_actions_are_not_scheduled() {
+        let mut keel = action_manifest();
+        let tool = keel["tools"][0].clone();
+        keel["tools"].as_array_mut().unwrap().push(tool);
+        assert!(!keel_declares(&keel.to_string(), "email", "mail.sync"));
+
+        let mut keel = action_manifest();
+        keel["tools"][0]["inputSchema"]["required"] = serde_json::json!(["account"]);
+        assert!(!keel_declares(&keel.to_string(), "email", "mail.sync"));
+        keel["tools"][0]["inputSchema"] = Value::Null;
+        assert!(!keel_declares(&keel.to_string(), "email", "mail.sync"));
     }
 }

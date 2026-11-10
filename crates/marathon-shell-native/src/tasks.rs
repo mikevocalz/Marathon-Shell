@@ -225,7 +225,22 @@ pub mod qobject {
         // What the compositor does for it (main.cpp connects these).
         #[qsignal]
         #[cxx_name = "spawnRequested"]
-        fn spawn_requested(self: Pin<&mut Tasks>, command: &QString, env: &QMap_QString_QVariant);
+        fn spawn_requested(
+            self: Pin<&mut Tasks>,
+            request_id: &QString,
+            command: &QString,
+            env: &QMap_QString_QVariant,
+        );
+        /// Marathon runners bypass desktop Exec parsing and shell interpretation.
+        #[qsignal]
+        #[cxx_name = "spawnRunnerRequested"]
+        fn spawn_runner_requested(
+            self: Pin<&mut Tasks>,
+            request_id: &QString,
+            program: &QString,
+            arguments: &QStringList,
+            env: &QMap_QString_QVariant,
+        );
         #[qsignal]
         #[cxx_name = "closeWindowRequested"]
         fn close_window_requested(self: Pin<&mut Tasks>, surface_id: i32);
@@ -247,7 +262,9 @@ pub mod qobject {
 
         // The compositor's events.
         #[cxx_name = "appLaunched"]
-        fn app_launched(self: Pin<&mut Tasks>, command: &QString, pid: i64);
+        fn app_launched(self: Pin<&mut Tasks>, request_id: &QString, pid: i64);
+        #[cxx_name = "appStartFailed"]
+        fn app_start_failed(self: Pin<&mut Tasks>, request_id: &QString, error: &QString);
         #[cxx_name = "appClosed"]
         fn app_closed(self: Pin<&mut Tasks>, pid: i64);
         /// A new toplevel; true if it is shown. `recent_input`: the user
@@ -493,7 +510,8 @@ pub struct TasksRust {
     pending_route: Option<(String, String)>,
     // An app → the app in front when a route launch opened it.
     callers: HashMap<String, String>,
-    pending_by_command: HashMap<String, Launch>,
+    /// Each pending attempt has its own request ID, even for identical commands.
+    pending_launches: HashMap<String, Launch>,
     active_by_pid: HashMap<i64, Launch>,
     exited_launches: HashMap<String, Launch>,
     pid_to_app: HashMap<i64, String>,
@@ -760,7 +778,7 @@ impl Tasks {
         let viewport = (self.device.viewport_width, self.device.viewport_height);
         self.as_mut().rust_mut().device = Device {
             render_node: profile.render_node(),
-            gpu_webgl: profile.gpu_stack() == "mesa-v3d",
+            gpu_webgl: matches!(profile.gpu_stack().as_str(), "mesa-v3d" | "mesa-panfrost"),
             runner_pool: profile.runner_pool(),
             runner_width,
             runner_height,
@@ -830,11 +848,11 @@ fn later(qt: Qt, after: std::time::Duration, f: impl FnOnce(Pin<&mut Tasks>) + S
     });
 }
 
-/// A sandbox instance's id.
+/// A launch request or sandbox instance ID; no dependency on procfs reads.
 fn launch_uuid() -> String {
-    std::fs::read_to_string("/proc/sys/kernel/random/uuid")
-        .unwrap_or_default()
-        .trim()
+    cxx_qt_lib::QUuid::create_uuid()
+        .to_string()
+        .trim_matches(['{', '}'])
         .to_owned()
 }
 

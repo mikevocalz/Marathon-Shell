@@ -1,9 +1,10 @@
 //! Marathon's address book and DAV sync: `org.marathonos.Dav` on the
-//! session bus, serving `Contacts1` and `Dav1` where the shell served them.
+//! session bus, serving `Contacts1`, `Dav1` and the shared `CalendarEvents1` cache.
 //! The shell admits each caller (`Permissions1.Admit`).
 
 mod accounts;
 mod contacts;
+mod events;
 mod secrets;
 mod sync;
 mod webdav;
@@ -23,10 +24,11 @@ use zbus::{ObjectPath, OwnedVariant as OwnedValue, Variant as Value};
 
 use accounts::{Account, Accounts, SecretOp};
 use contacts::{Book, Contact, Row};
-use sync::Events;
+use events::Events;
 
 const BUS_NAME: &str = "org.marathonos.Dav";
 const CONTACTS_PATH: &str = "/org/marathonos/Shell/Contacts";
+const CALENDAR_PATH: &str = "/org/marathonos/Shell/CalendarEvents";
 const DAV_PATH: &str = "/org/marathonos/Shell/Dav";
 const SYNC_EVERY: Duration = Duration::from_mins(15);
 
@@ -43,8 +45,8 @@ struct SyncState {
     syncing: bool,
     last_error: String,
     last_sync_ms: i64,
-    /// Each collection's sync-token, by URL.
-    tokens: HashMap<String, String>,
+    /// A collection URL can be shared by different authenticated accounts.
+    tokens: HashMap<(String, String), String>,
 }
 
 #[derive(Clone)]
@@ -70,6 +72,33 @@ impl Core {
 
     fn dav(&self) -> SignalEmitter<'static> {
         emitter(&self.bus, DAV_PATH)
+    }
+
+    fn calendar(&self) -> SignalEmitter<'static> {
+        emitter(&self.bus, CALENDAR_PATH)
+    }
+
+    async fn dav_state(&self) -> HashMap<&'static str, Value<'static>> {
+        let count = self
+            .accounts
+            .with(|a| i32::try_from(a.saved.accounts.len()).unwrap_or(i32::MAX))
+            .await;
+        let (syncing, last_error, last_sync_ms) = self
+            .state
+            .with(|s| (s.syncing, s.last_error.clone(), s.last_sync_ms))
+            .await;
+        HashMap::from([
+            ("accountCount", Value::from(count)),
+            ("syncing", Value::from(syncing)),
+            ("lastError", Value::from(last_error)),
+            ("lastSyncMs", Value::from(last_sync_ms)),
+        ])
+    }
+
+    async fn publish_dav_state(&self) {
+        if let Err(error) = DavService::state_changed(&self.dav(), &self.dav_state().await).await {
+            log::warn("Dav", format_args!("sync state: {error}"));
+        }
     }
 
     async fn discover(&self, id: String) {
@@ -100,6 +129,9 @@ impl Core {
                     })
                     .await;
                 DavService::account_discovered(&self.dav(), &id).await.ok();
+                if let Err(error) = CalendarEventsService::events_changed(&self.calendar()).await {
+                    log::warn("Dav", format_args!("calendar invalidation: {error}"));
+                }
             }
             Err(reason) => {
                 log::warn("Dav", format_args!("discovery of {id} failed: {reason}"));
@@ -124,6 +156,7 @@ impl Core {
         if !started {
             return;
         }
+        self.publish_dav_state().await;
         let ready: Vec<(Account, String)> = self
             .accounts
             .with(|a| {
@@ -144,21 +177,24 @@ impl Core {
                 .cloned()
                 .collect::<Vec<_>>();
             for collection in collections {
+                let calendar = account.collections_calendar.contains(&collection);
                 let token = {
-                    let collection = collection.clone();
+                    let key = (account.id.clone(), collection.clone());
                     self.state
-                        .with(move |s| s.tokens.get(&collection).cloned().unwrap_or_default())
+                        .with(move |s| s.tokens.get(&key).cloned().unwrap_or_default())
                         .await
                 };
+                let full = token.is_empty();
                 let (agent, from, secret, url) = (
                     self.agent.clone(),
                     account.clone(),
                     secret.clone(),
                     collection.clone(),
                 );
-                let pulled =
-                    blocking::unblock(move || sync::pull(&agent, &from, &secret, &url, &token))
-                        .await;
+                let pulled = blocking::unblock(move || {
+                    sync::pull(&agent, &from, &secret, &url, &token, calendar)
+                })
+                .await;
                 let pulled = match pulled {
                     Ok(pulled) => pulled,
                     Err(e) => {
@@ -167,7 +203,11 @@ impl Core {
                         continue;
                     }
                 };
-                let token = pulled.token;
+                let token = pulled.next_token().map(str::to_owned);
+                if let Some(warning) = pulled.warning() {
+                    log::warn("Dav", format_args!("{collection}: {warning}"));
+                    error = warning;
+                }
                 let contacts = pulled.contacts;
                 let (stored, failures) = self
                     .book
@@ -185,27 +225,34 @@ impl Core {
                     })
                     .await;
                 changed.extend(stored);
-                if failures.is_empty() {
-                    self.state
-                        .with(move |s| s.tokens.insert(collection, token))
+                let mut complete = failures.is_empty();
+                for failure in failures {
+                    log::warn("Dav", format_args!("cannot store contact: {failure}"));
+                    error = failure;
+                }
+                if calendar {
+                    let (resources, deleted, retained, id, collection) = (
+                        pulled.events,
+                        pulled.deleted,
+                        pulled.unsupported_resources,
+                        account.id.clone(),
+                        collection.clone(),
+                    );
+                    let stored = self
+                        .events
+                        .with(move |store| {
+                            store.apply(&id, &collection, &resources, &deleted, full, &retained)
+                        })
                         .await;
-                } else {
-                    for failure in failures {
-                        log::warn("Dav", format_args!("cannot store contact: {failure}"));
-                        error = failure;
+                    if let Err(e) = stored {
+                        log::warn("Dav", format_args!("cannot store events: {e}"));
+                        error = e.to_string();
+                        complete = false;
                     }
                 }
-                let (events, id) = (pulled.events, account.id.clone());
-                let stored = self
-                    .events
-                    .with(move |store| {
-                        events
-                            .iter()
-                            .try_for_each(|e| store.upsert(&id, e, now_ms()).map(drop))
-                    })
-                    .await;
-                if let Err(e) = stored {
-                    log::warn("Dav", format_args!("cannot store events: {e}"));
+                if let (true, Some(token)) = (complete, token) {
+                    let key = (account.id.clone(), collection);
+                    self.state.with(move |s| s.tokens.insert(key, token)).await;
                 }
             }
             DavService::sync_finished(&self.dav(), &account.id)
@@ -229,6 +276,10 @@ impl Core {
                 s.last_sync_ms = now_ms();
             })
             .await;
+        self.publish_dav_state().await;
+        if let Err(error) = CalendarEventsService::events_changed(&self.calendar()).await {
+            log::warn("Dav", format_args!("calendar invalidation: {error}"));
+        }
     }
 }
 
@@ -338,17 +389,28 @@ impl ContactsService {
         phone: String,
         email: String,
     ) -> fdo::Result<()> {
+        let data = HashMap::from([
+            ("name".to_owned(), OwnedValue::from(zbus::Str::from(name))),
+            ("phone".to_owned(), OwnedValue::from(zbus::Str::from(phone))),
+            ("email".to_owned(), OwnedValue::from(zbus::Str::from(email))),
+        ]);
+        self.create_contact(h, data).await.map(drop)
+    }
+
+    /// `AddContact` with any of `UpdateContact`'s fields; the new id.
+    async fn create_contact(
+        &self,
+        #[zbus(header)] h: Header<'_>,
+        data: HashMap<String, OwnedValue>,
+    ) -> fdo::Result<i32> {
         self.admit(&h).await?;
         let added = self
             .0
             .book
             .with(move |b| {
-                b.add(Contact {
-                    name,
-                    phone,
-                    email,
-                    ..Contact::default()
-                })
+                let mut contact = Contact::default();
+                contact.update(&data);
+                b.add(contact)
             })
             .await
             .map_err(|e| fdo::Error::Failed(format!("Cannot save contact: {e}")))?;
@@ -356,7 +418,8 @@ impl ContactsService {
             return Err(fdo::Error::InvalidArgs("A contact needs a name".into()));
         };
         Self::contacts_changed(&self.0.contacts()).await?;
-        Ok(Self::contact_added(&self.0.contacts(), id).await?)
+        Self::contact_added(&self.0.contacts(), id).await?;
+        Ok(id)
     }
 
     async fn update_contact(
@@ -402,6 +465,24 @@ impl ContactsService {
     async fn contact_updated(e: &SignalEmitter<'_>, id: i32) -> zbus::Result<()>;
     #[zbus(signal)]
     async fn contact_deleted(e: &SignalEmitter<'_>, id: i32) -> zbus::Result<()>;
+}
+
+struct CalendarEventsService(Core);
+
+#[interface(name = "org.marathonos.Shell.CalendarEvents1")]
+impl CalendarEventsService {
+    async fn list_events(&self, #[zbus(header)] h: Header<'_>) -> fdo::Result<Vec<Value<'static>>> {
+        admit(&self.0.bus, &h, "CalendarEvents", &["calendar"]).await?;
+        let accounts = self.0.accounts.with(|a| a.saved.accounts.clone()).await;
+        self.0
+            .events
+            .with(move |events| events.list(&accounts))
+            .await
+            .map_err(fdo::Error::Failed)
+    }
+
+    #[zbus(signal)]
+    async fn events_changed(e: &SignalEmitter<'_>) -> zbus::Result<()>;
 }
 
 struct DavService(Core);
@@ -475,6 +556,7 @@ impl DavService {
         if removed {
             self.0.keyring.try_send(()).ok();
             Self::accounts_changed(&self.0.dav()).await?;
+            CalendarEventsService::events_changed(&self.0.calendar()).await?;
         }
         Ok(removed)
     }
@@ -497,6 +579,7 @@ impl DavService {
             .await;
         if found {
             Self::accounts_changed(&self.0.dav()).await?;
+            CalendarEventsService::events_changed(&self.0.calendar()).await?;
         }
         Ok(())
     }
@@ -513,24 +596,14 @@ impl DavService {
         #[zbus(header)] h: Header<'_>,
     ) -> fdo::Result<HashMap<&'static str, Value<'static>>> {
         self.admit(&h).await?;
-        let count = self
-            .0
-            .accounts
-            .with(|a| i32::try_from(a.saved.accounts.len()).unwrap_or(i32::MAX))
-            .await;
-        let (syncing, last_error, last_sync_ms) = self
-            .0
-            .state
-            .with(|s| (s.syncing, s.last_error.clone(), s.last_sync_ms))
-            .await;
-        Ok(HashMap::from([
-            ("accountCount", Value::from(count)),
-            ("syncing", Value::from(syncing)),
-            ("lastError", Value::from(last_error)),
-            ("lastSyncMs", Value::from(last_sync_ms)),
-        ]))
+        Ok(self.0.dav_state().await)
     }
 
+    #[zbus(signal)]
+    async fn state_changed(
+        e: &SignalEmitter<'_>,
+        state: &HashMap<&'static str, Value<'static>>,
+    ) -> zbus::Result<()>;
     #[zbus(signal)]
     async fn accounts_changed(e: &SignalEmitter<'_>) -> zbus::Result<()>;
     #[zbus(signal)]
@@ -569,6 +642,9 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     bus.object_server()
         .at(DAV_PATH, DavService(core.clone()))
+        .await?;
+    bus.object_server()
+        .at(CALENDAR_PATH, CalendarEventsService(core.clone()))
         .await?;
     bus.request_name(BUS_NAME).await?;
     io::spawn(keep_secrets(core.clone(), wake));

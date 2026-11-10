@@ -45,10 +45,11 @@ endif()
 
 # QML suites that need Keel's Silica: set KEEL_QML to a Keel build's qml dir,
 # or install keel-silica.
+add_subdirectory(native-ui)
 set(KEEL_QML "$ENV{KEEL_QML}" CACHE PATH "Keel build qml directory for the Silica QML tests")
 find_path(_SILICA_QMLDIR Sailfish/Silica/qmldir PATHS ${KEEL_QML} /usr/lib/qt6/qml /usr/lib64/qt6/qml NO_DEFAULT_PATH)
 if(_SILICA_QMLDIR)
-    foreach(suite marathon-silica/tests tests/ui apps/notes/tests apps/clock/tests apps/calculator/tests apps/gallery/tests apps/music/tests apps/phone/tests apps/messages/tests apps/calendar/tests apps/email/tests apps/camera/tests apps/browser/tests apps/settings/tests apps/template/tests apps/test/tests apps/maps/tests apps/terminal/tests)
+    foreach(suite marathon-silica/tests tests/ui apps/clock/tests apps/calculator/tests apps/gallery/tests apps/music/tests apps/phone/tests apps/messages/tests apps/email/tests apps/camera/tests apps/browser/tests apps/settings/tests apps/template/tests apps/test/tests apps/maps/tests apps/terminal/tests)
         string(REPLACE "/" "_" name "Qml_${suite}")
         add_test(NAME ${name} COMMAND sh ${CMAKE_SOURCE_DIR}/${suite}/run.sh)
         set_tests_properties(${name} PROPERTIES ENVIRONMENT "KEEL_QML=${_SILICA_QMLDIR}")
@@ -91,6 +92,20 @@ if(Python3_FOUND)
     # devices/ and socs/ manifests (needs the jsonschema module)
     add_test(NAME Devices_Check COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/devices/devices.py check)
     add_test(NAME Devices_Tests COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/devices/test_devices.py)
+    add_test(NAME Passport_Inspection COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/passport/test_passport.py)
+    set_tests_properties(Passport_Inspection PROPERTIES TIMEOUT 60)
+    add_test(NAME Q25_SessionProfile COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/qemu/test_q25_session_profile.py)
+    add_test(NAME Q25_GpuPackaging COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/qemu/test_q25_gpu_packaging.py)
+    add_test(NAME Q25_RootDiff COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/q25/test_q25_root_diff.py)
+    add_test(NAME Q25_RootInstall COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/q25/test_q25_root_install.py)
+    add_test(NAME Q25_CarrierHook COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/q25/test_q25_carrier_hook.py)
+    add_test(NAME Q25_UserdataImage COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/q25/test_q25_userdata_image.py)
+    add_test(NAME Q25_GnssFrames COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/devices/zinwa/q25/gnss/test_mtk_gnss_frames.py)
+    # Alpine has no systemd-tmpfiles; CI runs this on its Ubuntu host as well.
+    find_program(SYSTEMD_TMPFILES_EXECUTABLE systemd-tmpfiles)
+    if(SYSTEMD_TMPFILES_EXECUTABLE)
+        add_test(NAME Image_UserConfigSeed COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/qemu/test_userconfig_seed.py)
+    endif()
 endif()
 
 # OTA feed publisher, and the image's sysupdate transfers run against its feed

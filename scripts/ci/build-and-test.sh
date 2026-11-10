@@ -5,7 +5,7 @@
 #   podman run --rm -v "$PWD:/src:ro" docker.io/library/alpine:edge /src/scripts/ci/build-and-test.sh
 #
 # keel-silica-dev comes from Marathon's own aports, not Alpine, so the Keel
-# Silica QML suites are left out (see ci.yml).
+# Silica QML suites run in the separate required native-ui job (see ci.yml).
 set -eu
 
 apk add --no-cache \
@@ -15,7 +15,8 @@ apk add --no-cache \
 	qt6-qtlocation-dev qt6-qtpositioning-dev qt6-qtspeech-dev qt6-qtwebsockets-dev \
 	hunspell-dev hunspell-en-us pulseaudio-dev pipewire-dev wayland-dev wayland-protocols \
 	mesa-dev libdrm-dev dbus dbus-dev eudev-dev libinput-dev linux-pam-dev sqlite-dev \
-	rpm findutils coreutils cryptsetup pipewire wireplumber pipewire-tools
+	rpm findutils coreutils cryptsetup pipewire wireplumber pipewire-tools zstd e2fsprogs \
+	e2fsprogs-extra dosfstools mtools sfdisk blkid android-tools gnupg erofs-utils
 
 # Tests that check file permissions pass trivially as root, so build and test
 # as an ordinary user from a private copy of the tree.
@@ -29,7 +30,7 @@ unset KEEL_QML
 export QT_QPA_PLATFORM=offscreen
 export MARATHON_TEST_STRICT=1
 cargo fmt --manifest-path crates/Cargo.toml --all -- --check
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON -DMARATHON_REQUIRE_QMLLINT=ON
 cmake --build build
 ctest --test-dir build --output-on-failure
 sh scripts/ci/count-skips.sh build/Testing/Temporary/LastTest.log tests/expected-skips.txt

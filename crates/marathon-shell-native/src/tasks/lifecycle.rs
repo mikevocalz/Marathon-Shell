@@ -56,6 +56,44 @@ struct Instance {
     surface_id: i32,
 }
 
+#[derive(Default)]
+struct BackgroundClaims {
+    by_handle: HashMap<u32, (String, String)>,
+    // A late end request must never release a newer claim with a reused handle.
+    last_handle: u32,
+}
+
+impl BackgroundClaims {
+    fn begin(&mut self, app_id: &str, category: &str) -> zbus::fdo::Result<u32> {
+        let handle = self.last_handle.checked_add(1).ok_or_else(|| {
+            zbus::fdo::Error::LimitsExceeded(
+                "No background task handles remain in this session".into(),
+            )
+        })?;
+        self.last_handle = handle;
+        self.by_handle
+            .insert(handle, (app_id.to_owned(), category.to_owned()));
+        Ok(handle)
+    }
+
+    fn end(&mut self, handle: u32, caller: &str) -> Option<(String, String)> {
+        if self.by_handle.get(&handle).is_none_or(|c| c.0 != caller) {
+            return None;
+        }
+        self.by_handle.remove(&handle)
+    }
+
+    fn holds(&self, app_id: &str, category: &str) -> bool {
+        self.by_handle
+            .values()
+            .any(|c| c.0 == app_id && c.1 == category)
+    }
+
+    fn revoke(&mut self, app_id: &str) {
+        self.by_handle.retain(|_, c| c.0 != app_id);
+    }
+}
+
 pub(super) struct Lifecycle {
     apps: HashMap<String, AppState>,
     instances: HashMap<String, Instance>,
@@ -65,8 +103,7 @@ pub(super) struct Lifecycle {
     idle_freeze: Duration,
     stopping: bool,
     cgroups: cgroup::AppCgroups,
-    claims: HashMap<u32, (String, String)>,
-    next_claim: u32,
+    claims: BackgroundClaims,
     audio_playback: String,
     active_call: String,
 }
@@ -88,8 +125,7 @@ impl Lifecycle {
             idle_freeze: Duration::from_secs(10),
             stopping: false,
             cgroups: cgroup::app_cgroups(),
-            claims: HashMap::new(),
-            next_claim: 1,
+            claims: BackgroundClaims::default(),
             audio_playback: String::new(),
             active_call: String::new(),
         }
@@ -229,6 +265,7 @@ impl Tasks {
                 .state_changed(&q(app_id), old as i32, State::Killed as i32);
         }
         let mut rust = self.as_mut().rust_mut();
+        rust.lifecycle.claims.revoke(app_id);
         rust.lifecycle.instances.remove(app_id);
         rust.lifecycle.apps.remove(app_id);
         rust.lifecycle.pending_foreground.retain(|a| a != app_id);
@@ -759,37 +796,33 @@ impl Tasks {
     }
 
     /// `AppLifecycle1`'s claims, refcounted per app and category.
-    pub(super) fn begin_claim(mut self: Pin<&mut Self>, app_id: &str, category: &str) -> u32 {
-        let mut rust = self.as_mut().rust_mut();
-        let handle = rust.lifecycle.next_claim;
-        rust.lifecycle.next_claim += 1;
-        rust.lifecycle
+    pub(super) fn begin_claim(
+        mut self: Pin<&mut Self>,
+        app_id: &str,
+        category: &str,
+    ) -> zbus::fdo::Result<u32> {
+        let handle = self
+            .as_mut()
+            .rust_mut()
+            .lifecycle
             .claims
-            .insert(handle, (app_id.to_owned(), category.to_owned()));
+            .begin(app_id, category)?;
         self.add_cap(app_id, category);
-        handle
+        Ok(handle)
     }
 
     /// Only the app that began it ends it.
     pub(super) fn end_claim(mut self: Pin<&mut Self>, handle: u32, caller: &str) -> bool {
-        if self
+        let Some((app, category)) = self
+            .as_mut()
+            .rust_mut()
             .lifecycle
             .claims
-            .get(&handle)
-            .is_none_or(|c| c.0 != caller)
-        {
-            return false;
-        }
-        let Some((app, category)) = self.as_mut().rust_mut().lifecycle.claims.remove(&handle)
+            .end(handle, caller)
         else {
             return false;
         };
-        if !self
-            .lifecycle
-            .claims
-            .values()
-            .any(|c| c.0 == app && c.1 == category)
-        {
+        if !self.lifecycle.claims.holds(&app, &category) {
             self.remove_cap(&app, &category);
         }
         true
@@ -864,4 +897,80 @@ fn stop_processes(pids: &[i32], grace: Duration) -> usize {
         unsafe { libc::close(fd) };
     }
     killed
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, reason = "tests")]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_exited_apps_claim_cannot_keep_its_replacement_awake() {
+        let mut claims = BackgroundClaims::default();
+        let exited = claims.begin("camera", "recording").unwrap();
+        claims.revoke("camera");
+
+        let replacement = claims.begin("camera", "recording").unwrap();
+        assert_ne!(replacement, exited);
+        assert!(claims.end(exited, "camera").is_none());
+        assert!(claims.holds("camera", "recording"));
+        assert!(claims.end(replacement, "camera").is_some());
+        assert!(!claims.holds("camera", "recording"));
+    }
+
+    #[test]
+    fn revoking_one_app_preserves_other_apps_claims() {
+        let mut claims = BackgroundClaims::default();
+        claims.begin("camera", "recording").unwrap();
+        claims.begin("camera", "download").unwrap();
+        let music = claims.begin("music", "audio-playback").unwrap();
+
+        claims.revoke("camera");
+
+        assert!(!claims.holds("camera", "recording"));
+        assert!(!claims.holds("camera", "download"));
+        assert!(claims.holds("music", "audio-playback"));
+        assert!(claims.end(music, "music").is_some());
+    }
+
+    #[test]
+    fn only_the_owner_can_end_each_claim_once() {
+        let mut claims = BackgroundClaims::default();
+        let handle = claims.begin("clock", "countdown-timer").unwrap();
+
+        assert!(claims.end(handle, "notes").is_none());
+        assert!(claims.holds("clock", "countdown-timer"));
+        assert!(claims.end(handle, "clock").is_some());
+        assert!(claims.end(handle, "clock").is_none());
+        assert!(!claims.holds("clock", "countdown-timer"));
+    }
+
+    #[test]
+    fn a_category_stays_active_until_its_last_claim_ends() {
+        let mut claims = BackgroundClaims::default();
+        let first = claims.begin("camera", "recording").unwrap();
+        let second = claims.begin("camera", "recording").unwrap();
+
+        assert!(claims.end(first, "camera").is_some());
+        assert!(claims.holds("camera", "recording"));
+        assert!(claims.end(second, "camera").is_some());
+        assert!(!claims.holds("camera", "recording"));
+    }
+
+    #[test]
+    fn handle_exhaustion_never_reuses_a_previous_handle() {
+        let mut claims = BackgroundClaims::default();
+        let first = claims.begin("clock", "countdown-timer").unwrap();
+        claims.last_handle = u32::MAX - 1;
+        let last = claims.begin("camera", "recording").unwrap();
+        assert_eq!(last, u32::MAX);
+        assert!(matches!(
+            claims.begin("music", "audio-playback"),
+            Err(zbus::fdo::Error::LimitsExceeded(_))
+        ));
+        assert!(claims.end(first, "clock").is_some());
+        assert!(claims.end(last, "camera").is_some());
+        assert!(claims.begin("music", "audio-playback").is_err());
+        assert!(!claims.holds("music", "audio-playback"));
+    }
 }

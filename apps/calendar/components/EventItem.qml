@@ -12,25 +12,31 @@ ListItem {
 
     objectName: "eventItem"
     width: parent ? parent.width : 0
-    contentHeight: Theme.itemSizeMedium
-    readonly property string details: [showDate ? app.dateText(modelData) : modelData.recurring && modelData.recurring !== "none" ? app.repeatText(modelData.recurring) : "", modelData.location || ""].filter(s => s !== "").join(" · ")
+    contentHeight: Math.max(Theme.itemSizeMedium, Math.max(timeColumn.height, detailsColumn.height) + 2 * Theme.paddingMedium)
+    readonly property string details: [showDate ? app.dateText(modelData) : modelData.recurring && modelData.recurring !== "none" ? app.repeatText(modelData.recurring) : "", modelData.location || "", modelData.accountLabel || "", modelData.recurrenceIncomplete ? qsTr("Series preview") : ""].filter(s => s !== "").join(" · ")
 
-    Accessible.name: [modelData.title || qsTr("Untitled event"), showDate ? app.dateText(modelData) : "", app.timeRangeText(modelData), modelData.location || ""].filter(s => s !== "").join(", ")
+    Accessible.name: [modelData.title || qsTr("Untitled event"), showDate ? app.dateText(modelData) : "", app.timeRangeText(modelData), modelData.location || "", modelData.accountLabel || "", modelData.recurrenceIncomplete ? qsTr("Series preview") : ""].filter(s => s !== "").join(", ")
     onClicked: app.openEvent(modelData)
-    menu: ContextMenu {
-        MenuItem {
-            objectName: "editItem"
-            text: qsTr("Edit")
-            onClicked: item.app.editEvent(item.modelData)
-        }
-        MenuItem {
-            objectName: "deleteItem"
-            text: qsTr("Delete")
-            onClicked: {
-                const id = item.modelData.id;
-                item.remorseDelete(function () {
-                    item.app.deleteEvent(id);
-                });
+    menu: modelData.readOnly ? null : eventMenu
+
+    Component {
+        id: eventMenu
+
+        ContextMenu {
+            MenuItem {
+                objectName: "editItem"
+                text: qsTr("Edit")
+                onClicked: item.app.editEvent(item.modelData)
+            }
+            MenuItem {
+                objectName: "deleteItem"
+                text: qsTr("Delete")
+                onClicked: {
+                    const id = item.modelData.id;
+                    item.remorseDelete(function () {
+                        item.app.deleteEvent(id);
+                    });
+                }
             }
         }
     }
@@ -86,6 +92,8 @@ ListItem {
     }
 
     Column {
+        id: detailsColumn
+
         anchors {
             left: bar.right
             leftMargin: Theme.paddingMedium
@@ -97,7 +105,7 @@ ListItem {
         Label {
             width: parent.width
             text: item.modelData.title || qsTr("Untitled event")
-            truncationMode: TruncationMode.Fade
+            wrapMode: Text.Wrap
             color: item.highlighted ? Theme.highlightColor : Theme.primaryColor
         }
         Label {
@@ -105,7 +113,7 @@ ListItem {
             visible: text !== ""
             text: item.details
             font.pixelSize: Theme.fontSizeExtraSmall
-            truncationMode: TruncationMode.Fade
+            wrapMode: Text.Wrap
             color: item.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
         }
     }

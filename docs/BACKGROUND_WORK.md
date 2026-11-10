@@ -23,7 +23,11 @@ So background work has two cases:
 
 An app declares tasks in its `manifest.json`. Each task names one of the app's
 Keel Actions (its `keel-actions.json`, installed by `install_keel_actions`);
-running the task is invoking that action.
+running the task is invoking that action. The v1 manifest schema accepts up
+to eight tasks per app. The generator enforces the same limits even when
+source lint was skipped. No bundled app currently declares a schedule;
+the following is a declaration example, not a claim that Mail exports
+`mail.sync` today.
 
 ```json
 "backgroundTasks": [
@@ -51,9 +55,22 @@ running the task is invoking that action.
 | `wake` | no | May wake a suspended device. Needs `intervalMinutes` ≥ 60. Default `false` |
 | `timeoutSeconds` | no | 1–600, default 60. The call is abandoned after this |
 
-The app id must be dot-separated `[A-Za-z_][A-Za-z0-9_-]*` elements, so that
-`org.marathonos.<id>` is a bus name. This field is for the manifest schema
-(roadmap R13); the generator is its only reader today.
+Task ids cannot start or end with a hyphen. Unknown task fields, explicit
+`null` constraints, unsupported intervals and invalid timeouts are refused.
+Duplicate task ids reject the app's entire schedule, including when one of
+the conflicting declarations is otherwise invalid. A network constraint
+requires `"network"` in the app's `permissions`; it does not grant access.
+A schedule with more than eight declarations is rejected in full. Eight is the
+per-app registration bound, not a promise of eight simultaneous workers or
+a measured energy budget.
+
+The app id follows manifest v1: 2–128 characters, dot-separated
+`[a-z][a-z0-9_-]*` elements, matching the install directory. The installed
+Keel manifest must identify `org.marathonos.<id>` and declare each scheduled
+action exactly once. Its input schema must accept `{}` and its confirmation
+flag must be absent or `false`; a required argument, malformed flag or
+confirmation prompt cannot be satisfied by an unattended timer. Source
+lint checks these contracts before installation.
 
 Intervals are fixed slots on wall-clock boundaries (`*:00/15`, `hourly`,
 `00/4:00`, `daily`, ...), as Sailfish's nemo-keepalive `BackgroundActivity`
@@ -121,9 +138,17 @@ network is NetworkManager's `State` = `CONNECTED_GLOBAL` (70), unmetered is
 kernel's `/sys/class/power_supply` (peripheral batteries ignored, external
 power never low). Charging uses systemd's own `ConditionACPower=`.
 
-Only system apps (`/usr/share/marathon-apps`) are read. Store-installed apps
-need their Keel manifest and activation file installed and a `daemon-reload`
-after install first.
+Only system apps (`/usr/share/marathon-apps`) are read. `marathon-dev lint`
+and the user package/directory installer reject nonempty `backgroundTasks`
+for third-party apps with an explicit unsupported-feature error. An empty
+array remains valid. Supporting store-installed schedules needs owned Keel
+manifest and activation registration, permission/revocation enforcement,
+timer cleanup on update/removal, and a user-manager reload; declaring tasks
+alone does not implement that lifecycle.
+
+This contract does not enable automatic suspend, grant root/system access,
+or add a new wake source. Existing app permissions and the wake service's
+device and low-battery behavior continue to apply.
 
 ### System services
 

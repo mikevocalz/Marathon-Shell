@@ -41,6 +41,9 @@ restricted permissions.
 | `protected` | only Marathon's own apps are protected |
 | `permission` | restricted permissions (`system`, `terminal`) only in Marathon's own apps |
 | `permission-reason` | every sensitive permission has a reason in `permissionReasons`, and every reason is for a requested permission |
+| `background-tasks` | scheduled work is supported only for OS-installed apps; user packages must not advertise schedules that cannot run |
+| `background-task` | scheduled task ids are unique within the app |
+| `background-action` | each scheduled action is declared once in the app's Keel Actions manifest, accepts empty arguments and requires no confirmation |
 | `files` | `entryPoint` and `icon` exist in the app |
 | `tested-on` | each width in `testedOn.widths` is laid out by a test under `tests/` (`width: N`), and `keyboard` is only declared when a test sends key events |
 | `id-cmake` | `add_marathon_app(...)` and `install_keel_actions(...)` in `CMakeLists.txt` use the app id, which names the install directory and the `org.marathonos.<id>` D-Bus name |
@@ -95,6 +98,7 @@ Required: `manifestVersion`, `id`, `name`, `version`, `entryPoint`, `icon`,
 | `permissions` | array | Names from the permission vocabulary. |
 | `permissionReasons` | object | Permission name → why the app needs it, shown to the user (10–300 characters). Required for every sensitive permission. |
 | `minShellVersion` | string | Oldest shell the app runs on. |
+| `minImage` | string | Set by `scripts/reef/publish-apps` on a copy of an OS app that Reef installs: the oldest `IMAGE_VERSION` it runs on (the image it was built against). Ignored for the OS's own copy. |
 | `protected` | boolean | A system app: cannot be uninstalled and holds its permissions without a prompt. Honoured only for an app the OS installed or signed with a system key ([CODE_SIGNING_GUIDE.md](CODE_SIGNING_GUIDE.md#trusted-keys)); ignored for any other. |
 | `toolkit` | `keel` \| `marathonui` | How the runner hosts the app. Default `keel`. |
 | `categories` | array | `Communication`, `Productivity`, `Entertainment`, `Utility`, `System`. |
@@ -104,6 +108,7 @@ Required: `manifestVersion`, `id`, `name`, `version`, `entryPoint`, `icon`,
 | `searchKeywords` | array | Extra search terms for the app. |
 | `deepLinks` | object | Route → `{ title, description, keywords }`, indexed by search (below). |
 | `backgroundCapabilities` | array | Categories the app may hold `AppLifecycle1.BeginBackgroundTask` for: `active-call`, `active-navigation`, `audio-playback`, `countdown-timer`, `download`, `location-tracking`, `periodic-sync`, `recording`. |
+| `backgroundTasks` | array | Up to eight periodic Keel actions, currently for OS-installed apps only. Each has a unique `id`, an `action` and a supported `intervalMinutes`; optional constraints and bounds are in [BACKGROUND_WORK.md](BACKGROUND_WORK.md). A network constraint requires the `network` permission. This field schedules invocations; it grants no permission or background lifetime claim. |
 | `requiresQtModules` | array | `webengine`: the runner loads QtWebEngine before the app starts. |
 | `chromiumFlags` | string | Space-separated Chromium switches over the device default. Needs `requiresQtModules: ["webengine"]`. |
 | `testedOn` | object | Below. |
@@ -146,12 +151,21 @@ What uninstalling the app does to its data, after Luma's `[lifecycle]` table.
 | `secrets` | `remove` \| `keep` | the app's Secret Service items; declared exactly when the app requests `secret-service` |
 | `userFiles` | `preserve` | files the app wrote to the media folders, which are never deleted with the app; only with `storage` |
 
-Uninstalling acts on it: the install and the cache always go; the data and
-config directories, the dconf keys and the shell settings keys go unless
-`appData` is `keep` (an app that declares nothing loses its data, as on
-Android); media folder files stay. `secrets` is not acted on yet: apps
-reach the Secret Service directly and its items carry no app id, so the
-uninstaller cannot tell an app's passwords from anyone else's.
+Uninstalling first removes the published installation. Code generations and
+writable directories are retained until a later device boot proves that old
+runners are gone. Settings lists pending cleanup even after the app leaves the
+launcher; **Retry cleanup** or `marathon-dev uninstall <id>` resumes the recorded
+operation. Reinstalling that ID is refused until filesystem cleanup finishes.
+
+The cache is removed on that retry. Data and config directories are removed
+unless `appData` is `keep`; media folder files stay. Removing an installed update
+of a bundled system app preserves its writable directories and cache because
+the bundled app still uses them. Shared dconf and shell settings cleanup is
+reported as unsupported when removal was requested. `secrets` is not acted on:
+apps reach the Secret Service directly and its items carry no reliable app id,
+so the uninstaller cannot identify an app's passwords safely. Neither the UI
+nor CLI reports full cleanup for these unsupported categories. See
+[app lifecycle transaction boundaries](v2/APP_LIFECYCLE_TRANSACTIONS.md).
 
 ## Share methods
 
@@ -204,6 +218,10 @@ running, emits `NavigationRouter.deepLinkRequested(appId, route, params)`.
   and `icon`, and that the entry point exists.
 
 Neither runs the full contract; `marathon-dev lint` does.
+
+The user installer additionally rejects nonempty or malformed
+`backgroundTasks`: it cannot yet register, revoke and remove third-party
+schedules. The system-app lint mode does not change this install policy.
 
 The installer also shows each declared permission to the user in words, refuses
 a package that declares one it can't describe, and holds an update that adds

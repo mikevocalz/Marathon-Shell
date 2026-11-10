@@ -5,7 +5,7 @@ use std::pin::Pin;
 use cxx_qt::{CxxQtType, Threading};
 use cxx_qt_lib::{QDateTime, QString};
 
-use crate::shell::{get, mirror, Service, Update};
+use crate::shell::{get, mirror, Field, Service, Update};
 
 #[cxx_qt::bridge(namespace = "marathon::platform")]
 pub mod qobject {
@@ -26,6 +26,10 @@ pub mod qobject {
         #[qproperty(i32, estimated_battery_time, cxx_name = "estimatedBatteryTime", READ, NOTIFY = state_changed)]
         #[qproperty(QString, power_profile, cxx_name = "powerProfile", READ, NOTIFY = state_changed)]
         #[qproperty(bool, power_profiles_supported, cxx_name = "powerProfilesSupported", READ, NOTIFY = state_changed)]
+        /// The phone has an assistant key (the key between the volume keys).
+        #[qproperty(bool, has_assist_key, cxx_name = "hasAssistKey", READ, NOTIFY = state_changed)]
+        /// The keyboard has a trackpad.
+        #[qproperty(bool, has_trackpad, cxx_name = "hasTrackpad", READ, NOTIFY = state_changed)]
         /// False once the shell refuses the system permission.
         #[qproperty(bool, permitted, READ, NOTIFY = state_changed)]
         type Power = super::PowerRust;
@@ -56,6 +60,7 @@ pub mod qobject {
     }
 
     impl cxx_qt::Threading for Power {}
+
     impl cxx_qt::Initialize for Power {}
 }
 
@@ -63,7 +68,6 @@ use qobject::Power;
 
 const POWER: Service = Service::shell("Power");
 
-#[derive(Default)]
 #[allow(clippy::struct_excessive_bools, reason = "the QML properties")]
 pub struct PowerRust {
     battery_level: i32,
@@ -73,7 +77,26 @@ pub struct PowerRust {
     estimated_battery_time: i32,
     power_profile: QString,
     power_profiles_supported: bool,
+    has_assist_key: bool,
+    has_trackpad: bool,
     permitted: bool,
+}
+
+impl Default for PowerRust {
+    fn default() -> Self {
+        Self {
+            battery_level: -1,
+            is_charging: false,
+            is_plugged_in: false,
+            is_power_save_mode: false,
+            estimated_battery_time: -1,
+            power_profile: QString::default(),
+            power_profiles_supported: false,
+            has_assist_key: false,
+            has_trackpad: false,
+            permitted: false,
+        }
+    }
 }
 
 impl cxx_qt::Initialize for Power {
@@ -85,13 +108,18 @@ impl cxx_qt::Initialize for Power {
                 Update::Refused => p.permitted = false,
                 Update::State(s) => {
                     p.permitted = true;
-                    p.battery_level = get(&s, "batteryLevel");
+                    p.battery_level = s
+                        .get("batteryLevel")
+                        .and_then(i32::from_value)
+                        .unwrap_or(-1);
                     p.is_charging = get(&s, "isCharging");
                     p.is_plugged_in = get(&s, "isPluggedIn");
                     p.is_power_save_mode = get(&s, "isPowerSaveMode");
                     p.estimated_battery_time = get(&s, "estimatedBatteryTime");
                     p.power_profile = get(&s, "powerProfile");
                     p.power_profiles_supported = get(&s, "powerProfilesSupported");
+                    p.has_assist_key = get(&s, "hasAssistKey");
+                    p.has_trackpad = get(&s, "hasTrackpad");
                 }
             }
             obj.state_changed();

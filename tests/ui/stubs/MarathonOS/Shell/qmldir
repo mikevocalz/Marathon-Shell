@@ -53,6 +53,7 @@ singleton WindowOrigins 1.0 ../../../../../shell/qml/core/WindowOrigins.qml
 GestureTracker 1.0 GestureTracker.qml
 WindowTextureItem 1.0 WindowTextureItem.qml
 singleton WeatherClient 1.0 WeatherClient.qml
+singleton NotesTaskClient 1.0 NotesTaskClient.qml
 FilteredAppModel 1.0 FilteredAppModel.qml
 Key 1.0 ../../../../../shell/qml/keyboard/UI/Key.qml
 PredictionBar 1.0 ../../../../../shell/qml/keyboard/UI/PredictionBar.qml
@@ -70,3 +71,5 @@ MTabBar 1.0 ../../../../../shell/qml/ui/MTabBar.qml
 FileChooserModel 1.0 FileChooserModel.qml
 BackdropProbe 1.0 BackdropProbe.qml
 NativeSurfaceItem 1.0 NativeSurfaceItem.qml
+
+singleton CalendarEventsClient 1.0 CalendarEventsClient.qml
