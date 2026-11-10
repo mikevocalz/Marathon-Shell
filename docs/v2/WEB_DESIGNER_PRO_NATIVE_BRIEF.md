@@ -93,7 +93,7 @@ Web Designer Pro helps review composition and coherence. Artcraft helps
 structure the local reference investigation. Neither is a new runtime
 dependency, nor does this PR claim that an APK has already been dissected.
 
-## First concrete application
+## Implemented application
 
 [PR #17](https://github.com/mikevocalz/Marathon-Shell/pull/17) introduces a shared
 native summary row for Settings and People. Use it as the first component
@@ -102,6 +102,9 @@ text, distinguishing accessible names and inherited focus/menu behavior.
 
 [PR #19](https://github.com/mikevocalz/Marathon-Shell/pull/19) reviews continuity
 and message identity. [PR #20](https://github.com/mikevocalz/Marathon-Shell/pull/20)
-reviews shared calendar data and truthful read-only states. These slices make
-the standard concrete; they do not certify all native screens. The remaining
-app journeys are explicit in the shared inventory.
+reviews shared calendar data and truthful read-only states. [PR #21](https://github.com/mikevocalz/Marathon-Shell/pull/21)
+integrates those foundations and implements the remaining product-app polish.
+The [implementation inventory](NATIVE_APP_POLISH.md) and
+[native review record](NATIVE_UI_REVIEW_2026-11-10.md) describe actual changes,
+tests, captures and their limits. Device/provider qualification is separate
+from native UI testing with service fixtures.

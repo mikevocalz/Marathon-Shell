@@ -1,7 +1,8 @@
 # Native UI consistency
 
-Status: shared implementation and review contract; individual screens still need
-native review. Source inspected: `094ed581d93e2ca0f8bca61c3a30c011ee601727`.
+Status: implemented across the product-app inventory, with real native tests
+and a [dated review record](NATIVE_UI_REVIEW_2026-11-10.md). The original source
+audit used `094ed581d93e2ca0f8bca61c3a30c011ee601727`.
 Scope: shell, Marathon.Silica, 14 standard apps, Pilot and Reef. The template
 is source-checked; the diagnostic app participates in the journey inventory.
 
@@ -31,6 +32,7 @@ value. Keep Work/Personal Spaces in 2.1.
 | --- | --- | --- |
 | App text, accent and selected states | Keel `Sailfish.Silica.Theme`: `primaryColor`, `secondaryColor`, `highlightColor`, `secondaryHighlightColor` | Inherit the current theme. Account identity has a text label; hue cannot carry identity or state alone. |
 | Shell colors | `shell/qml/theme/MColors.qml` | Use semantic aliases. Its text/accent roles already read Silica Theme; do not add a second palette in an app. |
+| Fixed media contrast and code text | `Marathon.Silica.ContentStyle` | Black/white media surfaces and installed monospace fallback are content requirements; ordinary controls continue to follow the ambience. |
 | Type | App `Theme.fontFamily` and `fontSize*`; shell `MTypography.qml` | Shell body size derives from `Theme.fontSizeMedium`. Keep user scaling. Code/emoji font exceptions need an actual content requirement. |
 | App spacing | `Theme.padding*`, `horizontalPageMargin`, native control geometry | Use the toolkit's density. A multiple such as two section gaps is deliberate composition, not a new local spacing scale. |
 | Shell spacing | `MSpacing.qml`: 4/8/16/24/32/40 base units, scaled in the owner | Consumers select roles; do not repeat these numbers throughout pages. |
@@ -60,7 +62,7 @@ decision; a convenient import is not that decision.
 
 | UI need | Starting point | Acceptance detail |
 | --- | --- | --- |
-| One item with a primary and secondary line | `SummaryListItem` proposed in [PR #17](https://github.com/mikevocalz/Marathon-Shell/pull/17); otherwise the existing `ListItem` | Long identity/status text grows within the row. The accessible name includes the distinguishing secondary value. Use the new component only after its dependency lands. |
+| One item with a primary and secondary line | `SummaryListItem`, integrated from [PR #17](https://github.com/mikevocalz/Marathon-Shell/pull/17) | Long identity/status text grows within the row. The accessible name includes the distinguishing secondary value. |
 | Primary/secondary action | `Button`, `SecondaryButton`, `IconButton` | Same pressed/focus/disabled behavior; label describes the action. Explain why an important action is unavailable. |
 | Search/filter/selection | `SearchField`, `FilterChip`, existing tab controls | Preserve query and selection on back/resume/resize. Distinguish no data from no matches. |
 | Data entry | `TextField`, `TextArea`, `ComboBox`, `Slider`, switches | Keep input and cursor on recoverable errors; associate labels and feedback with the field. |
@@ -129,7 +131,8 @@ blocked checks explicitly.
 
 The machine-readable [inventory](../../tools/native-ui-consistency/policy.json)
 contains one concrete review journey for every app directory. Product entries
-start at `native-review-needed`; inventory inclusion is not qualification.
+link their implementation and native-test evidence; inventory inclusion alone
+is not qualification. See the [implemented surfaces](NATIVE_APP_POLISH.md).
 
 | Wave | Areas | Shared improvement to review |
 | --- | --- | --- |
@@ -153,9 +156,10 @@ records existing findings by exact path, rule, expression and count; new or
 duplicated findings fail. Removed findings must retire their allowance.
 
 The initial audit found 134 source findings across 430 production QML files.
-Some are intentional viewfinder, compositing, font or object geometry choices;
-they require review before replacement. The baseline is an explicit inventory
-of inherited decisions, not a visual approval.
+The implementation resolved all 134 and retired their exact allowances. Fixed
+viewfinder/media contrast, code fonts and intentional geometry retain their
+meaning through shared owners. The baseline is now empty; reintroducing a
+direct local literal or missing wrapper import fails the source check.
 
 The check also requires a journey for new app directories, including a nested
 `ui/` layout. The workflow runs the checker and its regression tests through

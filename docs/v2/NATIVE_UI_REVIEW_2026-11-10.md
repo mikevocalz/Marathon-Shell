@@ -1,0 +1,130 @@
+# Native UI implementation review — 10 November 2026
+
+## Change and evidence identity
+
+This review covers the implemented all-app polish in PR21, including the
+shared-row, Hub/Mail and shared-Calendar prerequisites from PR17/19/20.
+The original audit/feature base is
+`094ed581d93e2ca0f8bca61c3a30c011ee601727`; the PR records its exact published
+head and tree. Product scope is 16 native apps plus the Hub, shell and shared
+controls. Template and diagnostics remain support entries.
+
+The local runtime is the official Qt **6.11.1** Linux x86_64 SDK and unmodified
+Keel **0df499bf34e02cec7f571853cbf5a4323dc1609e**. Native controls, theme,
+Actions, Share, Pickers, Gallery, KeepAlive, Notifications and Thumbnailer are
+compiled from that pin. Qt Multimedia, Positioning, Core5Compat, WebChannel
+and WebEngine are real modules. Offscreen rendering uses the software scene
+graph and the generated production Phosphor icon theme. Each suite gets an
+isolated JSON Configuration store. Platform-service fixtures remain explicit;
+this environment does not impersonate a device or a live account provider.
+
+The [implementation inventory](NATIVE_APP_POLISH.md) states what changed in
+each app. The [native contract](NATIVE_UI_CONSISTENCY.md) and the user's
+[Web Designer Pro adaptation](WEB_DESIGNER_PRO_NATIVE_BRIEF.md) govern visual
+and interaction choices. Fixed media contrast, text source identity, small
+corners, native menus and retained task state were kept deliberately.
+
+## Real native suite results
+
+All rows below name executed production QML with real Qt/Keel controls.
+“Cases” excludes lifecycle entries; “results” includes them. Platform services
+use their existing fixtures. The corresponding full app runners are mandatory
+in the dedicated native CI job, not conditional on the compositor build.
+
+| Suite | Cases | Results | Local result |
+| --- | ---: | ---: | --- |
+| Browser | 77 | 87 | Pass |
+| Calculator | 97 | 107 | Pass |
+| Calendar | 61 | 69 | Pass |
+| Camera | 15 | 19 | Pass |
+| Clock | 97 | 111 | Pass |
+| Mail | 107 | 119 | Pass |
+| Gallery | 56 | 66 | Pass |
+| Maps | 61 | 69 | Pass |
+| Messages | 67 | 77 | Pass |
+| Music | 87 | 103 | Pass |
+| Notes / Tasks | 167 | 183 | Pass |
+| Phone / People | 81 | 95 | Pass |
+| Pilot | 9 | 11 | Pass |
+| Reef | 2 | 4 | Pass |
+| Settings | 162 | 188 | Pass |
+| Terminal | 64 | 76 | Pass |
+| Shared Marathon.Silica controls | 151 | 187 | Pass |
+
+The full suites contain zero skipped cases. Separate shell tests cover Hub,
+PageViewHub, overview geometry, task switching, page indicators, keyboard keys
+and language selection. Native toolkit checks exercise actual module loading,
+WebEngine HTML loading and theme-image readiness. Validator/gate-contract tests
+prove that missing tools, reports, empty suites and skipped tests cannot count
+as coverage. Source consistency has zero new and zero inherited findings; all
+134 original allowances were retired after their source changes.
+
+The production Notes-wire client builds from its locked Rust dependencies.
+This host denies private D-Bus socket creation, so its integration run is
+recorded as blocked locally and remains a required CI test. Existing focused
+PR17, PR19 and PR20 have successful native and complete build/test CI runs.
+Current integration CI evidence is recorded on PR21.
+
+## Native visual review
+
+The reproducible native capture harness uses the production Mail, Phone,
+Notes and Pilot windows with synthetic fixture data. It checks page readiness,
+actual window dimensions and output images and records source/runtime
+provenance. Capture files and review findings accompany the PR.
+
+| Profile | State and interaction | Evidence scope |
+| --- | --- | --- |
+| 320 × 640 | Mail source hierarchy; incoming call; large-text task; Pilot conversation/composer | Actual native windows and existing service fixtures |
+| 720 × 720 | Duplicate-name contacts and exact Mail source opened with Return | Square keyboard-device layout and keyboard activation |
+| 1024 × 768 | Notes task/editor workspace and Pilot conversation/composer | Wider layout with the same task state |
+| Narrow → wide → narrow | Shared rows, headings/keypad; app rows, call controls, drafts and ambience selection | Native geometry, identity and focus regressions |
+| Reduced motion / scale changes | Shell task-page indicator and shared native controls | Live token scale 0.75/1/1.5/2 and final geometry |
+
+## Findings fixed during native verification
+
+- Long Calendar year labels exceeded narrow day cells. Adaptive outer spacing
+  and content geometry now retain the actual font advance width.
+- Phone call content collided with persistent actions in short windows. The
+  identity and secondary controls scroll above the primary action region.
+  Native capture review also caught a broken Message label; metric-based
+  inline/stacked action layout now keeps action names readable.
+- Pilot disabled actions needed explicit native button admission, and deferred
+  conversation scrolling could target a removed view. Both paths were fixed
+  and exercised with real keyboard activation. Capture review found cramped
+  compact prompt input; narrow full-window and overlay composers now give
+  text its own row above the full-size action targets.
+- Camera keyboard controls used a QtQuick import revision predating
+  `activeFocusOnTab`. The real module loader exposed it; controls now use the
+  current API. The unavailable-camera placeholder has its required native
+  flickable parent and is tested for visible, nonzero geometry.
+- Native busy graphics were missing from the icon theme. All four sizes now
+  resolve to a production asset and have a native readiness regression.
+- A context menu could execute a deferred callback after destruction. Its
+  outside-press guard now releases through a timer owned by the menu.
+- Hub footer clearance depended on the scroll geometry it changed. It now
+  depends on item presence, with unchanged clearance across scrolling and a
+  binding-loop regression in the retained-context test.
+- The shell fixture loaded real scale-token singletons recursively. Module-local
+  symlinks keep the actual production implementations and test live scaling;
+  the formatter preserves those links and formats their tracked targets.
+- Several new geometry checks read before native Column/Row layout finished.
+  They now wait for the actual positions while retaining their bounds and
+  identity assertions.
+
+## Qualification limits
+
+Native test fixtures establish app presentation and interaction contracts.
+They do not establish physical touch latency, screen-reader speech order,
+hardware camera output, microphone/audio routing, GPU frame pacing, suspend
+wakeups or live IMAP/SMTP/CalDAV/provider behavior. Maps tests retain their
+existing renderer fixture. The selected software scene graph does not qualify
+glass/blur shaders on device hardware or a complete light theme.
+
+The shared calendar feed is a read-only account preview. Recurrence expansion,
+remote editing/invitations and daemon-owned reminders are outside that feature.
+Mail's existing optimistic seen/move and synchronous send behavior is not a
+new durable operation journal. The local Artcraft APK workflow is implemented;
+no supplied BlackBerry APK or APK-runtime observation is claimed here.
+
+No v2 branch merge, deployment or release was performed. Work/Personal Spaces
+remain 2.1 and premium/native-extension products remain independently installable.

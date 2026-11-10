@@ -111,6 +111,22 @@ class StyleRules(unittest.TestCase):
             self.assertNotIn("fixture", errors[0])
             self.assertEqual(ui.inventory_errors(root, {"schema": 2}), ["Unsupported native UI policy schema"])
 
+    def test_native_stage_requires_linked_suite_and_review(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "apps/native/tests").mkdir(parents=True)
+            (root / "apps/native/Main.qml").write_text("Item {}")
+            row = {"directory": "native", "journey": "Open an item and return.",
+                   "stage": "native-ui-tested", "test_suite": "apps/native/tests/run.sh",
+                   "review_record": "review.md"}
+            policy = {"schema": 1, "apps": [row], "token_owners": {}}
+            self.assertEqual(len(ui.inventory_errors(root, policy)), 2)
+            (root / row["test_suite"]).write_text("#!/bin/sh\n")
+            (root / "review.md").write_text("Native runtime and fixture scope.\n")
+            self.assertEqual(ui.inventory_errors(root, policy), [])
+            row["review_record"] = "../outside.md"
+            self.assertTrue(ui.inventory_errors(root, policy))
+
     def test_removed_debt_must_retire_its_allowance(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

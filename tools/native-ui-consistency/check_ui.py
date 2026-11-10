@@ -177,8 +177,14 @@ def inventory_errors(root, policy):
         errors.append("App inventory mismatch: missing=" + repr(sorted(expected - set(names)))
                       + ", stale=" + repr(sorted(set(names) - expected)))
     for row in rows:
-        if not row.get("journey") or row.get("stage") not in {"native-review-needed", "support-only"}:
+        if not row.get("journey") or row.get("stage") not in {"native-review-needed", "native-ui-tested", "support-only"}:
             errors.append("Every app needs a concrete journey and an honest review stage: " + row["directory"])
+        if row.get("stage") == "native-ui-tested":
+            for field in ("test_suite", "review_record"):
+                value = row.get(field)
+                path = Path(value) if isinstance(value, str) and value else None
+                if path is None or path.is_absolute() or ".." in path.parts or not (root / path).is_file():
+                    errors.append("Native UI evidence is missing or outside this repository: " + row["directory"] + ": " + field)
     for path, rules in policy["token_owners"].items():
         if not (root / path).is_file() or not rules or set(rules) - RULES.keys():
             errors.append("Invalid token owner: " + path)

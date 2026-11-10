@@ -33,11 +33,13 @@ every property or a whole directory.
 
 ## Existing findings and cleanup
 
-`baseline.json` records the source inspected at
-`094ed581d93e2ca0f8bca61c3a30c011ee601727`: 134 findings across
-430 production QML files. They are source review candidates. A viewfinder,
-compositing mask or emoji font can have a legitimate literal; do not replace
-one mechanically with an unrelated theme role.
+The original audit of `094ed581d93e2ca0f8bca61c3a30c011ee601727` found 134
+findings across 430 production QML files. The all-app implementation resolved
+every finding and retired every exact allowance; `baseline.json` is now empty.
+Fixed media contrast and code-font choices live in `ContentStyle`; shell roles
+remain in the existing theme owners. No new baseline allowance was added.
+A viewfinder, compositing mask or emoji font still needs the appropriate
+content-specific role, rather than an unrelated status or ambience color.
 
 Every allowance matches an exact path, rule, normalized expression and count.
 Moving it to another file, changing its value or adding another copy fails.
