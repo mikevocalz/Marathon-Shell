@@ -175,6 +175,38 @@ TestCase {
         verify(dawn.current);
     }
 
+    function test_ambienceFitsNarrowAndWideWindows() {
+        const original = Wallpapers.wallpapers;
+        const title = "<b>A long wallpaper name that keeps its literal identity</b>";
+        Wallpapers.wallpapers = [
+            {
+                name: title,
+                path: "file:///wallpapers/dawn.svg",
+                isDark: false
+            }
+        ];
+        try {
+            const s = open("ambience");
+            const grid = child(s.page, "ambienceGrid");
+            s.app.width = 320;
+            tryCompare(grid, "width", 320);
+            compare(grid.columns, 2);
+            const tile = child(s.page, "ambience-" + title);
+            const caption = child(tile, "ambienceName");
+            compare(caption.textFormat, Text.PlainText);
+            verify(caption.width > 0);
+            tile.forceActiveFocus();
+            keyClick(Qt.Key_Return);
+            compare(Settings.wallpaperPath, "file:///wallpapers/dawn.svg");
+            s.app.width = 1440;
+            tryVerify(() => grid.columns > 2);
+            verify(grid.cellWidth < grid.width / 2);
+            verify(tile.current);
+        } finally {
+            Wallpapers.wallpapers = original;
+        }
+    }
+
     function test_sounds() {
         const s = open("sound");
         const volume = child(s.page, "volumeSlider");
