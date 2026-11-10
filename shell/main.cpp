@@ -1254,7 +1254,8 @@ int main(int argc, char *argv[]) {
     pilot->setParent(&app);
     qmlRegisterSingletonInstance<marathon::PilotClient>("MarathonOS.Shell", 1, 0, "PilotClient",
                                                         pilot);
-    auto *calendarEvents = new marathon::CalendarEventsClient(&app);
+    auto *calendarEvents = new marathon::CalendarEventsClient();
+    calendarEvents->setParent(&app);
     qmlRegisterSingletonInstance<marathon::CalendarEventsClient>(
         "MarathonOS.Shell", 1, 0, "CalendarEventsClient", calendarEvents);
 
