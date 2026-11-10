@@ -8,13 +8,14 @@
 # and it follows a branch.
 pkgname=shoal-pilot
 pkgver=0.1.0
-pkgrel=6
+pkgrel=7
 pkgdesc="Pilot assistant for Marathon"
 url="https://github.com/patrickjquinn/Marathon-Shell"
 arch="aarch64 x86_64"
 license="Apache-2.0"
 depends="
 	keel-silica
+	marathon-silica
 	qt6-qtdeclarative
 	qt6-qtmultimedia
 	shoal-pilotd

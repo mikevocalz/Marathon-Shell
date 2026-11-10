@@ -2,7 +2,7 @@
 # Maintainer: Patrick Quinn <patrick@jquinn.com>
 pkgname=marathon-shell
 pkgver=1.0.0
-pkgrel=528
+pkgrel=529
 pkgdesc="Marathon Shell - Modern Wayland compositor with Qt6/QML"
 url="https://github.com/patrickjquinn/Marathon-Shell"
 arch="aarch64"
@@ -66,6 +66,7 @@ depends="
 	libcap-utils
 	keel-silica
 	marathon-icon-theme
+	marathon-silica=$pkgver-r$pkgrel
 	zstd
 	"
 makedepends="
@@ -100,7 +101,7 @@ makedepends="
 	sqlite-dev
 	"
 install="$pkgname.post-install"
-subpackages="$pkgname-doc marathon-icon-theme:icontheme:noarch $pkgname-browser:browser
+subpackages="$pkgname-doc marathon-icon-theme:icontheme:noarch marathon-silica:silica:noarch $pkgname-browser:browser
 	$pkgname-test-app:testapp"
 # The shell source is this repo. scripts/qemu/lib/build-marathon-shell-apk.sh
 # stages the working tree into /var/cache/distfiles as
@@ -368,6 +369,12 @@ testapp() {
 }
 
 # sha512sums regenerate with `abuild checksum` on build host.
+silica() {
+	pkgdesc="Shared native Marathon QML controls and content styles"
+	depends="keel-silica qt6-qtdeclarative"
+	amove usr/lib/qt6/qml/Marathon
+}
+
 icontheme() {
 	pkgdesc="Phosphor icons under Sailfish icon names, for Keel's Silica"
 	license="MIT"
