@@ -63,7 +63,7 @@ Page {
         VerticalScrollDecorator {}
     }
 
-    Row {
+    Grid {
         id: actions
 
         width: parent.width - 2 * Theme.horizontalPageMargin
@@ -72,11 +72,16 @@ Page {
             bottom: answerButton.top
             bottomMargin: Theme.paddingLarge
         }
-        spacing: Theme.paddingLarge
+        columns: root.phone.callNumber.length > 0 && messageAction.minimumColumnWidth + declineAction.minimumColumnWidth + columnSpacing <= width ? 2 : 1
+        columnSpacing: Theme.paddingLarge
+        rowSpacing: Theme.paddingSmall
 
         LabelledButton {
+            id: messageAction
+
             name: "message"
-            width: (actions.width - actions.spacing) / 2
+            width: actions.columns === 2 ? (actions.width - actions.columnSpacing) / 2 : actions.width
+            inlineLabel: actions.columns === 1
             visible: root.phone.callNumber.length > 0
             icon: "image://theme/icon-m-message"
             text: qsTr("Message")
@@ -89,8 +94,11 @@ Page {
             }
         }
         LabelledButton {
+            id: declineAction
+
             name: "decline"
-            width: root.phone.callNumber.length > 0 ? (actions.width - actions.spacing) / 2 : actions.width
+            width: actions.columns === 2 ? (actions.width - actions.columnSpacing) / 2 : actions.width
+            inlineLabel: actions.columns === 1
             icon: "image://theme/icon-m-end-call"
             text: qsTr("Decline")
             accessibleName: qsTr("Decline call from %1").arg(root.phone.callName || root.phone.callNumber)
@@ -117,31 +125,48 @@ Page {
         onClicked: Telephony.answer()
     }
 
-    component LabelledButton: Column {
+    component LabelledButton: Item {
         id: labelled
 
         property string name
         property string icon
         property string text
         property string accessibleName
+        property bool inlineLabel: false
+        readonly property real minimumColumnWidth: Math.max(button.width, labelMetrics.width)
 
         signal clicked
 
         width: Theme.itemSizeExtraLarge
+        implicitHeight: inlineLabel ? Math.max(button.height, label.height) : button.height + label.height
+        height: implicitHeight
+
+        TextMetrics {
+            id: labelMetrics
+
+            font: label.font
+            text: labelled.text
+        }
 
         IconButton {
             id: button
 
             objectName: labelled.name + "Button"
-            anchors.horizontalCenter: parent.horizontalCenter
+            x: labelled.inlineLabel ? 0 : (parent.width - width) / 2
+            y: labelled.inlineLabel ? (parent.height - height) / 2 : 0
             icon.source: labelled.icon
             Accessible.name: labelled.accessibleName
             onClicked: labelled.clicked()
         }
         Label {
+            id: label
+
+            objectName: labelled.name + "ActionLabel"
             textFormat: Text.PlainText
-            width: parent.width
-            horizontalAlignment: Text.AlignHCenter
+            x: labelled.inlineLabel ? button.width + Theme.paddingMedium : 0
+            y: labelled.inlineLabel ? (parent.height - height) / 2 : button.height
+            width: parent.width - x
+            horizontalAlignment: labelled.inlineLabel ? Text.AlignLeft : Text.AlignHCenter
             text: labelled.text
             color: button.highlighted ? Theme.highlightColor : Theme.primaryColor
             font.pixelSize: Theme.fontSizeSmall

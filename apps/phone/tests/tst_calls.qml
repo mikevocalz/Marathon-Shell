@@ -131,6 +131,11 @@ TestCase {
         compare(label.textFormat, Text.PlainText);
         verify(!label.truncated);
         verify(info.clip);
+        for (const name of ["messageActionLabel", "declineActionLabel"]) {
+            const actionLabel = findChild(page, name);
+            compare(actionLabel.lineCount, 1, "compact actions keep each label readable");
+            verify(actionLabel.paintedWidth <= actionLabel.width + 1);
+        }
         const before = actionRect(page, answer);
         const decline = actionRect(page, findChild(page, "declineButton"));
         verify(info.mapToItem(page, 0, info.height).y <= decline.y);
