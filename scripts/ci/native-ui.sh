@@ -9,6 +9,18 @@ if [ "${1:-}" != --build ]; then
         qt6-qtdeclarative-private-dev qt6-qtsvg-dev qt6-qtwayland-dev \
         qt6-qtmultimedia-dev qt6-qtpositioning-dev qt6-qt5compat-dev \
         qt6-qtwebengine-dev qt6-qtwebchannel-dev libxkbcommon-dev dbus
+    # The base Qt packages provide fontconfig but no fonts. Empty-font fallback
+    # has different metrics and cannot qualify the production layouts. Use the
+    # image's existing Source Sans files and Sail Sans aliases before running
+    # the suites as the unprivileged ci user.
+    cmake -S /src/tests/native-ui/fonts -B /tmp/native-ui-fonts -G Ninja \
+        -DCMAKE_INSTALL_PREFIX=/usr
+    cmake --install /tmp/native-ui-fonts
+    fc-cache -f /usr/share/fonts/source-sans-3
+    case "$(fc-match -f '%{file}' 'Sail Sans Pro Light')" in
+        /usr/share/fonts/source-sans-3/SourceSans3-Light.ttf) ;;
+        *) echo "Production Sail Sans font alias is unavailable" >&2; exit 1 ;;
+    esac
     adduser -D ci
     cp -a /src /home/ci/src
     chown -R ci:ci /home/ci/src
@@ -97,3 +109,5 @@ cmake -S tests/native-ui -B build-native-ui -G Ninja \
 # CTest also fails if the required label ever selects no tests.
 dbus-run-session -- ctest --test-dir build-native-ui -L native-ui-required \
     --no-tests=error --output-on-failure
+# Keep the successful wrappers' actual case counts visible in the job log.
+sed -n '/^\[native-ui\]/p' build-native-ui/Testing/Temporary/LastTest.log

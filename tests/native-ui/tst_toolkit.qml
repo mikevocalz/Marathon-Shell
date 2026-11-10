@@ -22,6 +22,13 @@ TestCase {
     width: 360
     height: 640
 
+    FontMetrics {
+        id: themeMetrics
+
+        font.family: Theme.fontFamily
+        font.pixelSize: Theme.fontSizeMedium
+    }
+
     Component {
         id: pageComponent
         Page {}
@@ -93,6 +100,12 @@ TestCase {
         verify(icon !== null);
         tryCompare(icon, "status", Image.Ready);
         verify(icon.implicitWidth > 0 && icon.implicitHeight > 0);
+    }
+
+    function test_realThemeFonts() {
+        verify(Qt.fontFamilies().indexOf("Source Sans 3") !== -1, "install the production Marathon fonts before measuring native layouts");
+        verify(themeMetrics.advanceWidth("WWWW") > themeMetrics.advanceWidth("iiii"), "the native theme must resolve proportional glyphs, not empty-font fallback");
+        verify(themeMetrics.height > 0);
     }
 
     function test_realQtModules() {

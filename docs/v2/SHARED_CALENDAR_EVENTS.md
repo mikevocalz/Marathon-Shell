@@ -73,12 +73,26 @@ complete collection sync after daemon startup; legacy rows are not guessed into
 the new identity model.
 
 Full collection replacement and incremental resource changes use SQLite
-transactions. Parse/fetch failures do not replace the collection or advance its
-sync token. A failed write rolls back the collection. Tokens are scoped by both
-account and collection. The visible query filters out removed/disabled accounts
-and collections that no longer belong to an account, even if their cached rows
-still exist. Account removal currently hides that cache; secure data erasure is
-not introduced by this change.
+transactions. iCalendar structural decode, invalid-date and fetch failures do not
+replace the collection or advance its sync token. Unsupported `DURATION` is handled
+separately: supported sibling resources and deletions still apply, while the
+entire unsupported resource keeps its last cached projection. Full refreshes
+also retain those cached rows, but remove unrelated resources missing from the
+provider's full listing. A previously unseen unsupported resource has no event
+projection to display.
+
+The DAV status `lastError` and daemon log report this partial sync. Its collection
+token does **not** advance, so the next scheduled sync or user refresh re-fetches
+the resource and a future parser can revisit it. No partial series replaces an
+existing resource.
+`Dav1.StateChanged` publishes the same state map as `GetState` at sync start and
+completion, so an open native Accounts page receives both progress and errors.
+Malformed supported fields or a later malformed event still fail the collection,
+even if an earlier event used `DURATION`. A failed write rolls back the collection.
+Tokens are scoped by both account and collection. The visible query filters out
+removed/disabled accounts and collections that no longer belong to an account,
+even if their cached rows still exist. Account removal currently hides that
+cache; secure data erasure is not introduced by this change.
 
 Existing local data keeps its numeric IDs and storage key. The native calendar
 bridge publishes a merged presentation list but persists only local records.
@@ -95,11 +109,14 @@ Remote read-only checks exist in the app handlers and native update boundary.
 | Multi-day event | Appears on each covered day; all-day end dates and midnight timed ends are exclusive |
 | `RRULE`, `RDATE`, `EXDATE`, `RECURRENCE-ID` | Marks stored entries as **Series preview**; does not expand future occurrences or apply the complete recurrence set |
 | Cancelled `VEVENT` | Omitted when replacing its resource |
-| `DURATION`, malformed dates, unknown/custom `TZID` | Explicit parse error; retains the previous collection and token |
+| `DURATION` | Reports partial sync, keeps the entire resource's previous projection and retries with the same token; valid sibling resources still update |
+| Malformed calendar/date, missing UID/start, unknown/custom `TZID` | Explicit decode error; retains the previous collection and token |
 
 Embedded `VTIMEZONE` rules are not evaluated. A recognized IANA name uses the
 installed database; provider-specific timezone definitions, recurrence expansion,
 exceptions and timezone-change re-interpretation need a fuller calendar engine.
+`DURATION` values are not evaluated; the unsupported-feature classification
+follows validation of the event's supported UID/start/end fields.
 This is an account-calendar preview, not a claim of full RFC 5545 coverage.
 
 Remote edits, invitation responses and service-owned reminders are follow-up
@@ -121,10 +138,17 @@ Registered evidence:
   collection deletion, atomic rollback, account visibility, legacy preservation,
   timezones, invalid dates and explicit recurrence previews. Together with the
   existing daemon tests, `cargo test -p marathon-davd --bin marathon-davd`
-  runs 20 tests.
+  runs 25 tests after the five collection-sync regressions below.
+- Five collection-sync Rust tests cover mixed supported/unsupported resources in
+  incremental and full refreshes, retained cached projections, deletions, visible
+  partial-sync warnings, token retry/recovery, structural decode failures and
+  malformed event fields that must not be hidden by `DURATION`.
 - A real-daemon private-bus test checks returned account/capability fields,
   account disable/re-enable/removal, and calendar permission denial. It remains
   part of the workspace's CTest `Rust_Crates` gate with strict bus setup in CI.
+- An additional private-bus regression checks DAV's start/completion state signals
+  using the native state mirror's exact map body and verifies that the completed
+  signal agrees with `GetState`.
 - The complete Calendar QML suite is now included in required native UI CI.
   New cases cover read-only detail/actions, loss of an open account event,
   cache failure/reload, the local action ID contract, exclusive date ranges and
@@ -132,16 +156,17 @@ Registered evidence:
   The existing required Hub suite checks merging/invalidation without mutating
   local storage; the shell agenda suite checks exclusive all-day ends.
 
-Local verification completed: 20 daemon unit tests, daemon Clippy with
+Local verification completed: 25 daemon unit tests, daemon Clippy with
 `--all-targets -- -D warnings`, workspace `cargo fmt --check`, Qt 6.12 formatting
 of changed QML, clang-format on the shell registration, Calendar manifest JSON
 Schema validation, the icon map, test reachability and `git diff --check`.
 The global Silica-import check reports existing Pilot, Reef and Camera imports;
 none of its findings is in the changed Calendar or Hub files.
 
-This workspace cannot create the private D-Bus listener (`Operation not
-permitted`) and does not have a compiled native Keel runtime or complete Qt
-development stack. Private-bus execution, native bridge compilation, real
-Calendar/Hub interaction and device/provider behavior therefore require the
-registered CI and subsequent target-device qualification. Stubbed service QML
-tests do not establish real permission transport or provider synchronization.
+The local execution environment cannot create the private D-Bus listener
+(`Operation not permitted`). The five sync regressions execute the real
+iCalendar decoder and SQLite cache with supplied resource responses. Private-bus
+execution, native bridge compilation and Calendar/Hub interaction are covered by
+the registered CI; device/provider behavior still needs target qualification.
+Stubbed service QML tests do not establish real permission transport or provider
+synchronization.

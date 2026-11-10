@@ -47,6 +47,13 @@ The installed theme is the runtime authority. Light and high-contrast
 presentations in the v2 specification are review targets; this document does
 not announce a completed light theme or a new theme-schema generator.
 
+The shared `marathon-silica` runtime also carries the repository's OFL-licensed
+Source Sans 3 fonts and its Sail Sans fontconfig aliases. `Theme.fontFamily`
+therefore resolves to the same production face in the shell and standalone
+native apps. Native CI installs these exact files and checks both font
+resolution and real text metrics; a container without fonts cannot qualify
+the layout. The capture runner records the resolved font and its source hash.
+
 For ordinary app pages, import the wrappers after Silica:
 
 ```qml

@@ -20,7 +20,7 @@ Page {
     TextMetrics {
         id: functionText
 
-        text: "mod"
+        text: "mod" // i18n: not user-facing (measures the fixed mathematical key)
         font.pixelSize: Theme.fontSizeMedium
         font.family: Theme.fontFamily
     }

@@ -77,9 +77,20 @@ Notes and Pilot windows with synthetic fixture data. It checks page readiness,
 actual window dimensions and output images and records source/runtime
 provenance. The [eight checked-in captures and visual findings](native-review/2026-11-10/README.md)
 include a [source/runtime manifest](native-review/2026-11-10/manifest.json).
-All fifteen selected source hashes, six aggregate input fingerprints and eight
+All fifteen selected source hashes, seven aggregate input fingerprints and eight
 image hashes match the integrated source/evidence. The four capture functions
 passed twelve Qt results with zero failures or skips.
+
+The final captures use an isolated Fontconfig environment containing only the
+repository's production Source Sans 3 fonts and Sail Sans alias configuration.
+All four process preflights matched `Sail Sans Pro Light` to
+`SourceSans3-Light.ttf`; each image also records Qt's resolved `Source Sans 3`
+probe family and `Regular` style at the normal font weight. The manifest
+records the actual font path/hash, alias hash and an aggregate digest of all
+packaged TTF/configuration inputs. This separates the alias match from Qt's
+selection of a weight and prevents host fallback fonts from silently changing
+the review. The source snapshot was clean at
+`325383a262aa605793f1785e8160d313feeee95b`.
 
 | Profile | State and interaction | Evidence scope |
 | --- | --- | --- |
@@ -115,6 +126,10 @@ boot were not run locally because this host has no Podman.
 
 ## Findings fixed during native verification
 
+- The native CI image lacked Marathon's production font package, so host
+  fallback metrics affected Phone and shared-tab geometry checks. The CI font
+  setup was corrected. Captures now verify their isolated production font
+  environment and were regenerated and visually inspected with that setup.
 - Long Calendar year labels exceeded narrow day cells. Adaptive outer spacing
   and content geometry now retain the actual font advance width.
 - Phone call content collided with persistent actions in short windows. The

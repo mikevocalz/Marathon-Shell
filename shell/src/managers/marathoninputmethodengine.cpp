@@ -7,6 +7,7 @@
 #include <QInputMethodEvent>
 #include <QInputMethodQueryEvent>
 #include <QKeyEvent>
+#include <QWindow>
 
 MarathonInputMethodEngine::MarathonInputMethodEngine(const marathon::Settings *settings,
                                                      QObject                  *parent)
@@ -19,6 +20,8 @@ MarathonInputMethodEngine::MarathonInputMethodEngine(const marathon::Settings *s
     if (m_inputMethod) {
         connectToInputMethod();
     }
+    connect(qGuiApp, &QGuiApplication::focusObjectChanged, this,
+            [this] { m_capitalisedAt.reset(); });
 
     QCoreApplication::instance()->installEventFilter(this);
 }
@@ -131,7 +134,7 @@ bool MarathonInputMethodEngine::capitalise(QObject *obj, const QKeyEvent *key) {
     if (text.size() != 1 || !text.front().isLower() || (key->modifiers() & ~Qt::KeypadModifier) ||
         !m_settings->getKeyboardAutoCapitalize()) {
         if (text.isEmpty() || !text.front().isPrint())
-            m_capitalisedAt.clear();
+            m_capitalisedAt.reset();
         return false;
     }
     QInputMethodQueryEvent query(Qt::ImEnabled | Qt::ImHints | Qt::ImSurroundingText |
@@ -151,7 +154,7 @@ bool MarathonInputMethodEngine::capitalise(QObject *obj, const QKeyEvent *key) {
     const QString sentence = before.trimmed();
     const bool    start    = sentence.isEmpty() ||
         (before.back().isSpace() && QStringView(u".!?").contains(sentence.back()));
-    if (!start || before == m_capitalisedAt)
+    if (!start || (m_capitalisedAt && before == *m_capitalisedAt))
         return false;
     QInputMethodEvent commit;
     commit.setCommitString(text.toUpper());
@@ -163,9 +166,13 @@ bool MarathonInputMethodEngine::capitalise(QObject *obj, const QKeyEvent *key) {
 
 bool MarathonInputMethodEngine::eventFilter(QObject *obj, QEvent *event) {
     if ((event->type() == QEvent::KeyPress || event->type() == QEvent::KeyRelease) &&
-        event->spontaneous() && obj == QGuiApplication::focusObject() &&
-        capitalise(obj, static_cast<QKeyEvent *>(event)))
-        return true;
+        event->spontaneous()) {
+        // Qt Quick forwards the window's hardware event to its item as a non-spontaneous event.
+        QObject *focus = QGuiApplication::focusObject();
+        if (focus && (obj == focus || obj == QGuiApplication::focusWindow()) &&
+            capitalise(focus, static_cast<QKeyEvent *>(event)))
+            return true;
+    }
     if (event->type() == QEvent::FocusIn) {
 
         QInputMethodQueryEvent query(Qt::ImEnabled | Qt::ImHints);

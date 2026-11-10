@@ -78,6 +78,29 @@ impl Core {
         emitter(&self.bus, CALENDAR_PATH)
     }
 
+    async fn dav_state(&self) -> HashMap<&'static str, Value<'static>> {
+        let count = self
+            .accounts
+            .with(|a| i32::try_from(a.saved.accounts.len()).unwrap_or(i32::MAX))
+            .await;
+        let (syncing, last_error, last_sync_ms) = self
+            .state
+            .with(|s| (s.syncing, s.last_error.clone(), s.last_sync_ms))
+            .await;
+        HashMap::from([
+            ("accountCount", Value::from(count)),
+            ("syncing", Value::from(syncing)),
+            ("lastError", Value::from(last_error)),
+            ("lastSyncMs", Value::from(last_sync_ms)),
+        ])
+    }
+
+    async fn publish_dav_state(&self) {
+        if let Err(error) = DavService::state_changed(&self.dav(), &self.dav_state().await).await {
+            log::warn("Dav", format_args!("sync state: {error}"));
+        }
+    }
+
     async fn discover(&self, id: String) {
         let ready = {
             let id = id.clone();
@@ -133,6 +156,7 @@ impl Core {
         if !started {
             return;
         }
+        self.publish_dav_state().await;
         let ready: Vec<(Account, String)> = self
             .accounts
             .with(|a| {
@@ -179,7 +203,11 @@ impl Core {
                         continue;
                     }
                 };
-                let token = pulled.token;
+                let token = pulled.next_token().map(str::to_owned);
+                if let Some(warning) = pulled.warning() {
+                    log::warn("Dav", format_args!("{collection}: {warning}"));
+                    error = warning;
+                }
                 let contacts = pulled.contacts;
                 let (stored, failures) = self
                     .book
@@ -203,16 +231,17 @@ impl Core {
                     error = failure;
                 }
                 if calendar {
-                    let (resources, deleted, id, collection) = (
+                    let (resources, deleted, retained, id, collection) = (
                         pulled.events,
                         pulled.deleted,
+                        pulled.unsupported_resources,
                         account.id.clone(),
                         collection.clone(),
                     );
                     let stored = self
                         .events
                         .with(move |store| {
-                            store.apply(&id, &collection, &resources, &deleted, full)
+                            store.apply(&id, &collection, &resources, &deleted, full, &retained)
                         })
                         .await;
                     if let Err(e) = stored {
@@ -221,7 +250,7 @@ impl Core {
                         complete = false;
                     }
                 }
-                if complete {
+                if let (true, Some(token)) = (complete, token) {
                     let key = (account.id.clone(), collection);
                     self.state.with(move |s| s.tokens.insert(key, token)).await;
                 }
@@ -247,6 +276,7 @@ impl Core {
                 s.last_sync_ms = now_ms();
             })
             .await;
+        self.publish_dav_state().await;
         if let Err(error) = CalendarEventsService::events_changed(&self.calendar()).await {
             log::warn("Dav", format_args!("calendar invalidation: {error}"));
         }
@@ -566,24 +596,14 @@ impl DavService {
         #[zbus(header)] h: Header<'_>,
     ) -> fdo::Result<HashMap<&'static str, Value<'static>>> {
         self.admit(&h).await?;
-        let count = self
-            .0
-            .accounts
-            .with(|a| i32::try_from(a.saved.accounts.len()).unwrap_or(i32::MAX))
-            .await;
-        let (syncing, last_error, last_sync_ms) = self
-            .0
-            .state
-            .with(|s| (s.syncing, s.last_error.clone(), s.last_sync_ms))
-            .await;
-        Ok(HashMap::from([
-            ("accountCount", Value::from(count)),
-            ("syncing", Value::from(syncing)),
-            ("lastError", Value::from(last_error)),
-            ("lastSyncMs", Value::from(last_sync_ms)),
-        ]))
+        Ok(self.0.dav_state().await)
     }
 
+    #[zbus(signal)]
+    async fn state_changed(
+        e: &SignalEmitter<'_>,
+        state: &HashMap<&'static str, Value<'static>>,
+    ) -> zbus::Result<()>;
     #[zbus(signal)]
     async fn accounts_changed(e: &SignalEmitter<'_>) -> zbus::Result<()>;
     #[zbus(signal)]

@@ -2,9 +2,17 @@
 
 These eight images are actual Qt 6.11.1 / Keel renders of production pages with
 synthetic service fixtures. They were captured from a clean source checkout at
-`1b98e77ffb585c6ff4adbc7ff70260e1d2766bdb`. The local commit ID can differ from
+`325383a262aa605793f1785e8160d313feeee95b`. The local commit ID can differ from
 the published integration commit; `manifest.json` includes source trees,
 individual file SHA-256 hashes and aggregate input digests for comparison.
+
+The images were recaptured with Marathon's production Source Sans 3 fonts.
+Each of the four app processes used an isolated Fontconfig configuration that
+included only the repository fonts and production Sail Sans aliases. Before
+each launch, `Sail Sans Pro Light` matched `SourceSans3-Light.ttf` exactly.
+Qt's normal-weight text probe resolved `Source Sans 3`, style `Regular`; both
+results and the actual font path/hash are recorded. The seven aggregate input
+digests include every packaged TTF and the Fontconfig alias file.
 
 Reproduction instructions and the exact capture boundaries are in the parent
 review README. All four native capture functions completed: twelve Qt results,
@@ -31,6 +39,13 @@ Early Mail and Notes images included native fades still in progress. The final
 harness waits for active, visible native pages and panel transitions, then lets
 short native fades finish and requests an actual frame. It does not change
 opacity or replace any control to obtain the final images.
+
+The production-font recapture was inspected separately from the earlier host
+font renders. All eight final images retain readable action names, distinct
+contact numbers, full Mail attachment identity and the expected native
+scrolling boundaries. The narrow Phone identity and Pilot conversation extend
+beyond their viewport while their fixed actions remain visible. The Notes
+large-text image remains the explicit stress case described below.
 
 ## Captures
 

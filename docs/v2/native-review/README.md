@@ -16,7 +16,8 @@ captures, observed fixes and source/runtime provenance.
 ## Reproduce the review set
 
 Build the real modules and icon bundle described in
-`scripts/ci/native-ui.sh`, then point the tool at those outputs:
+`scripts/ci/native-ui.sh`, make Fontconfig's `fc-match` available on `PATH`, then
+point the tool at those outputs:
 
 ```sh
 export KEEL_QML=/path/to/keel-build/qml
@@ -28,6 +29,13 @@ python3 tools/native-ui-consistency/capture_native.py --output /tmp/native-revie
 The output contains eight PNGs, a manifest, four native runtime logs and four
 JUnit reports. It verifies real Qt 6 test execution, ready pages and exact image
 dimensions. Each app runs in a fresh process and temporary configuration store.
+Its isolated Fontconfig configuration reads only the repository's
+`marathon-fonts/source-sans-3` directory and production
+`60-marathon-sail-sans.conf` aliases. Before every launch, the tool requires
+`fc-match 'Sail Sans Pro Light'` to resolve to that directory's
+`SourceSans3-Light.ttf`. It also verifies a Qt text probe resolves the theme's
+requested family to `Source Sans 3` and records the probe's actual style. A
+missing font, wrong alias resolution or Qt fallback fails the capture.
 Qt device scale and Keel theme pixel ratio are both set to one; the Notes compact
 case uses Keel's native `huge` font setting. Locale is `C.UTF-8` and timezone is
 UTC. App content, text metrics, colors, controls and behavior remain production
@@ -62,13 +70,19 @@ belong to its evidence.
 The manifest records the local source commit and tree, the actual Qt version,
 runtime paths, image hashes, and independent source fingerprints. Its aggregate
 source digests cover all QML, JavaScript, JSON, qmldir and capture templates in
-the selected app directories and shared control module. Selected production
-entry points also have individual SHA-256 hashes. These permit comparison with
-a published tree whose commit ID differs after integration.
+the selected app directories and shared control module, plus the TTF and
+Fontconfig configuration files under `marathon-fonts`. The full review set has
+seven aggregate input digests. Selected production entry points also have
+individual SHA-256 hashes. These permit comparison with a published tree whose
+commit ID differs after integration.
 
-The recorded font family is the theme's requested family. Font installation,
-Qt/Keel versions, graphics backends and theme assets can affect rasterization;
-these are not portable pixel equality baselines. The captures exclude shell
+The manifest records the theme's requested family, Fontconfig's actual matching
+path and file hash, the production alias hash, and Qt's resolved probe family
+and style. The Fontconfig alias preflight does not claim that every weight or
+glyph uses that same Light font file. Host font collections are excluded, but
+Qt/Keel versions, graphics backends and theme assets can still affect
+rasterization; these are not portable pixel equality baselines. The captures
+exclude shell
 decorations, the system keyboard, real providers/modem calls and device GPU
 behavior. Runtime logs can contain expected host limitations such as an
 unavailable session bus; a passing capture is not evidence of those integrations.

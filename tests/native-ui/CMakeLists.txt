@@ -167,7 +167,7 @@ else()
     set_tests_properties(NativeUI_RegistrationContract PROPERTIES
         LABELS "native-ui-required" TIMEOUT 60
         ENVIRONMENT "QMLTESTRUNNER=${QMLTESTRUNNER};CMAKE_COMMAND=${CMAKE_COMMAND};KEEL_QML=${KEEL_QML};MARATHON_NOTES_WIRE_CLIENT=${MARATHON_NOTES_WIRE_CLIENT}")
-    message(STATUS "Required native UI scope: real toolkit/icons + all 16 product apps + all shared controls + real Hub/Notes wire + PageViewHub + Hub + overview/task switcher/page indicator")
+    message(STATUS "Required native UI tests are registered under the native-ui-required CTest label")
 endif()
 
 if(Python3_Interpreter_FOUND)

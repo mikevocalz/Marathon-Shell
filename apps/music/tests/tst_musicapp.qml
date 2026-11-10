@@ -17,14 +17,6 @@ TestCase {
         LibraryStub {}
     }
     Component {
-        id: mediaStub
-        MediaStub {}
-    }
-    Component {
-        id: playerComponent
-        Player {}
-    }
-    Component {
         id: storeStub
         QtObject {
             property var value: "[]"
@@ -35,24 +27,50 @@ TestCase {
         MusicApp {
             width: 540
             height: 1140
+            playlistStore: QtObject {
+                property var value: "[]"
+            }
+            sessionStore: QtObject {
+                property var value: ""
+            }
+            player: Player {
+                media: MediaStub {}
+            }
         }
     }
 
+    property var appWindows: []
+
+    function init() {
+        failOnWarning(/TypeError: Cannot read property .* of null/);
+    }
+
+    function createApp(properties) {
+        const app = createTemporaryObject(appComponent, this, properties);
+        verify(app !== null);
+        appWindows.push(app);
+        return app;
+    }
+
+    function cleanup() {
+        // QtTest destroys temporary objects in creation order. Close the
+        // windows before independent library/session fixtures so live native
+        // bindings cannot observe already-destroyed dependencies.
+        for (const app of appWindows) {
+            if (app && typeof app.destroy === "function")
+                app.destroy();
+        }
+        appWindows = [];
+        wait(0);
+    }
+
     function makeApp(library) {
-        const props = {
-            playlistStore: createTemporaryObject(storeStub, this),
-            sessionStore: createTemporaryObject(storeStub, this, {
-                value: ""
-            }),
-            player: createTemporaryObject(playerComponent, this, {
-                media: createTemporaryObject(mediaStub, this)
-            })
-        };
+        const props = {};
         if (library !== null)
             props.library = library === undefined ? createTemporaryObject(libraryStub, this) : library;
         else
             props.library = null;
-        const app = createTemporaryObject(appComponent, this, props);
+        const app = createApp(props);
         tryVerify(() => app.pageStack.currentPage !== null && app.pageStack.currentPage.status === PageStatus.Active);
         tryVerify(() => app.loaded);
         return app;
@@ -81,15 +99,8 @@ TestCase {
         const library = createTemporaryObject(libraryStub, this, {
             deliver: false
         });
-        const app = createTemporaryObject(appComponent, this, {
-            library: library,
-            playlistStore: createTemporaryObject(storeStub, this),
-            sessionStore: createTemporaryObject(storeStub, this, {
-                value: ""
-            }),
-            player: createTemporaryObject(playerComponent, this, {
-                media: createTemporaryObject(mediaStub, this)
-            })
+        const app = createApp({
+            library: library
         });
         tryVerify(() => app.pageStack.currentPage !== null && app.pageStack.currentPage.status === PageStatus.Active);
         compare(library.loads, 1);
@@ -371,13 +382,9 @@ TestCase {
         const session = createTemporaryObject(storeStub, this, {
             value: ""
         });
-        const first = createTemporaryObject(appComponent, this, {
+        const first = createApp({
             library: createTemporaryObject(libraryStub, this),
-            playlistStore: createTemporaryObject(storeStub, this),
-            sessionStore: session,
-            player: createTemporaryObject(playerComponent, this, {
-                media: createTemporaryObject(mediaStub, this)
-            })
+            sessionStore: session
         });
         tryVerify(() => first.loaded);
         first.player.playTracks(first.tracks, 2);
@@ -386,13 +393,9 @@ TestCase {
         compare(JSON.parse(session.value).index, 2);
         compare(JSON.parse(session.value).position, 15000);
 
-        const next = createTemporaryObject(appComponent, this, {
+        const next = createApp({
             library: createTemporaryObject(libraryStub, this),
-            playlistStore: createTemporaryObject(storeStub, this),
-            sessionStore: session,
-            player: createTemporaryObject(playerComponent, this, {
-                media: createTemporaryObject(mediaStub, this)
-            })
+            sessionStore: session
         });
         tryVerify(() => next.loaded);
         compare(next.player.currentTrack.title, "Dawn");

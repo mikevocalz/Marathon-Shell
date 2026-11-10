@@ -1,18 +1,18 @@
 {
   "review_date": "2026-11-10",
   "kind": "actual-native-viewport-captures",
-  "source_commit": "1b98e77ffb585c6ff4adbc7ff70260e1d2766bdb",
-  "source_tree": "fdf6b917838fc5bd40e47fd3d7863db0a152ad11",
+  "source_commit": "325383a262aa605793f1785e8160d313feeee95b",
+  "source_tree": "b77a296bd50f7849a978c507bb485594105d729b",
   "source_dirty": false,
   "source_identity_note": "The capture checkout commit can differ from the integrated publication commit. Source file and aggregate input digests identify the actual captured inputs.",
   "source_inputs": {
-    "tree_digest_format": "SHA-256 of sorted UTF-8 'repository-relative-path NUL file-sha256 LF' records; QML, JS, JSON, qmldir and .qml.in files",
+    "tree_digest_format": "SHA-256 of sorted UTF-8 'repository-relative-path NUL file-sha256 LF' records; QML, JS, JSON, qmldir and .qml.in files, plus TTF and conf files in marathon-fonts",
     "trees": [
       {
         "path": "apps/email",
         "file_count": 23,
         "source_sha256": "c8032779ccf1d0d479c312f82642acb83b4a80eb11236199d14999be50fc60d0",
-        "git_tree": "d167f2094bcfe8979dc765053062c7f9fa7dec87"
+        "git_tree": "c66b5a442d49f83e78d103d3c3f761b744807d2e"
       },
       {
         "path": "apps/phone",
@@ -43,10 +43,16 @@
         "file_count": 4,
         "source_sha256": "3a54cb229e86589aa1ae23b3c6c68ff7a11f3ff77b69f3562d6a91eebc5a003f",
         "git_tree": "e867bbe7286a2aae21d593f791cca723a818b72a"
+      },
+      {
+        "path": "marathon-fonts",
+        "file_count": 8,
+        "source_sha256": "16672fe91e32bcf7bf81c5487c0413cd54eec95838e8e1bdeb5d3f58b59d760a",
+        "git_tree": "eef7e4b2601ce3ef18c14036bc89d78ed9dced6d"
       }
     ],
     "files": {
-      "tools/native-ui-consistency/capture_native.py": "b88976dfc4fa7d8cda0d0da8090aa80c5879cfb25f8a74fc92c1366910d2aa21",
+      "tools/native-ui-consistency/capture_native.py": "8b673de269b15b1af2639e654b6ead40c1cbcbf417f4e3e0216beb29eb801795",
       "packaging/packages/keel-silica/APKBUILD": "2d21e0e5a37c2706a1561f56ddec37ee65817017db871f8502952fdc4f67b885",
       "apps/email/EmailApp.qml": "6a264c59e8dd54acbeaefebeaff8869db50f74830bbff265d52535b495146989",
       "apps/email/pages/InboxPage.qml": "f32bcffb42759ac4ac74512ea00c79cfd73ae817c1a67aaff74fb88b3c8b66a8",
@@ -68,13 +74,39 @@
       "6.11.1"
     ],
     "packaged_keel_revision": "0df499bf34e02cec7f571853cbf5a4323dc1609e",
+    "runner": "/workspace/scratch/47ba65e0ccf9/qt-native-sdk/6.11.1/gcc_64/bin/qmltestrunner",
+    "keel_qml": "/workspace/scratch/47ba65e0ccf9/keel-native-build/qml",
     "renderer": "Qt Quick offscreen software, Qt device scale 1, Keel theme pixel ratio 1",
+    "fonts": {
+      "isolation": "Only repository source-sans-3 fonts and the production Sail Sans alias configuration",
+      "font_directory": "/workspace/scratch/47ba65e0ccf9/marathon-ui-finish/marathon-fonts/source-sans-3",
+      "fontconfig_alias_file": "/workspace/scratch/47ba65e0ccf9/marathon-ui-finish/marathon-fonts/60-marathon-sail-sans.conf",
+      "fontconfig_alias_sha256": "66ee546090ca2e51ec688eef3cd8247ece4fafae53baa84048775543b14ba72f",
+      "fc_match": "/usr/bin/fc-match",
+      "requested_family": "Sail Sans Pro Light",
+      "matched_file": "/workspace/scratch/47ba65e0ccf9/marathon-ui-finish/marathon-fonts/source-sans-3/SourceSans3-Light.ttf",
+      "repository_file": "marathon-fonts/source-sans-3/SourceSans3-Light.ttf",
+      "matched_file_sha256": "fcc10d83a12844e7dc699b1bb85f65f0d1bb0179de216feb5d28f806500f7cef",
+      "matched_family": "Source Sans 3,Source Sans 3 Light",
+      "matched_style": "Light,Regular",
+      "match_scope": "Fontconfig alias preflight; each image also records a Qt text probe's resolved family and style"
+    },
+    "font_preflights_passed": 4,
     "theme": [
       {
         "name": "mail-inbox-320x640",
         "width": 320,
         "height": 640,
         "fontFamily": "Sail Sans Pro Light",
+        "resolvedFont": {
+          "family": "Source Sans 3",
+          "styleName": "Regular",
+          "bold": false,
+          "weight": 400,
+          "italic": false,
+          "pointSize": 24,
+          "pixelSize": 32
+        },
         "fontSizeMedium": 32,
         "pixelRatio": 1
       },
@@ -83,6 +115,15 @@
         "width": 720,
         "height": 720,
         "fontFamily": "Sail Sans Pro Light",
+        "resolvedFont": {
+          "family": "Source Sans 3",
+          "styleName": "Regular",
+          "bold": false,
+          "weight": 400,
+          "italic": false,
+          "pointSize": 24,
+          "pixelSize": 32
+        },
         "fontSizeMedium": 32,
         "pixelRatio": 1
       },
@@ -91,6 +132,15 @@
         "width": 320,
         "height": 640,
         "fontFamily": "Sail Sans Pro Light",
+        "resolvedFont": {
+          "family": "Source Sans 3",
+          "styleName": "Regular",
+          "bold": false,
+          "weight": 400,
+          "italic": false,
+          "pointSize": 24,
+          "pixelSize": 32
+        },
         "fontSizeMedium": 32,
         "pixelRatio": 1
       },
@@ -99,6 +149,15 @@
         "width": 720,
         "height": 720,
         "fontFamily": "Sail Sans Pro Light",
+        "resolvedFont": {
+          "family": "Source Sans 3",
+          "styleName": "Regular",
+          "bold": false,
+          "weight": 400,
+          "italic": false,
+          "pointSize": 24,
+          "pixelSize": 32
+        },
         "fontSizeMedium": 32,
         "pixelRatio": 1
       },
@@ -107,6 +166,15 @@
         "width": 320,
         "height": 640,
         "fontFamily": "Sail Sans Pro Light",
+        "resolvedFont": {
+          "family": "Source Sans 3",
+          "styleName": "Regular",
+          "bold": false,
+          "weight": 400,
+          "italic": false,
+          "pointSize": 30,
+          "pixelSize": 40
+        },
         "fontSizeMedium": 40,
         "pixelRatio": 1
       },
@@ -115,6 +183,15 @@
         "width": 1024,
         "height": 768,
         "fontFamily": "Sail Sans Pro Light",
+        "resolvedFont": {
+          "family": "Source Sans 3",
+          "styleName": "Regular",
+          "bold": false,
+          "weight": 400,
+          "italic": false,
+          "pointSize": 24,
+          "pixelSize": 32
+        },
         "fontSizeMedium": 32,
         "pixelRatio": 1
       },
@@ -123,6 +200,15 @@
         "width": 320,
         "height": 640,
         "fontFamily": "Sail Sans Pro Light",
+        "resolvedFont": {
+          "family": "Source Sans 3",
+          "styleName": "Regular",
+          "bold": false,
+          "weight": 400,
+          "italic": false,
+          "pointSize": 24,
+          "pixelSize": 32
+        },
         "fontSizeMedium": 32,
         "pixelRatio": 1
       },
@@ -131,11 +217,23 @@
         "width": 1024,
         "height": 768,
         "fontFamily": "Sail Sans Pro Light",
+        "resolvedFont": {
+          "family": "Source Sans 3",
+          "styleName": "Regular",
+          "bold": false,
+          "weight": 400,
+          "italic": false,
+          "pointSize": 24,
+          "pixelSize": 32
+        },
         "fontSizeMedium": 32,
         "pixelRatio": 1
       }
     ],
     "icons": "Real generated production Phosphor theme mappings, with native busy indicator assets",
+    "icon_dirs": [
+      "/workspace/scratch/47ba65e0ccf9/native-icon-finish-build/icons/themes/z1.0/icons-monochrome"
+    ],
     "harness_results": {
       "test_functions": 4,
       "total_qt_results": 12,
@@ -149,7 +247,7 @@
     "Native controls and production QML; app services use the existing test fixtures",
     "Pilot uses the production MainPage in a shared native ApplicationWindow, as its native tests do",
     "No shell decorations, system keyboard, modem/provider integration or device GPU evidence",
-    "Fonts and Qt/Keel versions can change rasterization; use the recorded runtime when comparing"
+    "Repository fonts are isolated and checked; Qt/Keel versions and graphics backends can still change rasterization"
   ],
   "images": [
     {
@@ -158,7 +256,7 @@
       "width": 320,
       "height": 640,
       "description": "Inbox with long sender, preview and account context",
-      "sha256": "5127ad75f28300ef1c8a02798d086be1d8ff99fc8cc13738bd37bbed9fdfede7"
+      "sha256": "ea99b4f1bf4fa4b5f356ef627370e14b506d057cb7610f98610a3cd31da124a9"
     },
     {
       "app": "email",
@@ -166,7 +264,7 @@
       "width": 720,
       "height": 720,
       "description": "Keyboard-opened source message, with a duplicate-name decoy",
-      "sha256": "d8f4bdc30c0612655e7b26e8aefe9bc3059d99124adce3b61a849596e086ec98"
+      "sha256": "815d11aed46d966202988ee606a808269afce42752924d5732c9fe7f92ae3963"
     },
     {
       "app": "phone",
@@ -174,7 +272,7 @@
       "width": 320,
       "height": 640,
       "description": "Incoming call: long identity above fixed native actions",
-      "sha256": "870edea873ca6dc6c7c46595f918a4483437501392c805de37828a6941db7090"
+      "sha256": "7fa800ce8f4a7ebfd6e507c0146c4aa53cf60998838737ab3bbd2e58d199929f"
     },
     {
       "app": "phone",
@@ -182,7 +280,7 @@
       "width": 720,
       "height": 720,
       "description": "Native contacts tab: same names, distinct numbers",
-      "sha256": "92652e182a1efef8778c542470dc166d4a69fca10d32f508ea00e6d2371425d7"
+      "sha256": "5939897363e8dd378a8fd75b3ad849c4b5afc75490c201ffbc5661955c7c0a6f"
     },
     {
       "app": "notes",
@@ -190,7 +288,7 @@
       "width": 320,
       "height": 640,
       "description": "Long task with the native huge text setting",
-      "sha256": "f8e4696b91fb34c49babe30ade95b557d83e7ca33383ec3a713f2987169fc728"
+      "sha256": "3d17e2e06b73f388b00747583b185b99ebe34fb3f80e634523ab0cc6cde24f48"
     },
     {
       "app": "notes",
@@ -198,7 +296,7 @@
       "width": 1024,
       "height": 768,
       "description": "Task collection and its original note in the wide workspace",
-      "sha256": "576d565af12af1262c4006167adcc3f7ab3c52148b1bd3cdeea8996d59012c83"
+      "sha256": "caa0f81bd67fa266608c762e095f2b33220fd84a320d74f149d635ec0e1f4a73"
     },
     {
       "app": "pilot",
@@ -206,7 +304,7 @@
       "width": 320,
       "height": 640,
       "description": "Production MainPage with a source explanation and retained prompt",
-      "sha256": "c80b160f88507729680008fae0d9e83eed1999adb397cf63a9ea56bebbb7701a"
+      "sha256": "cc3fd4a728f0e9ac3884ca653beb819905cdc9553dc115b5ad79da99adefdffb"
     },
     {
       "app": "pilot",
@@ -214,7 +312,7 @@
       "width": 1024,
       "height": 768,
       "description": "The same conversation and prompt after widening the native page",
-      "sha256": "c3c7e33800202e92aab314a35d896ea9a65c1f0d66fce05ffb66b437aea9da2c"
+      "sha256": "0c9fd0fd158bfc021d372c8868013351bfdffd2d45e432c435d353b83a6b5f53"
     }
   ]
 }

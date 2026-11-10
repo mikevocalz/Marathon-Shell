@@ -29,6 +29,35 @@ pub struct Resource {
     pub events: Vec<Event>,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum DecodeError {
+    UnsupportedDuration,
+    Invalid(String),
+}
+
+impl std::fmt::Display for DecodeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnsupportedDuration => f.write_str("Calendar DURATION is not supported yet"),
+            Self::Invalid(message) => f.write_str(message),
+        }
+    }
+}
+
+impl std::error::Error for DecodeError {}
+
+impl From<String> for DecodeError {
+    fn from(message: String) -> Self {
+        Self::Invalid(message)
+    }
+}
+
+impl From<&str> for DecodeError {
+    fn from(message: &str) -> Self {
+        Self::Invalid(message.to_owned())
+    }
+}
+
 fn instant(value: &str, date_only: bool, timezone: Option<&str>) -> Result<i64, String> {
     if !value.is_ascii() {
         return Err("Invalid calendar date or time".into());
@@ -72,9 +101,12 @@ fn instant(value: &str, date_only: bool, timezone: Option<&str>) -> Result<i64, 
 }
 
 impl Event {
-    pub fn from_ical(event: &ical::parser::ical::component::IcalEvent) -> Result<Self, String> {
+    pub fn from_ical(
+        event: &ical::parser::ical::component::IcalEvent,
+    ) -> Result<Self, DecodeError> {
         let mut out = Self::default();
         let (mut start, mut end) = (None, None);
+        let mut duration = false;
         for property in &event.properties {
             let value = property.value.as_deref().unwrap_or_default().trim();
             let parameter = |name: &str| {
@@ -102,7 +134,12 @@ impl Event {
                     out.all_day = date_only;
                 }
                 "DTEND" => end = Some(instant(value, date_only, parameter("TZID"))?),
-                "DURATION" => return Err("Calendar DURATION is not supported yet".into()),
+                "DURATION" => {
+                    if value.is_empty() {
+                        return Err("Calendar event has an empty DURATION".into());
+                    }
+                    duration = true;
+                }
                 _ => {}
             }
         }
@@ -113,6 +150,14 @@ impl Event {
         out.end_ms = end.unwrap_or(out.start_ms + if out.all_day { 86_400_000 } else { 0 });
         if out.end_ms < out.start_ms {
             return Err("Calendar event ends before it starts".into());
+        }
+        if duration {
+            if end.is_some() {
+                return Err("Calendar event has both DTEND and DURATION".into());
+            }
+            // Validate the supported fields first. An unsupported feature must
+            // not hide a malformed UID/start or depend on property order.
+            return Err(DecodeError::UnsupportedDuration);
         }
         Ok(out)
     }
@@ -191,13 +236,26 @@ impl Events {
         resources: &[Resource],
         deleted: &[String],
         full: bool,
+        retained: &[String],
     ) -> rusqlite::Result<()> {
         let transaction = self.0.transaction()?;
-        if full {
+        if full && retained.is_empty() {
             transaction.execute(
                 "DELETE FROM calendar_events WHERE account_id = ?1 AND collection_id = ?2",
                 params![account, collection],
             )?;
+        } else if full {
+            let hrefs = {
+                let mut query = transaction.prepare(
+                    "SELECT DISTINCT href FROM calendar_events WHERE account_id = ?1 AND collection_id = ?2",
+                )?;
+                let rows =
+                    query.query_map(params![account, collection], |row| row.get::<_, String>(0))?;
+                rows.collect::<rusqlite::Result<Vec<_>>>()?
+            };
+            for href in hrefs.iter().filter(|href| !retained.contains(href)) {
+                transaction.execute("DELETE FROM calendar_events WHERE account_id = ?1 AND collection_id = ?2 AND href = ?3", params![account, collection, href])?;
+            }
         }
         for href in deleted
             .iter()

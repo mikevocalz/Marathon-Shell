@@ -4,7 +4,7 @@
 
 use crate::accounts::Account;
 use crate::contacts::Contact;
-use crate::events::{Event, Resource};
+use crate::events::{DecodeError, Event, Resource};
 use crate::webdav::{self, multistatus};
 use std::io::BufReader;
 
@@ -65,6 +65,32 @@ pub struct Pulled {
     pub events: Vec<Resource>,
     pub deleted: Vec<String>,
     pub token: String,
+    /// Keep these resources' last projection, including during a full refresh.
+    pub unsupported_resources: Vec<String>,
+}
+
+impl Pulled {
+    pub fn next_token(&self) -> Option<&str> {
+        // Retry unsupported resources on the next sync instead of forgetting
+        // them behind a new token. Supported sibling resources can still apply.
+        self.unsupported_resources
+            .is_empty()
+            .then_some(self.token.as_str())
+    }
+
+    pub fn warning(&self) -> Option<String> {
+        (!self.unsupported_resources.is_empty()).then(|| {
+            let count = self.unsupported_resources.len();
+            let resources = if count == 1 {
+                "calendar resource uses"
+            } else {
+                "calendar resources use"
+            };
+            format!(
+                "{count} {resources} unsupported DURATION. Previously cached events remain available; sync will retry."
+            )
+        })
+    }
 }
 
 /// What changed in a collection since `token`: each new or changed
@@ -86,7 +112,18 @@ pub fn pull(
         Some("1"),
         Some(&webdav::sync_collection(token)),
     )?;
-    let changes = multistatus(&report);
+    pull_changes(collection, &report, calendar, |url| {
+        webdav::request(agent, &auth, "GET", url, None, None)
+    })
+}
+
+fn pull_changes(
+    collection: &str,
+    report: &str,
+    calendar: bool,
+    mut fetch: impl FnMut(&str) -> Result<String, String>,
+) -> Result<Pulled, String> {
+    let changes = multistatus(report);
     let mut pulled = Pulled {
         token: changes.sync_token,
         ..Pulled::default()
@@ -100,13 +137,14 @@ pub fn pull(
             pulled.deleted.push(url);
             continue;
         }
-        let body = webdav::request(agent, &auth, "GET", &url, None, None)?;
+        let body = fetch(&url)?;
         if calendar {
             let mut resource = Resource {
                 href: url,
                 events: Vec::new(),
             };
             let mut found = false;
+            let mut unsupported = false;
             for parsed in ical::IcalParser::new(BufReader::new(body.as_bytes())) {
                 let parsed = parsed.map_err(|e| format!("Invalid calendar resource: {e}"))?;
                 found = true;
@@ -119,13 +157,23 @@ pub fn pull(
                     }) {
                         continue;
                     }
-                    resource.events.push(Event::from_ical(&event)?);
+                    match Event::from_ical(&event) {
+                        Ok(event) => resource.events.push(event),
+                        Err(DecodeError::UnsupportedDuration) => unsupported = true,
+                        Err(DecodeError::Invalid(error)) => return Err(error),
+                    }
                 }
             }
             if !found {
                 return Err("Calendar resource contains no calendar".into());
             }
-            pulled.events.push(resource);
+            if unsupported {
+                // A DAV resource is the replacement unit. Do not publish half
+                // of a series or erase its prior projection on a full refresh.
+                pulled.unsupported_resources.push(resource.href);
+            } else {
+                pulled.events.push(resource);
+            }
         } else {
             pulled.contacts.extend(
                 ical::VcardParser::new(BufReader::new(body.as_bytes()))
@@ -137,3 +185,7 @@ pub fn pull(
     }
     Ok(pulled)
 }
+
+#[cfg(test)]
+#[path = "sync_tests.rs"]
+mod tests;

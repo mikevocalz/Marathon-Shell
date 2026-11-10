@@ -39,9 +39,19 @@ busy-indicator sizes now have theme assets from the existing Phosphor Thin
 vocabulary.
 
 The `marathon-silica` APK subpackage installs the existing shared QML module
-independently of the shell binary. Shell, Pilot and Reef depend on it, and the
-image builder stages it with the shell and icon packages. The same controls
-are therefore available to both standalone native extensions.
+independently of the shell binary, alongside the production Source Sans 3
+fonts and Sail Sans fontconfig aliases. It depends on the matching icon theme
+and fontconfig. Shell, Pilot and Reef depend on this runtime, and the image
+builder stages it with the shell and icon packages. The same controls and
+font metrics are therefore available to both standalone native extensions.
+
+Hardware input uses the original Qt Quick window event and distinguishes an
+unset capitalization marker from a pending empty prefix. Its native test
+drives the production engine and Settings binding through Qt window-system
+dispatch, including empty fields, focus changes and literal field hints.
+The shared Calendar sync keeps cached unsupported resources while applying
+valid sibling updates and deletions. Its partial-sync warning reaches the
+native Accounts UI through the daemon's typed state signal.
 
 ## Implemented app surfaces
 

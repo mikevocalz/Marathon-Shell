@@ -3,6 +3,8 @@
 
 This is a visual-review aid, not a screenshot comparison test. It requires the
 real Qt Quick Test runner and Keel modules used by the native UI test gate.
+Fontconfig must be available; captures use only the repository's production
+Source Sans 3 fonts and Sail Sans aliases, checked before every app launch.
 The generated harnesses and configuration are temporary; PNGs, runtime logs,
 JUnit reports and a provenance manifest are written to --output.
 """
@@ -42,6 +44,15 @@ SCENES = {
 }
 
 HELPERS = """
+    Text {
+        id: captureFontProbe
+        visible: false
+        text: "Native capture font"
+        textFormat: Text.PlainText
+        font.family: Theme.fontFamily
+        font.pixelSize: Theme.fontSizeMedium
+    }
+
     function resizeApp(app, w, h) {
         testCase.width = w;
         testCase.height = h;
@@ -54,6 +65,8 @@ HELPERS = """
         verify(waitForPolish(testCase.Window.window));
         testCase.Window.window.update();
         verify(waitForRendering(app));
+        compare(Theme.fontFamily, "Sail Sans Pro Light");
+        compare(captureFontProbe.fontInfo.family, "Source Sans 3");
     }
 
     function capture(app, name, w, h) {
@@ -82,6 +95,7 @@ HELPERS = """
         console.info("NATIVE_CAPTURE " + JSON.stringify({
             name: name, width: w, height: h,
             fontFamily: Theme.fontFamily,
+            resolvedFont: captureFontProbe.fontInfo,
             fontSizeMedium: Theme.fontSizeMedium,
             pixelRatio: Theme.pixelRatio
         }));
@@ -110,15 +124,61 @@ def png_dimensions(path):
     return struct.unpack(">II", header[16:24])
 
 
+def production_font_environment(state, env):
+    """Use the packaged fonts, without the host's fallback font collection."""
+    font_directory = ROOT / "marathon-fonts/source-sans-3"
+    alias_file = ROOT / "marathon-fonts/60-marathon-sail-sans.conf"
+    expected = font_directory / "SourceSans3-Light.ttf"
+    for path in (expected, alias_file):
+        if not path.is_file():
+            raise ValueError(f"required production font input is absent: {path}")
+    matcher = shutil.which("fc-match")
+    if matcher is None:
+        raise ValueError("Fontconfig fc-match is required to verify the production capture font")
+    config = ET.Element("fontconfig")
+    ET.SubElement(config, "dir").text = str(font_directory)
+    ET.SubElement(config, "cachedir").text = str(state / "font-cache")
+    ET.SubElement(config, "include").text = str(alias_file)
+    config_file = state / "fonts.conf"
+    ET.ElementTree(config).write(config_file, encoding="utf-8", xml_declaration=True)
+    env.update(FONTCONFIG_FILE=str(config_file), FONTCONFIG_PATH=str(state))
+    # A caller's Qt font-directory override must not reintroduce host fonts.
+    env.pop("QT_QPA_FONTDIR", None)
+    query = "Sail Sans Pro Light"
+    match = subprocess.run([matcher, "--format=%{file}\n%{family}\n%{style}\n", query],
+                           env=env, capture_output=True, text=True, timeout=10, check=False)
+    lines = match.stdout.splitlines()
+    if match.returncode or len(lines) != 3:
+        raise ValueError(f"fc-match could not resolve {query}: {match.stderr.strip()}")
+    resolved = Path(lines[0]).resolve()
+    if resolved != expected.resolve():
+        raise ValueError(f"{query} resolved to {resolved}; expected {expected}")
+    return {
+        "isolation": "Only repository source-sans-3 fonts and the production Sail Sans alias configuration",
+        "font_directory": str(font_directory),
+        "fontconfig_alias_file": str(alias_file),
+        "fontconfig_alias_sha256": hashlib.sha256(alias_file.read_bytes()).hexdigest(),
+        "fc_match": str(Path(matcher).resolve()),
+        "requested_family": query,
+        "matched_file": str(resolved),
+        "repository_file": resolved.relative_to(ROOT).as_posix(),
+        "matched_file_sha256": hashlib.sha256(resolved.read_bytes()).hexdigest(),
+        "matched_family": lines[1],
+        "matched_style": lines[2],
+        "match_scope": "Fontconfig alias preflight; each image also records a Qt text probe's resolved family and style",
+    }
+
+
 def source_inputs(apps):
     """Fingerprint the actual inputs, independently of a publication commit ID."""
     directories = [*(f"apps/{app}" for app in apps), "marathon-silica/Marathon/Silica",
-                   "tools/native-ui-consistency/capture_templates"]
+                   "tools/native-ui-consistency/capture_templates", "marathon-fonts"]
     trees = []
     for directory in directories:
         files = sorted(p for p in (ROOT / directory).rglob("*") if p.is_file()
                        and (p.suffix in {".qml", ".js", ".json"} or p.name == "qmldir"
-                            or p.name.endswith(".qml.in")))
+                            or p.name.endswith(".qml.in")
+                            or (directory == "marathon-fonts" and p.suffix in {".ttf", ".conf"})))
         entries = [(p.relative_to(ROOT).as_posix(), hashlib.sha256(p.read_bytes()).hexdigest())
                    for p in files]
         content = "".join(f"{name}\0{digest}\n" for name, digest in entries).encode()
@@ -134,7 +194,7 @@ def source_inputs(apps):
     }
     for app in apps:
         files.extend(ROOT / "apps" / app / name for name in selected[app])
-    return {"tree_digest_format": "SHA-256 of sorted UTF-8 'repository-relative-path NUL file-sha256 LF' records; QML, JS, JSON, qmldir and .qml.in files",
+    return {"tree_digest_format": "SHA-256 of sorted UTF-8 'repository-relative-path NUL file-sha256 LF' records; QML, JS, JSON, qmldir and .qml.in files, plus TTF and conf files in marathon-fonts",
             "trees": trees,
             "files": {p.relative_to(ROOT).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
                       for p in files}}
@@ -191,7 +251,7 @@ def main():
                 "Native controls and production QML; app services use the existing test fixtures",
                 "Pilot uses the production MainPage in a shared native ApplicationWindow, as its native tests do",
                 "No shell decorations, system keyboard, modem/provider integration or device GPU evidence",
-                "Fonts and Qt/Keel versions can change rasterization; use the recorded runtime when comparing",
+                "Repository fonts are isolated and checked; Qt/Keel versions and graphics backends can still change rasterization",
             ],
             "runs": [],
         }
@@ -224,6 +284,7 @@ def main():
                                KEEL_THEME_PIXEL_RATIO="1",
                                QML_XHR_ALLOW_FILE_READ="1", KEEL_THEME_ICON_DIRS=args.icons,
                                LC_ALL="C.UTF-8", TZ="UTC")
+                    run["fonts"] = production_font_environment(state, env)
                     with log.open("w", encoding="utf-8") as stream:
                         result = subprocess.run(command, cwd=ROOT, env=env, stdout=stream,
                                                 stderr=subprocess.STDOUT, timeout=60, check=False)
