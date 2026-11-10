@@ -1,6 +1,6 @@
 # Marathon v2 — native BB10 × Sailfish successor
 
-Planning baseline: November 7, 2026. Status: proposed programme; no v2 functionality is implemented by these documents.
+Planning baseline: November 7, 2026; approved scope revised November 9, 2026. Status: approved implementation programme, with individual work packages still planned until their evidence is recorded. These documents implement no runtime functionality.
 
 ## Product decision
 
@@ -12,14 +12,40 @@ The product should make it unusually easy to read, reply, capture, search and re
 
 - [Modernization programme](MODERNIZATION_PLAN.md): features, architecture, dependencies, delivery phases and release gates.
 - [UI and interaction specification](UI_SPEC.md): visual language, screen inventory, adaptive rules and motion.
+- [Visual refresh research](VISUAL_REFRESH_RESEARCH_2026-11-09.md): inspected Mobbin references, existing theme ownership and a restrained native visual lift.
+- [Design influence roster](DESIGN_INFLUENCES.md): TAT/The Astonishing Tribe, named UX work and the existing BlackBerry/Sailfish references.
 - [Implementation backlog](BACKLOG.md): ordered work packages and acceptance evidence.
+- [Engineering workflow and skills](ENGINEERING_WORKFLOW.md): native/API guidance, source versions, agent responsibilities and validation.
+- [V1 gap audit and upstream intake](V1_GAP_AUDIT.md): complete open-item inventory, current-versus-inherited source findings, dated Reddit feedback and repair priorities.
+- [Remediation queue and programme tracker](REMEDIATION_QUEUE.md): eight ready-to-file repair tickets, detailed acceptance and all 37 packages linked to the current draft PRs; the issue board is disabled.
+- [QNX reference crosswalk](QNX_REFERENCE_CROSSWALK.md): verified 6.3 manuals, current QNX 8 checks and concrete lifecycle/recovery lessons for the existing Linux-native repairs and separate RNQNX plans.
+- [App lifecycle transactions](APP_LIFECYCLE_TRANSACTIONS.md): generation publication, legacy migration, running-code retention, truthful uninstall outcomes and retry boundaries in draft #9.
+- [Native validation gate](NATIVE_VALIDATION.md): the required real Qt/Keel suites, strict QML validator, reproducible commands and exact limits of the host evidence.
+- [Rust architecture and API audit](RUST_API_AUDIT.md): all 28 main workspace crates, separate native app workspaces, real Qt/D-Bus boundaries and remaining ownership work.
+- [AppInstaller API](APP_INSTALLER_API.md): asynchronous refresh, cached state, explicit errors and bulk capability discovery for Settings.
+- [Open-work audit](OPEN_WORK_AUDIT.md): every open PR and approved package, source integration and exact evidence boundaries.
+- [Native UX research](UX_RESEARCH_2026-11-07.md): the historical navigation/adaptive-overview brief and its current applicability.
+- [Managed external-client RFC](../rfcs/0013-react-native-client-contract.md): the proposed native lifecycle/package contract for independently built clients; documentation, not a new runtime.
+- [Passport inspection tools](../../tools/passport/README.md): passive host inventory and bounded offline ELF inspection; no device-port or bootability claim.
+
+## Approved 2.0 scope
+
+The November 9 decision keeps every approved successor capability in the **2.0 programme** except Work/Personal Spaces. The original V2-001–029 packages remain planned; V2-030–037 make the additional work explicit. Phases sequence implementation within 2.0; they do not silently move approved capabilities into a later release or establish that they work today.
+
+| Programme | Scope |
+|---|---|
+| 2.0 | Existing Hub/Peek, live covers, native task invocation, adaptive displays, accessibility, reliable services and installable app ecosystem |
+| 2.0 additions | Paired-device continuity; credentials/passkeys; migration/export/restore; Remember-style tasks and attachment provenance; secure messaging, voice and video; personal Travel/Bedside/Focus scenes; keyboard Instant Actions; meeting preparation and follow-up |
+| 2.1 only | All Work/Personal Spaces: organizational views, account assignment to spaces, work mode, profile switching, separate work storage/credentials, managed profiles and security isolation |
+
+Ordinary multiple accounts within the user's personal Hub remain in 2.0. Personal scenes change presentation and interruption preferences; they do not create another identity, account partition or security boundary. See the explicit [2.1 appendix](MODERNIZATION_PLAN.md#15-version-21-appendix-workpersonal-spaces) before adding any work-profile interface.
 
 ## Repository and branch policy
 
 - Upstream: https://github.com/patrickjquinn/Marathon-Shell
 - Fork: `mikevocalz/Marathon-Shell`; development branch: `v2`.
-- Base: upstream `main`, verified at `c2c1b2fe32aeaa51edf75a45045cbfbbc08c4ac5` on November 7, 2026.
-- The newer device-specific `release/q25-v1` branch is an integration source to evaluate, not an automatic replacement for main. Review its fixes and dependency changes individually before importing them.
+- Historical base: upstream `main`, verified at `c2c1b2fe32aeaa51edf75a45045cbfbbc08c4ac5` on November 7, 2026. On November 9, upstream `main` is `567f1faa8bfdf31611dd401134c293daa160221c`, 548 commits ahead of that base; see the [intake audit](V1_GAP_AUDIT.md).
+- Current upstream `main` and `release/q25-v1` are integration sources to evaluate. Review their fixes and dependency changes before importing them; an old open camera PR or Reddit report does not establish current source behavior.
 - Preserve upstream history, attribution and existing license notices. Retain `main` as the upstream tracking baseline; submit small feature branches into `v2`.
 - Do not force-push shared branches. Record each upstream integration SHA and its regression results.
 - The first commit is documentation only. This plan does not bump the package version, publish a release, flash a device, change signing keys or announce upstream endorsement.
@@ -35,11 +61,15 @@ The product should make it unusually easy to read, reply, capture, search and re
 6. Nitro Forge is the owner's separate premium commercial component product. Marathon provides generic native runtime/SDK support so licensed developers can install selected Forge packages in their own apps with minimal setup. Forge components, engines, assets and licensing code are not bundled, vendored or dependencies of the OS, shell or bundled system apps. NYC-Tron application adapters remain separate from system controls. React Native Marathon and QNX are separate platform targets.
 7. Retain Deckard as an optional compatibility lane; first-party features and our RN applications must not depend on Android emulation.
 8. Normal navigation, messaging, search and settings remain usable without AI.
+9. All Work/Personal Spaces are deferred to 2.1, including lightweight organizational views. They are not a 2.0 dependency or release gate.
+10. Implementation uses relevant native and API skills, source/version checks, delegated work and independent review. Keep the OS's Qt/Keel architecture and validate its contracts with non-premium fixtures.
 
 ## Evidence and limitations
 
 The existing research, *MarathonOS as a modern BB10 successor* (November 6, 2026), supplies the detailed audit and 34-source register. This plan incorporates it, then adds the explicit native-only scope and first-class adaptive UI decision.
 
 Rechecked upstream README, tree, main SHA, contribution guide, Keel migration and Sailfish keep/drop document. No AGENTS.md was present in the returned main tree. No build or hardware run was performed for this planning change. Existing capability descriptions below are source/documentation evidence, not independently reproduced readiness claims.
+
+The November 9 scope review inspected this fork's `v2` at `bc39c23cac18221df21e410a45f8cc72d0ae9824` and the existing app, Rust service, portal and keyboard seams. Detailed source paths and first implementable slices are in the backlog. Existing Notes checkbox tasks, mail/DAV credential storage and Bluetooth pairing must not be relabeled as the complete task, passkey or companion features.
 
 The old CONTRIBUTING guide still refers to MarathonUI; the current README and Keel migration document explicitly supersede that API. Use the Keel imports and Marathon.Silica extension strategy. Any proposed accessible dialog controls or adaptive command surfaces that differ from current Keel interaction guidance need an explicit v2 design decision and regression review, not an undocumented toolkit fork.

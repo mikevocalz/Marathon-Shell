@@ -1,24 +1,23 @@
 import QtQml
 
 QtObject {
-    property string latest: ""
-    property string preview: ""
+    property string latest
+    property string preview
+    readonly property var _count: ({
+            value: 0
+        })
 
     function nextPath(kind) {
-        return kind === "video" ? "/pictures/VID_1.mp4" : "/pictures/IMG_1.jpg";
+        const n = ++_count.value;
+        return kind === "video" ? "/pictures/VID_" + n + ".mp4" : "/pictures/IMG_" + n + ".jpg";
     }
-
     function posterPath(video) {
-        return "/cache/posters/VID_1.jpg";
+        return "/cache/posters/" + video.substring(video.lastIndexOf("/") + 1) + ".jpg";
     }
-
     function add(capture) {
-        latest = capture.indexOf("file://") === 0 ? capture : "file://" + capture;
-        preview = /\.mp4$/i.test(latest) ? Qt.resolvedUrl("../../../data/photo.png") : latest;
+        latest = capture;
+        preview = capture;
     }
-
-    function deleteLatest() {
-        latest = "";
-        preview = "";
+    function remove(capture) {
     }
 }

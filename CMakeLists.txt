@@ -208,6 +208,7 @@ add_subdirectory(marathon-icon-theme)
 add_subdirectory(marathon-fonts)
 add_subdirectory(shell)
 add_subdirectory(tools/marathon-app-runner)
+add_subdirectory(tools/marathon-touch-hints)
 add_subdirectory(tools/sailfish-qml)
 add_subdirectory(tools/sailfish-install)
 
@@ -242,6 +243,9 @@ install(PROGRAMS systemd/marathon-activate
     DESTINATION ${CMAKE_INSTALL_PREFIX}/libexec
 )
 install(PROGRAMS tools/marathon-data-key/marathon-data-key
+    DESTINATION ${CMAKE_INSTALL_PREFIX}/libexec
+)
+install(PROGRAMS tools/marathon-remote-connection/marathon-remote-connection
     DESTINATION ${CMAKE_INSTALL_PREFIX}/libexec
 )
 

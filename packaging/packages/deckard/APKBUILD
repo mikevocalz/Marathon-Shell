@@ -8,30 +8,41 @@
 # scripts/qemu/lib/build-deckard-apk.sh stages a local checkout.
 pkgname=deckard
 pkgver=0.1.0
-pkgrel=26
-_commit=d5c317833bbe0844eb2809a8ecf873e09379cafe
+pkgrel=37
+_commit=77f55d6c44d70562f328f492ada0099a8e65954f
 pkgdesc="Android notifications, media and system integration for Marathon"
 url="https://github.com/patrickjquinn/Marathon-Deckard"
 arch="aarch64 x86_64"
 license="GPL-3.0-or-later AND GPL-3.0-only"
-# deckard-containerd runs lxc-*, dnsmasq, iptables and modprobe (kmod);
+# deckard-containerd runs lxc-*, dnsmasq, iptables, modprobe (kmod) and
+# iproute2's ip (its bridge; busybox ip has no link add);
 # deckard-boot-evidence runs ss and nsenter; deckard-migrate runs
 # marathon-shell-bin --rename-app-ids.
-depends="lxc dnsmasq iptables kmod iproute2-ss util-linux-misc libgcc marathon-shell>=1.0.0-r492"
+# deckard-camera links GStreamer; a camera device's package brings libcamerasrc.
+depends="lxc dnsmasq iptables kmod iproute2 util-linux-misc libgcc gstreamer gst-plugins-base marathon-shell>=1.0.0-r492"
 # The overlay carries Android ELF files (the patched composer HAL) that link
 # Android's libc++, so the Rust binaries' libgcc_s is listed above instead.
 # Cargo strips the binaries; abuild's strip would rewrite them after package()
 # and break the build manifest's digests.
 options="!tracedeps !strip net"
-makedepends="cargo unzip"
+makedepends="cargo unzip gstreamer-dev gst-plugins-base-dev"
 checkdepends="dbus"
+install="$pkgname.post-install $pkgname.post-upgrade"
 # microG's signed releases, unchanged (Marathon-Deckard docs/microg.md).
 _microg=v0.3.17.252432
 _gms=com.google.android.gms-252432034.apk
 _vending=com.android.vending-84022634.apk
+# F-Droid, its Privileged Extension and Aurora Store from f-droid.org, unchanged
+# (Marathon-Deckard docs/fdroid.md).
+_fdroid=org.fdroid.fdroid_1023052.apk
+_privext=org.fdroid.fdroid.privileged_2140.apk
+_aurora=com.aurora.store_76.apk
 source="deckard-$_commit.tar.gz::https://github.com/patrickjquinn/Marathon-Deckard/archive/$_commit.tar.gz
 	$_gms::https://github.com/microg/GmsCore/releases/download/$_microg/$_gms
 	$_vending::https://github.com/microg/GmsCore/releases/download/$_microg/$_vending
+	https://f-droid.org/repo/$_fdroid
+	https://f-droid.org/repo/$_privext
+	https://f-droid.org/repo/$_aurora
 	"
 builddir="$srcdir/Marathon-Deckard-$_commit"
 
@@ -46,7 +57,8 @@ prepare() {
 	[ -f host/deckard-launch/Cargo.toml ] &&
 	[ -f host/deckard-container/Cargo.toml ] &&
 	[ -f host/deckard-host-tools/src/migrate.rs ] &&
-	[ -f host/deckard-bridge/Cargo.toml ] ||
+	[ -f host/deckard-bridge/Cargo.toml ] &&
+	[ -f host/deckard-camera/Cargo.toml ] ||
 		die "pin a Deckard commit containing the native host tools"
 }
 
@@ -56,7 +68,7 @@ build() {
 	cargo build --release --locked -p deckard-host-tools \
 		-p deckard-fonts-sync -p deckard-overlay-sync \
 		-p deckard-runtime -p deckard-launch -p deckard-container \
-		-p deckard-bridge
+		-p deckard-bridge -p deckard-camera
 }
 
 check() {
@@ -67,7 +79,7 @@ check() {
 		cargo test --release --locked -p deckard-host-tools -p deckard-fonts-sync \
 		-p deckard-overlay-sync -p deckard-runtime -p deckard-launch \
 		-p deckard-container -p deckard-bridge -p deckard-core \
-		-p deckard-mpris -p deckard-packages
+		-p deckard-mpris -p deckard-packages -p deckard-camera
 }
 
 package() {
@@ -80,6 +92,11 @@ package() {
 		"$pkgdir"/usr/lib/systemd/user/graphical-session.target.wants/deckard-bridge.service
 	install -Dm644 $p/deckard-bridge.service.json \
 		"$pkgdir"/usr/share/marathon-shell/services/deckard-bridge.service.json
+	install -Dm755 target/release/deckard-camera "$pkgdir"/usr/libexec/deckard-camera
+	install -Dm644 $p/deckard-camera.service \
+		"$pkgdir"/usr/lib/systemd/user/deckard-camera.service
+	ln -s ../deckard-camera.service \
+		"$pkgdir"/usr/lib/systemd/user/graphical-session.target.wants/deckard-camera.service
 	install -Dm755 target/release/deckard-overlay-sync \
 		"$pkgdir"/usr/libexec/deckard-overlay-sync
 	install -Dm755 target/release/deckard-open-apk "$pkgdir"/usr/libexec/deckard-open-apk
@@ -124,14 +141,16 @@ package() {
 
 	install -d "$pkgdir"/usr/share/deckard
 	cp -r image/overlay "$pkgdir"/usr/share/deckard/overlay
-	if [ -x image/microg/install.sh ]; then
-		case "$CARCH" in
-		aarch64) _abi=arm64-v8a ;;
-		x86_64) _abi=x86_64 ;;
-		esac
+	case "$CARCH" in
+	aarch64) _abi=arm64-v8a ;;
+	x86_64) _abi=x86_64 ;;
+	esac
+	[ ! -x image/microg/install.sh ] ||
 		image/microg/install.sh "$srcdir/$_gms" "$srcdir/$_vending" \
 			"$pkgdir"/usr/share/deckard/overlay $_abi
-	fi
+	[ ! -x image/fdroid/install.sh ] ||
+		image/fdroid/install.sh "$srcdir/$_fdroid" "$srcdir/$_privext" \
+			"$srcdir/$_aurora" "$pkgdir"/usr/share/deckard/overlay $_abi
 	chmod -R u=rwX,go=rX "$pkgdir"/usr/share/deckard/overlay
 	[ ! -f image/whiteouts ] ||
 		install -Dm644 image/whiteouts "$pkgdir"/usr/share/deckard/whiteouts
@@ -152,4 +171,7 @@ sha512sums="
 SKIP  deckard-$_commit.tar.gz
 0b2f77e87aea3f97e0958f8d02b2d0859ad413347181eee3e45949cf1fb23b8eadc3654472ef802030a15707b85245b22af6d74ebb85667a960d707fea223e27  com.google.android.gms-252432034.apk
 8a0297a6e2ee648f456480309c41b84ead67ffb2a28ac907e764077012d28f5826a7994f9a39e4202b1b7382030bd7cd45d6368930faa84773f0b4695f9c7af6  com.android.vending-84022634.apk
+a57b0952c4a3a1573bd9837998c5941d1a820ae9bae5fe4e0e6f24ff2f95c91e083a08b5b26619329f6099ad796a1e06692fad1d3b73bb534da0f71eafe88792  org.fdroid.fdroid_1023052.apk
+1d57c4927f5e88f9480f51132dc29ca366a06021c805c30e85fb53d7c577e2e4f3ceb507e3dabecf9ed4360eea02d1b9dcd8f83ad199b11aec7d06e0411c4929  org.fdroid.fdroid.privileged_2140.apk
+0511962ae1474c804805c06b78a614d5aa62a977625f178a06aedcb651ff8162e62c2ec4715e70303836be7e6b4dc048d541e9511804f1b4272171b8e5b24b4b  com.aurora.store_76.apk
 "

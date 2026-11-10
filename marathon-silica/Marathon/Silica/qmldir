@@ -13,6 +13,7 @@ FocusFrame 1.0 FocusFrame.qml
 IconButton 1.0 IconButton.qml
 IconTextSwitch 1.0 IconTextSwitch.qml
 ListItem 1.0 ListItem.qml
+SummaryListItem 1.0 SummaryListItem.qml
 MenuItem 1.0 MenuItem.qml
 Page 1.0 Page.qml
 PageHeader 1.0 PageHeader.qml

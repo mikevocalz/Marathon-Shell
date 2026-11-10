@@ -1,0 +1,21 @@
+#!/bin/sh
+# Root prepares the GPU before greetd; PAM sessions select only validated state.
+set -eu
+# Explicit temporary diagnostics for either session, independent of greetd's
+# discarded environment. No eval/source: permit only these boolean switches in
+# the root-owned file.
+if [ -r /etc/marathon/q25-session.conf ]; then
+    while IFS='=' read -r name value; do
+        case "$name:$value" in
+            MARATHON_STARTUP_TIMING:0|MARATHON_STARTUP_TIMING:1|\
+            MARATHON_PRESENT_STATS:0|MARATHON_PRESENT_STATS:1|\
+            MARATHON_FRAME_TIMING:0|MARATHON_FRAME_TIMING:1)
+                export "$name=$value" ;;
+        esac
+    done < /etc/marathon/q25-session.conf
+fi
+if [ -x /usr/libexec/marathon/q25-shell-session.gpu ] && [ -r /run/q25-gpu/ready ] && [ ! -e /etc/q25/gpu-disabled ]; then
+    exec /usr/libexec/marathon/q25-shell-session.gpu "$@"
+fi
+echo 'q25-session: GPU validation unavailable; starting software framebuffer' >&2
+exec /usr/libexec/marathon/q25-shell-session.software "$@"

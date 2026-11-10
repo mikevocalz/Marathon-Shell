@@ -75,21 +75,27 @@ TabItem {
             hintText: !root.phone.hasContactsPermission ? qsTr("Pull down to let Phone show your contacts and name callers") : root.phone.contacts.length === 0 ? qsTr("Pull down to add someone") : ""
         }
 
-        delegate: ListItem {
+        delegate: SummaryListItem {
             id: item
 
             required property var modelData
 
             objectName: "personItem"
-            contentHeight: Theme.itemSizeSmall
-            Accessible.name: modelData.name || ""
+            text: modelData.name || Phone.format(modelData.phone) || modelData.email || qsTr("Unnamed contact")
+            description: modelData.name ? Phone.format(modelData.phone) || modelData.email || "" : ""
+            iconSource: modelData.favorite ? "image://theme/icon-m-favorite-selected" : "image://theme/icon-m-contact"
+            Accessible.description: modelData.favorite ? qsTr("Favorite") : ""
             menu: ContextMenu {
                 MenuItem {
+                    objectName: "callPersonMenuItem"
                     text: qsTr("Call")
+                    enabled: (item.modelData.phone || "") !== ""
                     onClicked: root.phone.call(item.modelData.phone)
                 }
                 MenuItem {
+                    objectName: "messagePersonMenuItem"
                     text: qsTr("Send message")
+                    enabled: (item.modelData.phone || "") !== ""
                     onClicked: root.phone.sendMessage(item.modelData.phone)
                 }
                 MenuItem {
@@ -103,15 +109,6 @@ TabItem {
                 phone: root.phone,
                 contactId: modelData.id
             })
-
-            Label {
-                x: Theme.horizontalPageMargin
-                width: parent.width - 2 * Theme.horizontalPageMargin
-                anchors.verticalCenter: parent.verticalCenter
-                text: item.modelData.name || Phone.format(item.modelData.phone)
-                truncationMode: TruncationMode.Fade
-                color: item.highlighted ? Theme.highlightColor : Theme.primaryColor
-            }
         }
 
         VerticalScrollDecorator {}

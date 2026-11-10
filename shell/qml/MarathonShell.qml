@@ -1,6 +1,7 @@
 import "./components" as Comp
 import "./core/BatteryWarning.js" as BatteryWarning
 import MarathonOS.Shell 1.0
+import Nemo.Configuration 1.0
 import QtQuick
 import QtQuick.Window
 import Sailfish.Silica 1.0 as Silica
@@ -33,6 +34,8 @@ Item {
     readonly property real quickSettingsThreshold: maxQuickSettingsHeight * Constants.quickSettingsDismissThreshold
     property var pendingLaunch: null
     property bool volumeUpPressed: false
+    // Pilot for the assistant key, waiting for the PIN: "pilot" or "pilot-voice".
+    property string pendingAssist: ""
     property bool powerButtonPressed: false
 
     // Closes the topmost shell overlay; false when none was open.
@@ -145,6 +148,59 @@ Item {
         pageView.currentIndex = 1;
     }
 
+    // A hardware home key does nothing on the lock screen.
+    function handleHomeKeyPress() {
+        if (!SessionStore.isLocked)
+            handleHomeKey();
+    }
+
+    // A phone keyboard's green key: answers a ringing call, else opens Phone.
+    function handleCallKey() {
+        if (incomingCallOverlay && incomingCallOverlay.isRinging) {
+            incomingCallOverlay.answer();
+            return;
+        }
+        if (SessionStore.isLocked)
+            return;
+        UIStore.openApp("phone", qsTr("Phone"), "");
+    }
+
+    // Declines a ringing call or ends the one in progress; false if none.
+    function endCall() {
+        if (incomingCallOverlay && incomingCallOverlay.isRinging) {
+            incomingCallOverlay.decline();
+            return true;
+        }
+        if (Modem.callState !== "idle" && Modem.callState !== "terminated") {
+            HapticManager.medium();
+            Modem.hangup();
+            return true;
+        }
+        return false;
+    }
+
+    // A red key: declines or ends a call, else goes home.
+    function handleEndKey() {
+        if (!endCall() && !SessionStore.isLocked)
+            handleHomeKey();
+    }
+
+    // The Q25's end key: declines or ends a call, else the switcher.
+    function handleHangupKey() {
+        if (!endCall())
+            handleSwitcherKey();
+    }
+
+    // Active Frames from an app, and between them and the grid.
+    function handleSwitcherKey() {
+        if (SessionStore.isLocked)
+            return;
+        if (UIStore.appWindowOpen)
+            handleHomeKey();
+        else
+            pageView.currentIndex = pageView.currentIndex === 1 ? 2 : 1;
+    }
+
     // Back lands on home when the foreground app has no page to pop.
     function revealHomeUnderApp() {
         if (pageView.currentIndex < 2) {
@@ -184,19 +240,64 @@ Item {
         powerMenu.show();
     }
 
-    focus: true
-    Keys.onReleased: event => {
-        if (event.key === Qt.Key_VolumeUp) {
-            volumeUpPressed = false;
-            event.accepted = true;
-        }
+    function stepVolume(key) {
+        SystemControlStore.setVolume(SystemControlStore.volume + (key === "volumeUp" ? 10 : -10));
+        systemHUD.showVolume(AudioManagerCpp.volume);
     }
+
+    // The key between the volume keys: `action` is SettingsManagerCpp's
+    // assistKeyPress or assistKeyHold. Locked, it waits for the PIN.
+    function runAssistAction(action) {
+        if (action === "none" || !SettingsManagerCpp.firstRunComplete)
+            return;
+        if (action !== "camera" && !PilotClient.available) {
+            Logger.warn("Shell", "Assistant key: Pilot is not available");
+            return;
+        }
+        if (!Display.screenOn)
+            Display.turnScreenOn();
+        HapticManager.medium();
+        if (SessionStore.isLocked) {
+            if (!SessionStore.checkSession()) {
+                if (action === "camera")
+                    shell.pendingLaunch = {
+                        "appId": "camera",
+                        "appName": qsTr("Camera")
+                    };
+                else
+                    shell.pendingAssist = action;
+                shell.showPinScreen = true;
+                pinScreen.show();
+                return;
+            }
+            SessionStore.unlock();
+        }
+        if (action === "camera")
+            UIStore.openApp("camera", qsTr("Camera"), "");
+        else
+            askPilot(action === "pilot-voice");
+    }
+
+    function askPilot(listening) {
+        pilotGlow.light();
+        // The Wayland client is the app itself, not its sandbox or Keel host.
+        const s = UIStore.appWindowOpen && appWindow.waylandSurface ? (appWindow.waylandSurface.surface || appWindow.waylandSurface) : null;
+        const pid = s && s.client ? s.client.processId : 0;
+        if (listening)
+            PilotClient.listenFor(pid);
+        else
+            PilotClient.showSheetFor(pid);
+    }
+
+    focus: true
     Component.onCompleted: {
         shell.forceActiveFocus();
         if (Security.bootUnlocked && SessionStore.isLocked)
             SessionStore.unlock();
         MHaptics.backend = HapticManager;
         compositor = shellInitialization.initialize(shell, shellWindow);
+        if (typeof TrackpadInput !== "undefined")
+            TrackpadInput.compositor = compositor;
         // Wire the *actual* QQuickWindow (not the root Item) so the
         // synchronous saveScreenshotTo() path works. Existing call
         // sites still pass `shell` explicitly when they want a frame
@@ -210,7 +311,11 @@ Item {
         lockScreen.swipeProgress = 0;
         if (compositor) {
             compositor.systemBackTriggered.connect(handleBackKey);
-            compositor.systemHomeTriggered.connect(handleHomeKey);
+            compositor.systemHomeTriggered.connect(handleHomeKeyPress);
+            compositor.systemCallTriggered.connect(handleCallKey);
+            compositor.systemEndTriggered.connect(handleEndKey);
+            compositor.systemSwitcherTriggered.connect(handleSwitcherKey);
+            compositor.systemHangupTriggered.connect(handleHangupKey);
             // Also reset the idle-screen-off timer when the compositor
             // sees ANY input — without this the timer only resets on
             // events that bubble up to the shell's own cursorTracker
@@ -408,11 +513,11 @@ Item {
         }
     }
     onWidthChanged: {
-        if (Constants.screenWidth > 0)
+        if ((typeof ScreenMetricsCpp === "undefined" || !ScreenMetricsCpp) && Constants.screenWidth > 0)
             resizeDebounceTimer.restart();
     }
     onHeightChanged: {
-        if (Constants.screenHeight > 0)
+        if ((typeof ScreenMetricsCpp === "undefined" || !ScreenMetricsCpp) && Constants.screenHeight > 0)
             resizeDebounceTimer.restart();
     }
     // Pass --skip-lock on the command line to force shell straight to
@@ -426,34 +531,6 @@ Item {
     // ignored it). Honor the app-window state even under skip-lock.
     state: _skipLock ? (UIStore.appWindowOpen ? "app" : "home") : (SettingsManagerCpp.firstRunComplete ? (SessionStore.showLockScreen ? (showPinScreen ? "pinEntry" : "locked") : (UIStore.appWindowOpen ? "app" : "home")) : "home")
     Keys.onPressed: event => {
-        if (event.key === Qt.Key_VolumeUp) {
-            volumeUpPressed = true;
-            if (powerButtonPressed) {
-                Logger.info("Shell", "Power + Volume Up combo - Taking Screenshot");
-                screenshotFlash.trigger();
-                ScreenshotService.captureScreen(shell);
-                event.accepted = true;
-                return;
-            }
-            if (shell.silenceRinging()) {
-                event.accepted = true;
-                return;
-            }
-            SystemControlStore.setVolume(SystemControlStore.volume + 10);
-            systemHUD.showVolume(AudioManagerCpp.volume);
-            event.accepted = true;
-            return;
-        }
-        if (event.key === Qt.Key_VolumeDown) {
-            if (shell.silenceRinging()) {
-                event.accepted = true;
-                return;
-            }
-            SystemControlStore.setVolume(SystemControlStore.volume - 10);
-            systemHUD.showVolume(AudioManagerCpp.volume);
-            event.accepted = true;
-            return;
-        }
         if ((event.key === Qt.Key_Space) && (event.modifiers & Qt.ControlModifier)) {
             Logger.debug("Shell", "Cmd+Space pressed - Opening Universal Search");
             UIStore.toggleSearch();
@@ -732,7 +809,6 @@ Item {
         enabled: true
         focus: false
         onPositionChanged: mouse => {
-            CursorManager.onMouseActivity();
             idleScreenTimer.rearm();
             mouse.accepted = false;
         }
@@ -879,6 +955,10 @@ Item {
         function onUserActivity() {
             dimState.restore();
         }
+
+        function onKeyPressed() {
+            Display.keyboardUsed();
+        }
     }
 
     // Power-key + system-level screen-on must ALSO restore the dim.
@@ -895,6 +975,11 @@ Item {
                 dimState.restore();
                 // Re-arm idle timers from the moment of wake.
                 idleScreenTimer.rearm();
+            } else {
+                // Off the app's surface: the window's reactivation at the
+                // wake would hand the app the keyboard, and with it its
+                // camera, behind the lock screen. Unlocking gives it back.
+                shell.forceActiveFocus();
             }
         }
     }
@@ -990,6 +1075,68 @@ Item {
                 UIStore.closeQuickSettings();
         }
         target: PermissionManager
+    }
+
+    // The volume and assistant keys, read from /dev/input whichever window
+    // has focus, locked or not. Volume works with the screen off without
+    // waking it; held, it repeats.
+    Connections {
+        function onSideKeyPressed(key) {
+            if (key === "assist") {
+                assistHoldTimer.restart();
+                return;
+            }
+            if (key === "volumeUp") {
+                volumeUpPressed = true;
+                if (powerButtonPressed) {
+                    Logger.info("Shell", "Power + Volume Up combo - Taking Screenshot");
+                    screenshotFlash.trigger();
+                    ScreenshotService.captureScreen(shell);
+                    return;
+                }
+            }
+            if (shell.silenceRinging())
+                return;
+            shell.stepVolume(key);
+            volumeRepeatTimer.key = key;
+            volumeRepeatTimer.interval = 400;
+            volumeRepeatTimer.restart();
+        }
+
+        function onSideKeyReleased(key) {
+            if (key === "assist") {
+                if (assistHoldTimer.running) {
+                    assistHoldTimer.stop();
+                    shell.runAssistAction(SettingsManagerCpp.assistKeyPress);
+                }
+                return;
+            }
+            if (key === "volumeUp")
+                volumeUpPressed = false;
+            if (volumeRepeatTimer.key === key)
+                volumeRepeatTimer.stop();
+        }
+
+        target: Power
+    }
+
+    Timer {
+        id: volumeRepeatTimer
+
+        property string key: ""
+
+        repeat: true
+        onTriggered: {
+            interval = 120;
+            shell.stepVolume(key);
+        }
+    }
+
+    Timer {
+        id: assistHoldTimer
+
+        interval: 500
+        onTriggered: shell.runAssistAction(SettingsManagerCpp.assistKeyHold)
     }
 
     // The power key, read from /dev/input whichever window has focus. A
@@ -1157,6 +1304,8 @@ Item {
                     Tasks.launchApp(typeof app === "string" ? app : app.id);
                 }
                 onUninstallFailed: name => errorToast.show(qsTr("%1 wasn't uninstalled").arg(name), qsTr("Try again from its app info."), "x")
+                onUninstallPartial: (appId, detail) => errorToast.show(qsTr("Cleanup incomplete for %1").arg(appId), detail, "x")
+                onUninstallFailureDetail: (name, detail) => errorToast.show(qsTr("%1 wasn't uninstalled").arg(name), detail, "x")
                 Component.onCompleted: {
                     shell.totalPages = pageView.pageCount;
                 }
@@ -1431,6 +1580,7 @@ Item {
         anchors.fill: parent
         visible: !SessionStore.isLocked
         z: Constants.zIndexPeek
+        backdrops: UIStore.appWindowOpen ? [appWindowContainer] : [wallpaperImage, mainContent]
 
         // The Hub and Quick Settings never outlive a lock or an app launch.
         Connections {
@@ -1853,7 +2003,7 @@ Item {
         visible: !SessionStore.isLocked && drawnHeight > 0
         z: Constants.zIndexQuickSettings
         clip: true
-        homeBackdrop: wallpaperImage
+        backdrops: UIStore.appWindowOpen ? [appWindowContainer] : [wallpaperImage, mainContent]
         onClosed: {
             UIStore.closeQuickSettings();
         }
@@ -1898,7 +2048,7 @@ Item {
         }
         onPositionChanged: mouse => {
             var dragDistance = mouse.y - startY;
-            if (dragDistance > 5 && !isDraggingDown) {
+            if (dragDistance > Qt.styleHints.startDragDistance && !isDraggingDown) {
                 isDraggingDown = true;
                 UIStore.quickSettingsDragging = true;
                 Logger.gesture("StatusBar", "dragStart", {
@@ -2081,6 +2231,11 @@ Item {
                 Logger.info("Shell", "Executing pending launch: " + shell.pendingLaunch.appName);
                 UIStore.openApp(shell.pendingLaunch.appId, shell.pendingLaunch.appName, "");
                 shell.pendingLaunch = null;
+            }
+            if (shell.pendingAssist) {
+                const listening = shell.pendingAssist === "pilot-voice";
+                shell.pendingAssist = "";
+                shell.askPilot(listening);
             }
             if (shell.pendingHub) {
                 shell.pendingHub = false;
@@ -2376,6 +2531,8 @@ Item {
         }
 
         function onEmergencyShutdownArmed(secondsUntilShutdown) {
+            if (Power.batteryLevel < 0)
+                return;
             criticalBatteryShutdownTimer.interval = Math.max(0, secondsUntilShutdown * 1000);
             criticalBatteryShutdownTimer.start();
         }
@@ -2393,6 +2550,8 @@ Item {
         interval: 10000
         repeat: false
         onTriggered: {
+            if (Power.batteryLevel < 0)
+                return;
             Logger.error("Battery", "Emergency critical power action due to battery");
             Power.performCriticalPowerAction();
         }
@@ -2617,10 +2776,12 @@ Item {
 
     // Focus that falls back to the shell root while an app is in front (an
     // overlay closing, the window it focused going) goes to the app, or keys
-    // reach type-to-search and the keyboard addresses the shell.
+    // reach type-to-search and the keyboard addresses the shell. Not while
+    // locked: an idle lock keeps the "app" state until the wake brings the
+    // lock screen up, and the app would come back to life behind it.
     Connections {
         function onActiveFocusItemChanged() {
-            if (shell.Window.activeFocusItem === shell && shell.state === "app" && !UIStore.searchOpen && !UIStore.quickSettingsOpen) {
+            if (shell.Window.activeFocusItem === shell && shell.state === "app" && !SessionStore.isLocked && !UIStore.searchOpen && !UIStore.quickSettingsOpen) {
                 Logger.info("Shell", "Focus fell to the shell with " + appWindow.appId + " in front; giving it back");
                 Qt.callLater(appWindow.focusApp);
             }
@@ -2683,13 +2844,6 @@ Item {
         }
     }
 
-    // ── Night Light warm-tint overlay ─────────────────────────────
-    // Marathon's shell IS the compositor, so one top-most tint item warms
-    // every app surface + chrome uniformly — the scene-graph equivalent of a
-    // CRTC gamma ramp (which Qt's compositor exposes no protocol for). Bound
-    // to the real DisplayManager night-light state via SystemControlStore.
-    // No MouseArea → never intercepts input. This is what makes the Night
-    // tile actually do something on screen.
     Binding {
         target: PilotClient
         property: "watching"
@@ -2703,17 +2857,15 @@ Item {
         z: Constants.zIndexPilotGlow
     }
 
-    Rectangle {
-        id: nightLightOverlay
+    // Above every surface and the chrome, below the panel's dither.
+    NightLight {
         anchors.fill: parent
         z: 900000
-        color: Qt.rgba(1.0, 0.52, 0.12, 1.0)
-        opacity: SystemControlStore.isNightLightOn ? 0.22 : 0.0
-        visible: opacity > 0.0
-        Behavior on opacity {
+        temperature: SystemControlStore.isNightLightOn ? Display.nightLightTemperature : 6500
+        Behavior on temperature {
             NumberAnimation {
-                duration: 400
-                easing.type: Easing.OutCubic
+                duration: 2000
+                easing.type: Easing.InOutSine
             }
         }
     }
@@ -2768,6 +2920,10 @@ Item {
     PowerMenu {
         id: powerMenu
 
+        onLockRequested: {
+            Logger.info("Shell", "Lock requested from power menu");
+            SessionStore.lock();
+        }
         onSleepRequested: {
             Logger.info("Shell", "Sleep requested from power menu");
             SessionStore.lock();
@@ -2828,7 +2984,7 @@ Item {
         onLoaded: {
             item.pinShown = Qt.binding(() => shell.showPinScreen);
             shell.incomingCallOverlay = item;
-            item.show(calls.ringing, calls.nameOf(calls.ringing));
+            item.show(calls.ringing, calls.contactName(calls.ringing));
         }
         onActiveChanged: {
             if (!active)
@@ -2863,8 +3019,12 @@ Item {
         property string ringing: ""
         property bool active: false
 
+        function contactName(number) {
+            return ContactsManager.getContactByNumber(number).name || "";
+        }
+
         function nameOf(number) {
-            return ContactsManager.getContactByNumber(number).name || number;
+            return contactName(number) || number;
         }
 
         function onIncomingCall(number) {
@@ -2873,7 +3033,7 @@ Item {
             AudioManagerCpp.playRingtone();
             HapticManager.vibratePattern([1000, 500]);
             if (shell.incomingCallOverlay)
-                shell.incomingCallOverlay.show(number, nameOf(number));
+                shell.incomingCallOverlay.show(number, contactName(number));
             else
                 incomingCallOverlayLoader.active = true;
         }
@@ -2908,19 +3068,36 @@ Item {
                 "priority": "high",
                 "actions": [
                     {
-                        "id": "call_back",
+                        "key": "call_back",
                         "label": qsTr("Call Back")
                     },
                     {
-                        "id": "message",
+                        "key": "message",
                         "label": qsTr("Message")
                     }
-                ]
+                ],
+                "replyTarget": number,
+                "tag": "missed-call:" + number
             });
             HapticManager.heavy();
         }
 
         target: Modem
+    }
+
+    // Phone's call log seen clears the missed-call notifications, as Android's does.
+    ConfigurationValue {
+        property real seenAt: -1
+
+        key: "/apps/phone/callLogSeen"
+        defaultValue: 0
+        onValueChanged: {
+            const at = Number(value) || 0;
+            if (seenAt >= 0 && at > seenAt)
+                NotificationService.dismissTaggedPrefix("phone", "missed-call:");
+            seenAt = at;
+        }
+        Component.onCompleted: seenAt = Number(value) || 0
     }
 
     Connections {
@@ -2933,7 +3110,7 @@ Item {
     }
 
     Connections {
-        function onMessageReceived(sender, text) {
+        function onMessageReceived(sender, text, timestamp, thread) {
             Display.turnScreenOn();
             NotificationService.sendNotification("messages", calls.nameOf(sender), text, {
                 "icon": "message-circle",
@@ -2941,15 +3118,17 @@ Item {
                 "priority": "high",
                 "actions": [
                     {
-                        "id": "inline-reply",
+                        "key": "inline-reply",
                         "label": qsTr("Reply")
                     },
                     {
-                        "id": "mark_read",
+                        "key": "mark_read",
                         "label": qsTr("Mark Read")
                     }
                 ],
-                "replyTarget": sender
+                "replyTarget": sender,
+                "conversation": thread,
+                "tag": "sms:" + thread
             });
             HapticManager.medium();
             AudioManagerCpp.playNotificationSound();
@@ -3008,5 +3187,98 @@ Item {
                 return "#f87171";
             }
         }
+    }
+
+    // The boot splash, carried on from Plymouth's last frame (q25-splash-
+    // greetd.conf stops its bar at half): the same images at the theme's
+    // positions (marathon.script), so the hand-over is invisible. The bar
+    // fills while the shell loads behind it, then the splash fades out.
+    Rectangle {
+        id: bootHandover
+
+        readonly property string theme: "file:///usr/share/plymouth/themes/marathon/"
+        property real progress: 0.5
+
+        anchors.fill: parent
+        z: 99990
+        color: "black"
+        visible: typeof MarathonBootHandover !== "undefined" && MarathonBootHandover && opacity > 0
+
+        Image {
+            id: bootLogo
+
+            source: bootHandover.theme + "marathon-logo.png"
+            x: Math.round(parent.width / 2 - width / 2)
+            y: Math.round(parent.height / 2 - height / 2 - 24)
+        }
+        Text {
+            // Plymouth's "Sans 14" in its font (Plymouth.ttf, Sora) at 96 dpi.
+            text: "M A R A T H O N" // i18n: literal
+            color: "white"
+            font.family: "Sora"
+            font.pixelSize: 19
+            x: Math.round(parent.width / 2 - width / 2)
+            y: Math.round(parent.height / 2 + bootLogo.height / 2 - 24)
+        }
+        Image {
+            id: bootTrack
+
+            source: bootHandover.theme + "progress-track.png"
+            x: Math.round(parent.width / 2 - width / 2)
+            y: parent.height - 110
+        }
+        Image {
+            source: bootHandover.theme + "progress-fill.png"
+            x: bootTrack.x
+            y: bootTrack.y
+            width: Math.round(140 * bootHandover.progress)
+            height: 2
+            fillMode: Image.Stretch
+        }
+
+        SequentialAnimation {
+            running: bootHandover.visible
+            NumberAnimation {
+                target: bootHandover
+                property: "progress"
+                to: 1
+                duration: 800
+                easing.type: Easing.OutCubic
+            }
+            PauseAnimation {
+                duration: 120
+            }
+            NumberAnimation {
+                target: bootHandover
+                property: "opacity"
+                to: 0
+                duration: 260
+                easing.type: Easing.InOutQuad
+            }
+        }
+    }
+
+    // Settings > Trackpad: "gesture" (scroll and caret) or "mouse" (pointer).
+    Binding {
+        target: typeof TrackpadInput !== "undefined" ? TrackpadInput : null
+        property: "mode"
+        value: SettingsManagerCpp.trackpadMode
+    }
+
+    // The mouse or trackpad pointer, drawn by the shell over everything (Qt's
+    // own stays hidden); CursorManager shows it while the pointer moves.
+    Image {
+        // The arrow's tip sits at (1, 1) of its 32-unit grid.
+        readonly property real hotspot: width / 32
+
+        source: "qrc:/images/cursor.svg"
+        width: Math.round(24 * Constants.scaleFactor)
+        height: width
+        sourceSize: Qt.size(width, height)
+        x: CursorManager.position.x - hotspot
+        y: CursorManager.position.y - hotspot
+        z: 100000
+        visible: CursorManager.cursorVisible
+        enabled: false
     }
 }

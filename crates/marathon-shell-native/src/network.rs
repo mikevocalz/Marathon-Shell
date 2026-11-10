@@ -173,25 +173,11 @@ pub mod qobject {
 
 use qobject::Network;
 
-/// `Marathon-XXXX` and `xxxx-xxxx-xxxx`, read off the screen and typed: no
-/// 0/O/1/l/i.
+const BLUEZ_ADAPTER: &str = "org.bluez.Adapter1";
+
+/// `Marathon-XXXX` and `xxxx-xxxx-xxxx`, read off the screen and typed.
 fn hotspot_credentials() -> (String, String) {
-    const ALPHABET: &[u8] = b"abcdefghjkmnpqrstuvwxyz23456789";
-    let pick = |n: usize| -> String {
-        let mut out = String::new();
-        while out.len() < n {
-            let mut byte = [0u8; 1];
-            // SAFETY: getrandom writes the one byte it is given.
-            if unsafe { libc::getrandom(byte.as_mut_ptr().cast(), 1, 0) } != 1 {
-                continue;
-            }
-            // Below 248 (8 x 31): no bias to the alphabet's start.
-            if usize::from(byte[0]) < ALPHABET.len() * 8 {
-                out.push(char::from(ALPHABET[usize::from(byte[0]) % ALPHABET.len()]));
-            }
-        }
-        out
-    };
+    let pick = marathon_rt::readable_secret;
     let ssid = format!("Marathon-{}", pick(4).to_uppercase());
     (ssid, format!("{}-{}-{}", pick(4), pick(4), pick(4)))
 }
@@ -316,6 +302,20 @@ impl Network {
             .await
             {
                 log::warn("network", format_args!("iw power_save {state}: {e}"));
+            }
+            // MediaTek's Android driver: in suspend mode its firmware filters
+            // broadcasts and answers ARP, as Android has it with the screen off.
+            let mode = if on {
+                "SETSUSPENDMODE 1"
+            } else {
+                "SETSUSPENDMODE 0"
+            };
+            if let Err(e) =
+                blocking::unblock(move || std::fs::write(WLAN_DRIVER_COMMANDS, mode)).await
+            {
+                if e.kind() != std::io::ErrorKind::NotFound {
+                    log::warn("network", format_args!("{mode}: {e}"));
+                }
             }
         });
     }
@@ -720,6 +720,9 @@ const NM: &str = "org.freedesktop.NetworkManager";
 const ACTIVE: &str = "org.freedesktop.NetworkManager.Connection.Active";
 const ACCESS_POINT: &str = "org.freedesktop.NetworkManager.AccessPoint";
 const HOTSPOT_UUID: &str = "5f7c2a3e-8d1b-4c6e-9a0f-3b2d1e4c5a60";
+/// The command node of MediaTek's gen4m driver, given to netdev by the
+/// device's udev rules. Writes take no trailing newline.
+const WLAN_DRIVER_COMMANDS: &str = "/proc/net/wlan/driver";
 // Active connection states.
 const ACTIVATED: u32 = 2;
 const DEACTIVATED: u32 = 4;
@@ -732,7 +735,7 @@ const BLUETOOTH: u32 = 5;
     default_service = "org.freedesktop.NetworkManager",
     default_path = "/org/freedesktop/NetworkManager"
 )]
-trait Nm {
+pub(crate) trait Nm {
     fn get_devices(&self) -> zbus::Result<Vec<OwnedObjectPath>>;
     fn activate_connection(
         &self,
@@ -752,17 +755,29 @@ trait Nm {
     #[zbus(property)]
     fn set_wireless_enabled(&self, enabled: bool) -> zbus::Result<()>;
     #[zbus(property)]
+    fn wwan_enabled(&self) -> zbus::Result<bool>;
+    #[zbus(property)]
+    fn set_wwan_enabled(&self, enabled: bool) -> zbus::Result<()>;
+    #[zbus(property)]
     fn active_connections(&self) -> zbus::Result<Vec<OwnedObjectPath>>;
+    #[zbus(property)]
+    fn devices(&self) -> zbus::Result<Vec<OwnedObjectPath>>;
 }
 
 #[zbus::proxy(
     interface = "org.freedesktop.NetworkManager.Device",
     default_service = "org.freedesktop.NetworkManager"
 )]
-trait Device {
+pub(crate) trait Device {
     fn disconnect(&self) -> zbus::Result<()>;
     #[zbus(property)]
     fn device_type(&self) -> zbus::Result<u32>;
+    #[zbus(property)]
+    fn udi(&self) -> zbus::Result<String>;
+    #[zbus(property)]
+    fn state(&self) -> zbus::Result<u32>;
+    #[zbus(property)]
+    fn active_connection(&self) -> zbus::Result<OwnedObjectPath>;
 }
 
 #[zbus::proxy(
@@ -781,8 +796,9 @@ trait Wireless {
     default_service = "org.freedesktop.NetworkManager",
     default_path = "/org/freedesktop/NetworkManager/Settings"
 )]
-trait NmSettings {
+pub(crate) trait NmSettings {
     fn list_connections(&self) -> zbus::Result<Vec<OwnedObjectPath>>;
+    fn add_connection(&self, connection: Settings<'_>) -> zbus::Result<OwnedObjectPath>;
     fn get_connection_by_uuid(&self, uuid: &str) -> zbus::Result<OwnedObjectPath>;
     #[zbus(signal)]
     fn new_connection(&self, connection: ObjectPath<'_>) -> zbus::Result<()>;
@@ -794,14 +810,18 @@ trait NmSettings {
     interface = "org.freedesktop.NetworkManager.Settings.Connection",
     default_service = "org.freedesktop.NetworkManager"
 )]
-trait SavedConnection {
+pub(crate) trait SavedConnection {
     fn get_settings(&self) -> zbus::Result<HashMap<String, HashMap<String, OwnedValue>>>;
+    fn get_secrets(
+        &self,
+        setting: &str,
+    ) -> zbus::Result<HashMap<String, HashMap<String, OwnedValue>>>;
     fn update(&self, settings: Settings<'_>) -> zbus::Result<()>;
     fn delete(&self) -> zbus::Result<()>;
 }
 
 /// `NetworkManager`'s connection settings, `a{sa{sv}}`.
-type Settings<'a> = HashMap<&'a str, HashMap<&'a str, Value<'a>>>;
+pub(crate) type Settings<'a> = HashMap<&'a str, HashMap<&'a str, Value<'a>>>;
 
 fn wifi_settings<'a>(
     ssid: &'a str,
@@ -877,7 +897,7 @@ fn hotspot_settings<'a>(ssid: &'a str, password: &'a str) -> Settings<'a> {
 }
 
 /// The kernel makes UUIDs; no crate needed for one per new profile.
-fn new_uuid() -> String {
+pub(crate) fn new_uuid() -> String {
     io::read("/proc/sys/kernel/random/uuid").unwrap_or_default()
 }
 
@@ -942,6 +962,8 @@ enum Event {
     Closed,
     WirelessEnabled(bool),
     ActiveChanged,
+    // Adapters can appear after start: firmware loads late, USB is replugged.
+    DevicesChanged,
     ActiveState {
         path: OwnedObjectPath,
         state: u32,
@@ -974,6 +996,8 @@ struct Actor {
     hotspot: Option<OwnedObjectPath>,
     hotspot_active: bool,
     rescan: Sender<Event>,
+    /// The Bluetooth adapters airplane mode powered off, to power back on.
+    airplane_bluetooth: Vec<OwnedObjectPath>,
 }
 
 async fn run(qt: Qt, commands: Receiver<Command>) {
@@ -999,6 +1023,7 @@ async fn run(qt: Qt, commands: Receiver<Command>) {
         hotspot: None,
         hotspot_active: false,
         rescan,
+        airplane_bluetooth: Vec::new(),
     };
     actor.detect_hardware().await;
     if let Ok(enabled) = actor.nm.wireless_enabled().await {
@@ -1030,6 +1055,10 @@ async fn run(qt: Qt, commands: Receiver<Command>) {
                     .ok();
             }
             Event::ActiveChanged => actor.refresh_links().await,
+            Event::DevicesChanged => {
+                actor.detect_hardware().await;
+                actor.scan().await;
+            }
             Event::ActiveState {
                 path,
                 state,
@@ -1077,6 +1106,7 @@ impl Actor {
             Err(e) => return log::warn("network", format_args!("no devices: {e}")),
         };
         let (mut wifi, mut bluetooth) = (false, false);
+        self.wifi_device = None;
         for path in devices {
             let Ok(device) = DeviceProxy::builder(&self.bus)
                 .path(path.clone())
@@ -1171,14 +1201,7 @@ impl Actor {
                 }
             }
             Command::Forget(ssid) => self.forget(&ssid).await,
-            Command::Airplane(enabled) => {
-                if set_rfkill(&["wlan", "wwan", "bluetooth"], enabled) == 0 {
-                    log::warn("network", "airplane mode: no rfkill switch answered");
-                }
-                if let Err(e) = self.nm.set_wireless_enabled(!enabled).await {
-                    log::warn("network", format_args!("WirelessEnabled: {e}"));
-                }
-            }
+            Command::Airplane(enabled) => self.airplane(enabled).await,
             Command::CreateHotspot { ssid, password } => {
                 self.create_hotspot(&ssid, &password).await;
             }
@@ -1191,6 +1214,98 @@ impl Actor {
                 self.set_hotspot(false);
             }
         }
+    }
+
+    // Through the radios' own services: the shell can't write rfkill, and
+    // a modem need not have a switch at all.
+    async fn airplane(&mut self, enabled: bool) {
+        if let Err(e) = self.nm.set_wireless_enabled(!enabled).await {
+            log::warn("network", format_args!("WirelessEnabled: {e}"));
+        }
+        if let Err(e) = self.nm.set_wwan_enabled(!enabled).await {
+            log::warn("network", format_args!("WwanEnabled: {e}"));
+        }
+        let adapters = if enabled {
+            let mut powered = Vec::new();
+            for adapter in self.bluetooth_adapters().await {
+                if self.bluetooth_powered(&adapter).await {
+                    powered.push(adapter);
+                }
+            }
+            self.airplane_bluetooth.clone_from(&powered);
+            powered
+        } else {
+            std::mem::take(&mut self.airplane_bluetooth)
+        };
+        for adapter in adapters {
+            if let Err(e) = self.set_bluetooth_powered(&adapter, !enabled).await {
+                log::warn("network", format_args!("Bluetooth Powered: {e}"));
+            }
+        }
+    }
+
+    async fn bluetooth_adapters(&self) -> Vec<OwnedObjectPath> {
+        let objects = async {
+            fdo::ObjectManagerProxy::builder(&self.bus)
+                .destination("org.bluez")
+                .path("/")
+                .build()
+                .await?
+                .get_managed_objects()
+                .await
+                .map_err(zbus::Error::from)
+        };
+        objects
+            .await
+            .map(|objects| {
+                objects
+                    .into_iter()
+                    .filter(|(_, interfaces)| {
+                        interfaces.keys().any(|i| i.as_str() == BLUEZ_ADAPTER)
+                    })
+                    .map(|(path, _)| path)
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    async fn bluetooth_props(
+        &self,
+        adapter: &ObjectPath<'_>,
+    ) -> zbus::Result<PropertiesProxy<'static>> {
+        PropertiesProxy::builder(&self.bus)
+            .destination("org.bluez")
+            .path(adapter.to_owned())
+            .cache_properties(zbus::proxy::CacheProperties::No)
+            .build()
+            .await
+    }
+
+    async fn bluetooth_powered(&self, adapter: &ObjectPath<'_>) -> bool {
+        let powered = async {
+            let value = self
+                .bluetooth_props(adapter)
+                .await?
+                .get(
+                    InterfaceName::from_static_str_unchecked(BLUEZ_ADAPTER),
+                    "Powered",
+                )
+                .await?;
+            Ok::<_, zbus::Error>(bool::try_from(&value).unwrap_or(false))
+        };
+        powered.await.unwrap_or(false)
+    }
+
+    async fn set_bluetooth_powered(&self, adapter: &ObjectPath<'_>, on: bool) -> zbus::Result<()> {
+        self.bluetooth_props(adapter)
+            .await?
+            .set(
+                InterfaceName::from_static_str_unchecked(BLUEZ_ADAPTER),
+                "Powered",
+                &Value::from(on),
+            )
+            .await
+            .map_err(zbus::Error::from)
     }
 
     async fn wireless(&self) -> Option<WirelessProxy<'static>> {
@@ -1603,7 +1718,12 @@ impl Actor {
             .receive_active_connections_changed()
             .await
             .map(|_| Event::ActiveChanged);
-        enabled.or(active).boxed()
+        let devices = self
+            .nm
+            .receive_devices_changed()
+            .await
+            .map(|_| Event::DevicesChanged);
+        enabled.or(active).or(devices).boxed()
     }
 
     // Signals from objects that come and go: every active connection's

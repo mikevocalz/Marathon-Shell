@@ -9,7 +9,7 @@ use std::io::Write as _;
 use std::os::unix::fs::OpenOptionsExt as _;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 use async_channel::Sender;
@@ -63,6 +63,8 @@ pub mod qobject {
         #[qproperty(f64, system_volume, cxx_name = "systemVolume", READ, WRITE = set_system_volume, NOTIFY)]
         #[qproperty(bool, dnd_enabled, cxx_name = "dndEnabled", READ, WRITE = set_dnd_enabled, NOTIFY)]
         #[qproperty(bool, vibration_enabled, cxx_name = "vibrationEnabled", READ, WRITE = set_vibration_enabled, NOTIFY)]
+        /// The system's location switch: off, nothing is located.
+        #[qproperty(bool, location_enabled, cxx_name = "locationEnabled", READ, WRITE = set_location_enabled, NOTIFY)]
         #[qproperty(bool, reduce_motion, cxx_name = "reduceMotion", READ, WRITE = set_reduce_motion, NOTIFY)]
         #[qproperty(QString, time_zone, cxx_name = "timeZone", READ, WRITE = set_time_zone, NOTIFY)]
         #[qproperty(bool, automatic_time, cxx_name = "automaticTime", READ, WRITE = set_automatic_time, NOTIFY)]
@@ -75,6 +77,9 @@ pub mod qobject {
         #[qproperty(bool, filter_mobile_friendly_apps, cxx_name = "filterMobileFriendlyApps", READ, WRITE = set_filter_mobile_friendly_apps, NOTIFY)]
         #[qproperty(QStringList, hidden_apps, cxx_name = "hiddenApps", READ, WRITE = set_hidden_apps, NOTIFY)]
         #[qproperty(QString, app_sort_order, cxx_name = "appSortOrder", READ, WRITE = set_app_sort_order, NOTIFY)]
+        #[qproperty(QString, assist_key_press, cxx_name = "assistKeyPress", READ, WRITE = set_assist_key_press, NOTIFY)]
+        #[qproperty(QString, assist_key_hold, cxx_name = "assistKeyHold", READ, WRITE = set_assist_key_hold, NOTIFY)]
+        #[qproperty(QString, trackpad_mode, cxx_name = "trackpadMode", READ, WRITE = set_trackpad_mode, NOTIFY)]
         #[qproperty(i32, app_grid_columns, cxx_name = "appGridColumns", READ, WRITE = set_app_grid_columns, NOTIFY)]
         #[qproperty(bool, search_native_apps, cxx_name = "searchNativeApps", READ, WRITE = set_search_native_apps, NOTIFY)]
         #[qproperty(bool, show_notification_badges, cxx_name = "showNotificationBadges", READ, WRITE = set_show_notification_badges, NOTIFY)]
@@ -92,6 +97,10 @@ pub mod qobject {
         #[qproperty(QString, language, READ, WRITE = set_language, NOTIFY)]
         #[qproperty(QList_QVariant, available_languages, cxx_name = "availableLanguages", READ = available_languages, CONSTANT)]
         #[qproperty(bool, unified_push_fallback_enabled, cxx_name = "unifiedPushFallbackEnabled", READ, WRITE = set_unified_push_fallback_enabled, NOTIFY)]
+        #[qproperty(bool, gtk_theming, cxx_name = "gtkTheming", READ, WRITE = set_gtk_theming, NOTIFY)]
+        #[qproperty(bool, kde_theming, cxx_name = "kdeTheming", READ, WRITE = set_kde_theming, NOTIFY)]
+        #[qproperty(bool, android_theming, cxx_name = "androidTheming", READ, WRITE = set_android_theming, NOTIFY)]
+        #[qproperty(QStringList, unthemed_apps, cxx_name = "unthemedApps", READ, WRITE = set_unthemed_apps, NOTIFY)]
         type Settings = super::SettingsRust;
 
         /// timedated refused a time zone, automatic time or clock change.
@@ -135,6 +144,8 @@ pub mod qobject {
         fn set_dnd_enabled(self: Pin<&mut Settings>, value: bool);
         #[cxx_name = "setVibrationEnabled"]
         fn set_vibration_enabled(self: Pin<&mut Settings>, value: bool);
+        #[cxx_name = "setLocationEnabled"]
+        fn set_location_enabled(self: Pin<&mut Settings>, value: bool);
         #[cxx_name = "setReduceMotion"]
         fn set_reduce_motion(self: Pin<&mut Settings>, value: bool);
         #[cxx_name = "setTimeZone"]
@@ -159,6 +170,12 @@ pub mod qobject {
         fn set_hidden_apps(self: Pin<&mut Settings>, value: &QStringList);
         #[cxx_name = "setAppSortOrder"]
         fn set_app_sort_order(self: Pin<&mut Settings>, value: &QString);
+        #[cxx_name = "setAssistKeyPress"]
+        fn set_assist_key_press(self: Pin<&mut Settings>, value: &QString);
+        #[cxx_name = "setAssistKeyHold"]
+        fn set_assist_key_hold(self: Pin<&mut Settings>, value: &QString);
+        #[cxx_name = "setTrackpadMode"]
+        fn set_trackpad_mode(self: Pin<&mut Settings>, value: &QString);
         #[cxx_name = "setAppGridColumns"]
         fn set_app_grid_columns(self: Pin<&mut Settings>, value: i32);
         #[cxx_name = "setSearchNativeApps"]
@@ -193,6 +210,14 @@ pub mod qobject {
         fn available_languages(self: &Settings) -> QList_QVariant;
         #[cxx_name = "setUnifiedPushFallbackEnabled"]
         fn set_unified_push_fallback_enabled(self: Pin<&mut Settings>, value: bool);
+        #[cxx_name = "setGtkTheming"]
+        fn set_gtk_theming(self: Pin<&mut Settings>, value: bool);
+        #[cxx_name = "setKdeTheming"]
+        fn set_kde_theming(self: Pin<&mut Settings>, value: bool);
+        #[cxx_name = "setAndroidTheming"]
+        fn set_android_theming(self: Pin<&mut Settings>, value: bool);
+        #[cxx_name = "setUnthemedApps"]
+        fn set_unthemed_apps(self: Pin<&mut Settings>, value: &QStringList);
 
         /// Reads the file; `screen_timeout` is the device's default.
         fn load(self: Pin<&mut Settings>, screen_timeout: i32);
@@ -408,8 +433,8 @@ macro_rules! properties {
 
 properties! {
     user_scale_factor: f64 = 1.0, "ui/userScaleFactor", "userScaleFactor", user_scale_factor_changed, on_user_scale_factor_changed, set_user_scale_factor(f64) custom;
-    wallpaper_path: QString = QString::from(&asset_url("wallpapers/meridian.jpg")), "ui/wallpaperPath", "wallpaperPath", wallpaper_path_changed, on_wallpaper_path_changed, set_wallpaper_path(&QString);
-    device_name: QString = QString::from("Marathon OS"), "system/deviceName", "deviceName", device_name_changed, on_device_name_changed, set_device_name(&QString) custom;
+    wallpaper_path: QString = QString::from(&asset_url("wallpapers/pulse.svg")), "ui/wallpaperPath", "wallpaperPath", wallpaper_path_changed, on_wallpaper_path_changed, set_wallpaper_path(&QString);
+    device_name: QString = QString::from(&model_name()), "system/deviceName", "deviceName", device_name_changed, on_device_name_changed, set_device_name(&QString) custom;
     auto_lock: bool = true, "system/autoLock", "autoLock", auto_lock_changed, on_auto_lock_changed, set_auto_lock(bool);
     auto_lock_timeout: i32 = 0, "system/autoLockTimeout", "autoLockTimeout", auto_lock_timeout_changed, on_auto_lock_timeout_changed, set_auto_lock_timeout(i32);
     show_notification_previews: bool = true, "system/showNotificationPreviews", "showNotificationPreviews", show_notification_previews_changed, on_show_notification_previews_changed, set_show_notification_previews(bool);
@@ -425,6 +450,7 @@ properties! {
     system_volume: f64 = 0.5, "audio/systemVolume", "systemVolume", system_volume_changed, on_system_volume_changed, set_system_volume(f64) custom;
     dnd_enabled: bool = false, "audio/dndEnabled", "dndEnabled", dnd_enabled_changed, on_dnd_enabled_changed, set_dnd_enabled(bool);
     vibration_enabled: bool = true, "audio/vibrationEnabled", "vibrationEnabled", vibration_enabled_changed, on_vibration_enabled_changed, set_vibration_enabled(bool);
+    location_enabled: bool = true, "location/enabled", "locationEnabled", location_enabled_changed, on_location_enabled_changed, set_location_enabled(bool);
     reduce_motion: bool = false, "accessibility/reduceMotion", "reduceMotion", reduce_motion_changed, on_reduce_motion_changed, set_reduce_motion(bool);
     time_zone: QString = QString::from(&local_zone()), "", "timeZone", time_zone_changed, on_time_zone_changed, set_time_zone(&QString) custom;
     automatic_time: bool = true, "", "automaticTime", automatic_time_changed, on_automatic_time_changed, set_automatic_time(bool) custom;
@@ -437,6 +463,11 @@ properties! {
     filter_mobile_friendly_apps: bool = true, "apps/filterMobileFriendly", "filterMobileFriendlyApps", filter_mobile_friendly_apps_changed, on_filter_mobile_friendly_apps_changed, set_filter_mobile_friendly_apps(bool);
     hidden_apps: QStringList = string_list(&["terminal".into(), "test".into()]), "apps/hiddenApps", "hiddenApps", hidden_apps_changed, on_hidden_apps_changed, set_hidden_apps(&QStringList);
     app_sort_order: QString = QString::from("alphabetical"), "apps/sortOrder", "appSortOrder", app_sort_order_changed, on_app_sort_order_changed, set_app_sort_order(&QString);
+    // The key between the volume keys: "camera", "pilot", "pilot-voice" or "none".
+    assist_key_press: QString = QString::from("camera"), "keys/assistPress", "assistKeyPress", assist_key_press_changed, on_assist_key_press_changed, set_assist_key_press(&QString);
+    assist_key_hold: QString = QString::from("pilot-voice"), "keys/assistHold", "assistKeyHold", assist_key_hold_changed, on_assist_key_hold_changed, set_assist_key_hold(&QString);
+    // The keyboard's trackpad: "gesture" (scroll, caret, Enter) or "mouse" (pointer).
+    trackpad_mode: QString = QString::from("gesture"), "keys/trackpadMode", "trackpadMode", trackpad_mode_changed, on_trackpad_mode_changed, set_trackpad_mode(&QString);
     app_grid_columns: i32 = 0, "apps/gridColumns", "appGridColumns", app_grid_columns_changed, on_app_grid_columns_changed, set_app_grid_columns(i32);
     search_native_apps: bool = true, "apps/searchNativeApps", "searchNativeApps", search_native_apps_changed, on_search_native_apps_changed, set_search_native_apps(bool);
     show_notification_badges: bool = true, "apps/showBadges", "showNotificationBadges", show_notification_badges_changed, on_show_notification_badges_changed, set_show_notification_badges(bool);
@@ -453,6 +484,11 @@ properties! {
     keyboard_language: QString = QString::from("en_US"), "keyboard/language", "keyboardLanguage", keyboard_language_changed, on_keyboard_language_changed, set_keyboard_language(&QString);
     language: QString = QString::default(), "system/language", "language", language_changed, on_language_changed, set_language(&QString);
     unified_push_fallback_enabled: bool = false, "notifications/unifiedPushFallback", "unifiedPushFallbackEnabled", unified_push_fallback_enabled_changed, on_unified_push_fallback_enabled_changed, set_unified_push_fallback_enabled(bool);
+    // The ambience's colours in GTK, KDE and Android apps, and the Flatpaks left without them.
+    gtk_theming: bool = true, "theming/gtk", "gtkTheming", gtk_theming_changed, on_gtk_theming_changed, set_gtk_theming(bool);
+    kde_theming: bool = true, "theming/kde", "kdeTheming", kde_theming_changed, on_kde_theming_changed, set_kde_theming(bool);
+    android_theming: bool = true, "theming/android", "androidTheming", android_theming_changed, on_android_theming_changed, set_android_theming(bool);
+    unthemed_apps: QStringList = string_list(&[]), "theming/unthemedApps", "unthemedApps", unthemed_apps_changed, on_unthemed_apps_changed, set_unthemed_apps(&QStringList);
 }
 
 impl Settings {
@@ -502,6 +538,22 @@ pub fn data_dir() -> Option<PathBuf> {
 
 fn file_url(path: &Path) -> String {
     QUrl::from_local_file(&QString::from(&*path.to_string_lossy())).to_string()
+}
+
+/// The model as the firmware names it, the default device name as on Android.
+fn model_name() -> String {
+    [
+        "/sys/firmware/devicetree/base/model",
+        "/sys/devices/virtual/dmi/id/product_name",
+    ]
+    .into_iter()
+    .filter_map(|path| fs::read_to_string(path).ok())
+    .map(|name| {
+        name.trim_matches(|c: char| c == '\0' || c.is_whitespace())
+            .to_owned()
+    })
+    .find(|name| !name.is_empty())
+    .unwrap_or_else(|| "Marathon OS".to_owned())
 }
 
 /// An installed asset's file URL, else the wallpaper built into the shell.
@@ -585,7 +637,7 @@ fn sound_name(path: &str) -> String {
 }
 
 /// The zone `/etc/localtime` names.
-fn local_zone() -> String {
+pub(crate) fn local_zone() -> String {
     let target = fs::read_link("/etc/localtime").unwrap_or_default();
     let target = target.to_string_lossy();
     target.split_once("zoneinfo/").map_or_else(
@@ -653,6 +705,25 @@ pub(crate) fn with(f: impl FnOnce(Pin<&mut Settings>) + Send + 'static) {
 
 pub(crate) fn thread() -> Option<&'static Qt> {
     QT.get()
+}
+
+/// `unthemedApps`, for launches off the settings' thread.
+static UNTHEMED: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+fn set_unthemed(apps: &QStringList) {
+    *UNTHEMED.lock().unwrap_or_else(|_| std::process::abort()) = QList::<QString>::from(apps)
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+}
+
+/// Whether `app_id` launches with the ambience's colours.
+pub(crate) fn themed(app_id: &str) -> bool {
+    !UNTHEMED
+        .lock()
+        .unwrap_or_else(|_| std::process::abort())
+        .iter()
+        .any(|id| id == app_id)
 }
 
 enum Timedated {
@@ -884,6 +955,8 @@ impl Settings {
         rust.screen_timeout = screen_timeout;
         rust.dirty = migrated;
         self.as_mut().read_properties();
+        crate::portal::set_theming(self.gtk_theming, self.kde_theming);
+        set_unthemed(&self.unthemed_apps);
         // Every "open in default..." resolves to one of Marathon's own apps
         // until the user picks another; an empty saved choice is none.
         let browser = if Path::new("/usr/share/applications/shipwright-pacific.desktop").exists() {
@@ -936,6 +1009,12 @@ impl Settings {
         }
         if name == "language" {
             crate::i18n::select(&self.language().to_string());
+        }
+        if matches!(name, "gtkTheming" | "kdeTheming") {
+            crate::portal::set_theming(self.gtk_theming, self.kde_theming);
+        }
+        if name == "unthemedApps" {
+            set_unthemed(&self.unthemed_apps);
         }
         self.save_soon();
     }
@@ -1050,6 +1129,22 @@ fn migrate(ini: &mut Ini) -> bool {
         );
         ini.0
             .insert("system/autoLockTimeoutMigrated".into(), Value::Bool(true));
+        changed = true;
+    }
+    // Once only: older images saved "Marathon OS" as the name before it
+    // defaulted to the model.
+    if !flag(ini, "system/deviceNameModelDefault") {
+        if ini
+            .0
+            .get("system/deviceName")
+            .and_then(Value::as_text)
+            .as_deref()
+            == Some("Marathon OS")
+        {
+            ini.0.remove("system/deviceName");
+        }
+        ini.0
+            .insert("system/deviceNameModelDefault".into(), Value::Bool(true));
         changed = true;
     }
     // Once only, so a developer who unhides the Test Suite keeps it.
@@ -1378,6 +1473,21 @@ mod tests {
         assert_eq!(
             delay("[system]\nautoLockTimeout=30\nautoLockTimeoutMigrated=true\n"),
             Some(30)
+        );
+    }
+
+    #[test]
+    fn the_old_default_name_gives_way_to_the_model_once() {
+        let name = |file: &str| {
+            let mut ini = Ini::parse(file);
+            migrate(&mut ini);
+            ini.0.get("system/deviceName").and_then(Value::as_text)
+        };
+        assert_eq!(name("[system]\ndeviceName=Marathon OS\n"), None);
+        assert_eq!(name("[system]\ndeviceName=Pat\n").as_deref(), Some("Pat"));
+        assert_eq!(
+            name("[system]\ndeviceName=Marathon OS\ndeviceNameModelDefault=true\n").as_deref(),
+            Some("Marathon OS")
         );
     }
 

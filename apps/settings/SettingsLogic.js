@@ -22,14 +22,18 @@ const pages = {
     privacy: "PrivacyPage.qml",
     updates: "UpdatesPage.qml",
     keyboard: "KeyboardPage.qml",
+    assistkey: "AssistKeyPage.qml",
+    trackpad: "TrackpadPage.qml",
     appmanager: "AppManagerPage.qml",
     appinfo: "AppManagerPage.qml",
     accounts: "AccountsPage.qml",
     quicksettings: "QuickSettingsPage.qml",
     hiddenapps: "HiddenAppsPage.qml",
     appsort: "AppLayoutPage.qml",
+    themedapps: "ThemedAppsPage.qml",
     store: "StorePage.qml",
     erase: "ErasePage.qml",
+    developer: "DeveloperPage.qml",
     android: "AndroidPage.qml",
     androidapps: "AndroidAppsPage.qml",
     androidaccess: "AndroidAccessListPage.qml",
@@ -68,7 +72,9 @@ const sections = [
             { page: "datetime", title: qsTr("Date and time"), icon: "image://theme/icon-m-clock", keywords: "time zone timezone clock 24-hour 12-hour format city" },
             { page: "battery", title: qsTr("Battery"), icon: "image://theme/icon-m-battery", keywords: "power saver profile charging" },
             { page: "storage", title: qsTr("Storage"), icon: "image://theme/icon-m-storage", keywords: "disk space memory usage free" },
-            { page: "keyboard", title: qsTr("Keyboard"), icon: "image://theme/icon-m-keyboard", keywords: "language autocorrect predictions typing capitalize" }
+            { page: "keyboard", title: qsTr("Keyboard"), icon: "image://theme/icon-m-keyboard", keywords: "language autocorrect predictions typing capitalize" },
+            { page: "assistkey", title: qsTr("Assistant key"), icon: "image://theme/icon-m-keys", keywords: "button side key shortcut camera pilot voice talk convenience" },
+            { page: "trackpad", title: qsTr("Trackpad"), icon: "image://theme/icon-m-gesture", keywords: "trackpad touchpad pointer mouse cursor scroll caret optical" }
         ]
     },
     {
@@ -86,6 +92,7 @@ const sections = [
             { page: "android", title: qsTr("Android apps"), icon: "image://theme/icon-m-android", keywords: "android apk play permissions special access reset google microg push account" },
             { page: "hiddenapps", title: qsTr("Hidden apps"), icon: "image://theme/icon-m-hidden", keywords: "hide drawer" },
             { page: "appsort", title: qsTr("App grid"), icon: "image://theme/icon-m-app-grid", keywords: "grid columns icons layout filter desktop native search badges" },
+            { page: "themedapps", title: qsTr("Themed apps"), icon: "image://theme/icon-m-ambience", keywords: "ambience theme colour color accent gtk gnome libadwaita kde qt android material flatpak" },
             { page: "store", title: qsTr("App Store"), icon: "image://theme/icon-m-package", keywords: "store flathub f-droid fdroid sources phone mobile desktop automatic updates metered anti-features" }
         ]
     },
@@ -95,6 +102,7 @@ const sections = [
             { page: "updates", title: qsTr("Software updates"), icon: "image://theme/icon-m-update", keywords: "upgrade version release channel" },
             { page: "about", title: qsTr("About device"), icon: "image://theme/icon-m-about", keywords: "device name version model kernel build licenses legal terms privacy" },
             { app: "terminal", title: qsTr("Terminal"), icon: "image://theme/icon-m-terminal", keywords: "shell command console" },
+            { page: "developer", title: qsTr("Developer tools"), icon: "image://theme/icon-m-developer-mode", keywords: "developer mode remote connection ssh usb login" },
             { page: "erase", title: qsTr("Erase all content"), icon: "image://theme/icon-m-delete", keywords: "factory reset wipe delete everything restore sell" }
         ]
     }
@@ -182,8 +190,8 @@ function wifiSummary(enabled, connected, ssid) {
 }
 
 function batterySummary(level, charging) {
-    if (typeof level !== "number" || level < 0)
-        return "";
+    if (typeof level !== "number" || !Number.isFinite(level) || level < 0)
+        return qsTr("Battery level unavailable");
     return charging ? qsTr("%1% · charging").arg(level) : qsTr("%1%").arg(level);
 }
 
@@ -191,7 +199,7 @@ function batteryStatus(charging, pluggedIn, secondsLeft) {
     if (charging)
         return qsTr("Charging");
     if (pluggedIn)
-        return qsTr("Plugged in, not charging");
+        return qsTr("Charged");
     if (!(secondsLeft > 0))
         return qsTr("Discharging");
     const hours = Math.floor(secondsLeft / 3600);
@@ -224,7 +232,7 @@ const tiles = [
     { id: "location", label: qsTr("Location"), desc: qsTr("GPS and location services") },
     { id: "hotspot", label: qsTr("Hotspot"), desc: qsTr("Share internet connection") },
     { id: "nightlight", label: qsTr("Night light"), desc: qsTr("Reduce blue light") },
-    { id: "rotation", label: qsTr("Rotation lock"), desc: qsTr("Lock screen orientation"), needs: "rotation" },
+    { id: "rotation", label: qsTr("Auto-rotate"), desc: qsTr("Turn the screen with the phone"), needs: "rotation" },
     { id: "autobrightness", label: qsTr("Auto-brightness"), desc: qsTr("Automatic brightness adjustment"), needs: "lightSensor" },
     { id: "lowpower", label: qsTr("Battery saver"), desc: qsTr("Low power mode") },
     { id: "vibration", label: qsTr("Vibration"), desc: qsTr("Haptic feedback"), needs: "vibrator" },
@@ -249,6 +257,30 @@ const scales = [
 ];
 
 // The shell's screenTimeout is in milliseconds; 0 keeps the screen on.
+// What the key between the volume keys does (Settings.assistKeyPress, assistKeyHold).
+const assistKeyActions = [
+    { id: "camera", title: qsTr("Open Camera") },
+    { id: "pilot", title: qsTr("Ask Pilot") },
+    { id: "pilot-voice", title: qsTr("Talk to Pilot") },
+    { id: "none", title: qsTr("Do nothing") }
+];
+
+// What the keyboard's trackpad does (Settings.trackpadMode).
+const trackpadModes = [
+    { id: "gesture", title: qsTr("Scroll and navigate"), description: qsTr("Swipe to scroll, or to move the cursor in text. Press to select.") },
+    { id: "mouse", title: qsTr("Pointer"), description: qsTr("Move a pointer around the screen. Press to click.") }
+];
+
+function trackpadModeTitle(id) {
+    const mode = trackpadModes.find(m => m.id === id);
+    return mode ? mode.title : "";
+}
+
+function assistKeyActionTitle(id) {
+    const action = assistKeyActions.find(a => a.id === id);
+    return action ? action.title : "";
+}
+
 const screenTimeouts = [
     { ms: 30000, title: qsTr("30 seconds") },
     { ms: 60000, title: qsTr("1 minute") },
@@ -256,6 +288,28 @@ const screenTimeouts = [
     { ms: 300000, title: qsTr("5 minutes") },
     { ms: 0, title: qsTr("Never") }
 ];
+
+const nightLightSchedules = [
+    { id: "off", title: qsTr("Off"), description: qsTr("Only when you turn it on") },
+    { id: "sunset", title: qsTr("Sunset to sunrise"), description: qsTr("Sun times where your time zone is") },
+    { id: "custom", title: qsTr("Custom"), description: qsTr("Between times you choose") }
+];
+
+// Night light warmth, 0-100, over 4500 K (mild) to 2700 K (candlelight).
+function nightLightKelvin(warmth) {
+    return Math.round((4500 - Math.max(0, Math.min(100, warmth)) * 18) / 100) * 100;
+}
+
+function nightLightWarmth(kelvin) {
+    return Math.max(0, Math.min(100, Math.round((4500 - kelvin) / 18)));
+}
+
+// Minutes after midnight as a Date today, for formatting and the picker.
+function timeOfDay(minutes) {
+    const d = new Date();
+    d.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
+    return d;
+}
 
 // Index of the option closest to value, so a stored 1.0999 still selects 110%.
 function nearestIndex(values, value) {
@@ -313,6 +367,11 @@ function dataEncryptionNote(state) {
     if (state === "off")
         return qsTr("This phone was set up before Marathon encrypted its data. Erase all content to start again with encryption.");
     return qsTr("Marathon doesn't encrypt data on this phone yet.");
+}
+
+// SettingsController.remoteAddresses()' kinds.
+function remoteAddressLabel(kind) {
+    return kind === "usb" ? qsTr("USB") : kind === "wifi" ? qsTr("Wi-Fi") : qsTr("Ethernet");
 }
 
 // Android apps: the runtime's state, its permission groups and special access.

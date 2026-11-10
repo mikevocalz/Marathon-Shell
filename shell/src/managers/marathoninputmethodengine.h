@@ -6,6 +6,12 @@
 #include <QRect>
 #include <QString>
 #include <QStringList>
+#include <optional>
+
+class QKeyEvent;
+namespace marathon {
+    class Settings;
+}
 
 class MarathonInputMethodEngine : public QObject {
     Q_OBJECT
@@ -16,7 +22,8 @@ class MarathonInputMethodEngine : public QObject {
     Q_PROPERTY(QRect inputItemRect READ inputItemRect NOTIFY inputItemRectChanged)
 
   public:
-    explicit MarathonInputMethodEngine(QObject *parent = nullptr);
+    explicit MarathonInputMethodEngine(const marathon::Settings *settings,
+                                       QObject                  *parent = nullptr);
     ~MarathonInputMethodEngine() override;
 
     bool active() const {
@@ -56,12 +63,18 @@ class MarathonInputMethodEngine : public QObject {
     bool eventFilter(QObject *obj, QEvent *event) override;
 
   private:
-    void          connectToInputMethod();
-    void          disconnectFromInputMethod();
+    void                      connectToInputMethod();
+    void                      disconnectFromInputMethod();
+    bool                      capitalise(QObject *obj, const QKeyEvent *key);
 
-    bool          m_active;
-    QString       m_preeditText;
-    QInputMethod *m_inputMethod;
+    bool                      m_active;
+    QString                   m_preeditText;
+    QInputMethod             *m_inputMethod;
+    const marathon::Settings *m_settings;
+    // The hardware key typed as a capital, whose release and repeats the app must not see.
+    quint32 m_heldCapital = 0;
+    // The last prefix guards delayed text updates; an empty prefix is a valid recorded value.
+    std::optional<QString> m_capitalisedAt;
 };
 
 #endif
