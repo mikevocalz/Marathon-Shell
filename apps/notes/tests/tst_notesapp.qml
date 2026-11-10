@@ -96,7 +96,8 @@ TestCase {
                 timestamp: 1
             }
         ]);
-        compare(JSON.parse(t.store.value)[0].title, "X");
+        compare(JSON.parse(t.store.value).notes[0].title, "X");
+        compare(JSON.parse(t.store.value).nextId, 2);
         compare(t.app.notes[0].title, "X");
     }
 
@@ -194,7 +195,36 @@ TestCase {
         ]);
         compare(t.app.notes.length, 1);
         compare(t.app.notes[0].title, "Marathon");
-        tryCompare(t.app.pageStack, "depth", 2);
-        compare(t.app.pageStack.currentPage.noteId, t.app.notes[0].id);
+        tryVerify(() => t.app.workspace.currentEditor !== null);
+        compare(t.app.workspace.currentEditor.noteId, t.app.notes[0].id);
+        compare(findChild(t.app.workspace.currentEditor, "bodyField").text, "Marathon\nhttps://marathonos.org");
+    }
+
+    function test_sharedCaptureUsesThePersistedIdAfterEmptyRestart() {
+        const snapshot = JSON.stringify({
+            version: 2,
+            nextId: 42,
+            notes: []
+        });
+        const t = makeApp(snapshot, "[]", true, true);
+        t.app.receiveShare([
+            {
+                name: "",
+                data: "A shared note"
+            }
+        ]);
+        compare(t.app.notes[0].id, 42);
+        t.app.save([]);
+        const persisted = t.store.value;
+        t.app.destroy();
+        wait(0);
+        const restarted = makeApp(persisted, "[]", true, true);
+        restarted.app.receiveShare([
+            {
+                name: "",
+                data: "After restart"
+            }
+        ]);
+        compare(restarted.app.notes[0].id, 43);
     }
 }

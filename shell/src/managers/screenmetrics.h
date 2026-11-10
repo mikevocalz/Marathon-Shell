@@ -4,6 +4,7 @@
 #include <QPointer>
 
 class QScreen;
+class QWindow;
 
 class ScreenMetrics : public QObject {
     Q_OBJECT
@@ -16,7 +17,11 @@ class ScreenMetrics : public QObject {
   public:
     explicit ScreenMetrics(QObject *parent = nullptr);
 
-    int width() const {
+    // Follow the shell's viewport and the display it is on. With no window,
+    // report the primary display so startup and headless callers still work.
+    void attachToWindow(QWindow *window);
+
+    int  width() const {
         return m_width;
     }
     int height() const {
@@ -37,10 +42,14 @@ class ScreenMetrics : public QObject {
   signals:
     void metricsChanged();
 
+  protected:
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
   private:
     void              attachToScreen(QScreen *screen);
-    void              updateFromScreen();
+    void              updateMetrics();
 
+    QPointer<QWindow> m_window;
     QPointer<QScreen> m_screen;
     int               m_width            = 0;
     int               m_height           = 0;

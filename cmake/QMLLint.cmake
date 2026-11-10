@@ -1,174 +1,76 @@
-# QMLLint.cmake - Build-time QML validation
-# This module integrates qmllint into the CMake build process to catch QML errors before runtime
-
-# Find qmllint executable (Fedora uses qmllint-qt6 or /usr/lib64/qt6/bin/qmllint)
-find_program(QMLLINT_EXECUTABLE
-    NAMES qmllint-qt6 qmllint
-    PATHS
-        /usr/lib64/qt6/bin
-        ${Qt6_DIR}/../../../bin
-        ${Qt6_DIR}/../../../libexec/qt6/bin
-        /opt/homebrew/opt/qt@6/bin
-        /usr/bin
-        /usr/local/bin
-    DOC "Path to qmllint executable"
-)
-
-if(NOT QMLLINT_EXECUTABLE)
-    message(WARNING "qmllint not found - QML validation will be skipped. Install Qt6 QmlTools to enable.")
-    set(QMLLINT_AVAILABLE FALSE)
-else()
-    message(STATUS "Found qmllint: ${QMLLINT_EXECUTABLE}")
-    set(QMLLINT_AVAILABLE TRUE)
+# Strict, explicit QML validation after the target's type information exists.
+# Qt owns <target>_qmllint; do not shadow it or create a build/lint cycle.
+include_guard(GLOBAL)
+option(MARATHON_REQUIRE_QMLLINT "Fail configuration without a working Qt 6 qmllint" OFF)
+set(_MARATHON_QML_VALIDATOR "${CMAKE_CURRENT_LIST_DIR}/../scripts/validate-qml.py")
+find_package(Python3 COMPONENTS Interpreter QUIET)
+set(QMLLINT_EXECUTABLE "" CACHE FILEPATH "Qt 6 qmllint (empty selects the build Qt or installed Qt 6 tools)")
+set(_qmllint_selection)
+if(QMLLINT_EXECUTABLE)
+    list(APPEND _qmllint_selection --qmllint "${QMLLINT_EXECUTABLE}")
+elseif(TARGET Qt6::qmllint)
+    get_target_property(_qt_qmllint Qt6::qmllint IMPORTED_LOCATION)
+    if(_qt_qmllint)
+        list(APPEND _qmllint_selection --qmllint "${_qt_qmllint}")
+    endif()
 endif()
+set(_qmllint_status 1)
+if(Python3_Interpreter_FOUND)
+    execute_process(COMMAND "${Python3_EXECUTABLE}" "${_MARATHON_QML_VALIDATOR}"
+        ${_qmllint_selection} --print-tool RESULT_VARIABLE _qmllint_status
+        OUTPUT_VARIABLE _qmllint_tool OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_VARIABLE _qmllint_error)
+endif()
+if(NOT _qmllint_status EQUAL 0)
+    if(MARATHON_REQUIRE_QMLLINT)
+        message(FATAL_ERROR "Qt 6 QML validation is required: ${_qmllint_error}. Python 3 and Qt 6 qmllint must be installed.")
+    endif()
+    message(WARNING "Qt 6 QML validation is unavailable: ${_qmllint_error}. This developer build is not QML validation; the explicit validation target will fail until tooling is installed.")
+else()
+    set(QMLLINT_EXECUTABLE "${_qmllint_tool}" CACHE FILEPATH "Qt 6 qmllint" FORCE)
+    set(_qmllint_selection --qmllint "${_qmllint_tool}")
+    message(STATUS "Strict QML validation tool: ${_qmllint_tool}")
+endif()
+# A missing qmllint must not remove the target or make running it successful.
+set(QMLLINT_AVAILABLE TRUE)
 
-# Function to add qmllint validation target
-# Usage: add_qmllint_target(target_name qml_files_list)
 function(add_qmllint_target target_name)
-    if(NOT QMLLINT_AVAILABLE)
-        return()
-    endif()
-
     set(qml_files ${ARGN})
-    
-    # Filter out non-QML files (like qmldir)
     list(FILTER qml_files INCLUDE REGEX "\\.qml$")
-    
     if(NOT qml_files)
-        return()
+        message(FATAL_ERROR "No QML files supplied for ${target_name} validation")
     endif()
-
-    # Build import paths for qmllint
-    set(import_paths "")
-    
-    # Add Qt6 QML import path
-    if(TARGET Qt6::Qml)
-        get_target_property(qt_qml_import_path Qt6::Qml IMPORTED_LOCATION)
-        if(qt_qml_import_path)
-            get_filename_component(qt_qml_path ${qt_qml_import_path} DIRECTORY)
-            get_filename_component(qt_qml_path ${qt_qml_path} DIRECTORY)
-            list(APPEND import_paths "${qt_qml_path}/qml")
-        endif()
+    list(LENGTH qml_files qml_count)
+    message(STATUS "Strict QML validation scope: ${target_name}, ${qml_count} module files")
+    if(NOT TARGET marathon-qml-validation)
+        add_custom_target(marathon-qml-validation)
     endif()
-    
-    if(EXISTS "${CMAKE_BINARY_DIR}/shell/qml")
-        list(APPEND import_paths "${CMAKE_BINARY_DIR}/shell/qml")
-    endif()
-    
-    # Add MarathonOS.Shell import path (for shell QML files)
-    # Shell modules are in shell/qml/ directory
-    if(EXISTS "${CMAKE_SOURCE_DIR}/shell/qml")
-        list(APPEND import_paths "${CMAKE_SOURCE_DIR}/shell/qml")
-    endif()
-    
-    # Also check if shell is in a subdirectory relative to current source
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../shell/qml")
-        list(APPEND import_paths "${CMAKE_CURRENT_SOURCE_DIR}/../shell/qml")
-    endif()
-    
-    # If we're in shell directory, add its qml directory
-    if(CMAKE_CURRENT_SOURCE_DIR MATCHES "shell")
-        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/qml")
-            list(APPEND import_paths "${CMAKE_CURRENT_SOURCE_DIR}/qml")
-        endif()
-    endif()
-    
-    # Remove duplicates while preserving order
-    if(import_paths)
-        list(REMOVE_DUPLICATES import_paths)
-    endif()
-    
-    # Debug: log import paths when CMAKE_VERBOSE_MAKEFILE is set
-    if(CMAKE_VERBOSE_MAKEFILE)
-        message(STATUS "[qmllint] Import paths for ${target_name}:")
-        foreach(path ${import_paths})
-            message(STATUS "  - ${path}")
-        endforeach()
-    endif()
-    
-    # Build QML_IMPORT_PATH environment variable
-    string(REPLACE ";" ":" import_path_env "${import_paths}")
-    if(NOT import_path_env STREQUAL "")
-        set(env_vars "QML_IMPORT_PATH=${import_path_env}")
+    if(NOT Python3_Interpreter_FOUND)
+        add_custom_target(${target_name}_validate_qml
+            COMMAND "${CMAKE_COMMAND}" -E echo "Python 3 and Qt 6 qmllint are required"
+            COMMAND "${CMAKE_COMMAND}" -E false VERBATIM)
     else()
-        set(env_vars "")
-    endif()
-
-    # Create a custom target that runs qmllint
-    # Check if target already exists to avoid duplicates
-    if(NOT TARGET ${target_name}_qmllint)
-        set(qmllint_dependencies "")
-        if(TARGET marathon-shell)
-            list(APPEND qmllint_dependencies marathon-shell)
+        set(import_args -I "${CMAKE_SOURCE_DIR}")
+        if(DEFINED KEEL_QML AND NOT KEEL_QML STREQUAL "")
+            list(APPEND import_args -I "${KEEL_QML}")
         endif()
-        
-        add_custom_target(${target_name}_qmllint
-            COMMAND ${CMAKE_COMMAND} -E echo "🔍 Running qmllint validation for ${target_name}..."
-            COMMAND ${CMAKE_COMMAND} -E echo "   Import paths: ${import_path_env}"
-            COMMAND ${CMAKE_COMMAND} -E env ${env_vars}
-                ${QMLLINT_EXECUTABLE}
-                ${qml_files}
-            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-            COMMENT "Validating QML files with qmllint"
-            VERBATIM
-            DEPENDS ${qmllint_dependencies}
-        )
-
-        # Make the main target depend on qmllint validation
-        if(TARGET ${target_name})
-            add_dependencies(${target_name} ${target_name}_qmllint)
-        endif()
+        add_custom_target(${target_name}_validate_qml
+            COMMAND "${Python3_EXECUTABLE}" "${_MARATHON_QML_VALIDATOR}"
+                ${_qmllint_selection} --build-dir "${CMAKE_BINARY_DIR}"
+                ${import_args} ${qml_files}
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            COMMENT "Strict QML validation for ${target_name}" VERBATIM)
     endif()
-    
-    # Note: qmllint exits with non-zero code only on errors, not warnings
-    # Warnings are shown but don't fail the build unless configured in .qmllint.ini
+    if(TARGET ${target_name})
+        add_dependencies(${target_name}_validate_qml ${target_name})
+    endif()
+    if(TARGET qmllint-types)
+        add_dependencies(${target_name}_validate_qml qmllint-types)
+    endif()
+    add_dependencies(marathon-qml-validation ${target_name}_validate_qml)
 endfunction()
 
-# Function to validate QML files in a directory
-# Usage: validate_qml_directory(target_name directory_path)
 function(validate_qml_directory target_name directory_path)
-    if(NOT QMLLINT_AVAILABLE)
-        return()
-    endif()
-
-    # Find all QML files in the directory
-    file(GLOB_RECURSE qml_files "${directory_path}/*.qml")
-    
-    if(NOT qml_files)
-        return()
-    endif()
-
-    # Build import paths (same as above)
-    set(import_paths "")
-    if(TARGET Qt6::Qml)
-        get_target_property(qt_qml_import_path Qt6::Qml IMPORTED_LOCATION)
-        if(qt_qml_import_path)
-            get_filename_component(qt_qml_path ${qt_qml_import_path} DIRECTORY)
-            get_filename_component(qt_qml_path ${qt_qml_path} DIRECTORY)
-            list(APPEND import_paths "${qt_qml_path}/qml")
-        endif()
-    endif()
-    
-    string(REPLACE ";" ":" import_path_env "${import_paths}")
-
-    # Create validation target
-    # Check if target already exists to avoid duplicates
-    if(NOT TARGET ${target_name}_qmllint)
-        add_custom_target(${target_name}_qmllint
-            COMMAND ${CMAKE_COMMAND} -E echo "🔍 Running qmllint validation for ${target_name}..."
-            COMMAND ${CMAKE_COMMAND} -E env QML_IMPORT_PATH=${import_path_env}
-                ${QMLLINT_EXECUTABLE}
-                ${qml_files}
-            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-            COMMENT "Validating QML files in ${directory_path} with qmllint"
-            VERBATIM
-        )
-
-        # Make the main target depend on validation
-        if(TARGET ${target_name})
-            add_dependencies(${target_name} ${target_name}_qmllint)
-        endif()
-    endif()
+    file(GLOB_RECURSE qml_files CONFIGURE_DEPENDS "${directory_path}/*.qml")
+    add_qmllint_target(${target_name} ${qml_files})
 endfunction()
-
-

@@ -1,0 +1,18 @@
+#!/bin/sh
+# Q25 verified render path; startup power state is currently prepared by lead.
+export QT_QPA_PLATFORM=eglfs
+export QT_QPA_EGLFS_INTEGRATION=eglfs_kms
+export QT_QPA_EGLFS_KMS_CONFIG=/etc/q25/eglfs-kms.json
+export QSG_RHI_BACKEND=opengl
+export PAN_MESA_DEBUG=noafbc
+export MARATHON_GPU_STACK=mesa-panfrost
+export GBM_BACKENDS_PATH=/usr/lib/gbm
+export MARATHON_FORCE_DPI=240
+export MARATHON_SCREENSHOT_PATH=/run/user/1000/q25-gpu-screen.png
+unset QT_QUICK_BACKEND QT_QPA_FB_DRM QT_SCALE_FACTOR QT_SCREEN_SCALE_FACTORS QT_FONT_DPI
+if [ -r /etc/q25/keyboard-layout-preview.env ]; then
+    set -a
+    . /etc/q25/keyboard-layout-preview.env
+    set +a
+fi
+exec /usr/bin/marathon-shell-session "$@"

@@ -78,10 +78,12 @@ overlay in `packaging/packages/device-*-marathon` ships the
   `shell/src/wayland/linuxdmabufv1.{h,cpp}`; see `docs/WAYLAND_PROTOCOLS.md`.
 - App lifecycle: warm runner pool, cgroup v2 freezer for backgrounded apps,
   oom_score_adj ladder. See `docs/NATIVE_APP_LIFECYCLE.md`.
-- Mail: QMF 4.0.4 + `MailService` + the `marathonoauth`/`marathonclassic`
-  credential plugins + the `marathon-mail-oauth` Rust helper.
-- Rust services live in `crates/` (`marathon-audiod`, `marathon-weatherd`,
-  `marathon-store-handler`, `marathon-apps`).
+- Mail: `marathon-maild` serves IMAP/SMTP accounts over D-Bus, watches Inboxes
+  with IMAP IDLE and queues outgoing mail when sending fails.
+- Rust platform code lives in the 28-member `crates/` workspace: the shell
+  and app runner's CXX-Qt objects, shared libraries, daemons, app packaging,
+  and Keel Actions. Pilot and Reef also have separate native app workspaces.
+  See `docs/v2/RUST_API_AUDIT.md` for the source and API boundary inventory.
 
 ---
 
@@ -274,8 +276,8 @@ module; when in doubt, ship the apk.
 | `apps/` | Bundled QML apps. |
 | `marathon-silica/` | `Marathon.Silica`: Keel's Silica plus accessibility, keyboard operation and missing components. |
 | `marathon-services/` | Shared libraries and services. |
-| `crates/` | Rust workspace (`marathon-audiod`, `marathon-background`, `marathon-apps`, `marathon-health`, `marathon-store-handler`, `marathon-weatherd`). |
-| `tools/` | `marathon-app-runner`, `marathon-webview-runner`, `marathon-mail-oauth`, ... |
+| `crates/` | Rust shell/app bridges, shared libraries, daemons, app packaging and Keel Actions; inventory in `docs/v2/RUST_API_AUDIT.md`. |
+| `tools/` | `marathon-app-runner`, `marathon-webview-runner`, shared `keel-launcher` sources, ... |
 | `scripts/` | Build wrappers, `marathon` CLI, `device-snap.sh`, `hot-deploy.sh`, `flash/`, `qemu/`. |
 | `packaging/` | aports, pipeline patches, configs. See `packaging/README.md`. |
 | `docs/redesign/` | JSX design references. |

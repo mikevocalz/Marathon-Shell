@@ -14,16 +14,22 @@ Dialog {
     property string defaultCc: ""
     property string defaultSubject: ""
     property string defaultBody: ""
+    property string senderAccountId: ""
+    property string senderAccountName: ""
+    property string senderAccountAddress: ""
     // Files to send: paths in the app's cache, from the share sheet.
     property var attachments: []
 
-    readonly property bool serviceReady: mail.accounts !== null && mail.currentAccountId !== ""
+    readonly property bool serviceReady: mail.accounts !== null && senderAccountAddress !== "" && mail.accountList.some(a => a.id === senderAccountId && a.address === senderAccountAddress)
     readonly property var fields: ({
             to: toField.text,
             cc: ccField.text,
             bcc: bccField.text,
             subject: subjectField.text,
-            body: bodyArea.text
+            body: bodyArea.text,
+            senderAccountId: senderAccountId,
+            senderAccountName: senderAccountName,
+            senderAccountAddress: senderAccountAddress
         })
     readonly property var to: Logic.parseRecipients(toField.text)
     readonly property var cc: Logic.parseRecipients(ccField.text)
@@ -56,6 +62,7 @@ Dialog {
     }
     onAccepted: {
         autosave.stop();
+        mail.currentAccountId = senderAccountId;
         if (mail.send(to.recipients.join(", "), cc.recipients.join(", "), bcc.recipients.join(", "), subjectField.text, bodyArea.text, attachments)) {
             draftStore.value = Logic.withDraft(draftStore.value, draftKey, {
                 to: "",
@@ -81,6 +88,9 @@ Dialog {
     Component.onCompleted: {
         const d = Logic.parseDrafts(draftStore.value)[draftKey];
         if (d) {
+            senderAccountId = d.senderAccountId || senderAccountId;
+            senderAccountName = d.senderAccountName || senderAccountName;
+            senderAccountAddress = d.senderAccountAddress || senderAccountAddress;
             toField.text = d.to || "";
             ccField.text = d.cc || "";
             bccField.text = d.bcc || "";
@@ -128,7 +138,7 @@ Dialog {
                 objectName: "fromItem"
                 visible: dialog.serviceReady
                 label: qsTr("From")
-                value: dialog.mail.currentAccountName
+                value: dialog.senderAccountName
                 alignment: Qt.AlignLeft
             }
             TextField {

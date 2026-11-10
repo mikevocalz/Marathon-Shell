@@ -9,6 +9,8 @@ QtObject {
     property int estimatedBatteryTime: 0
     property string powerProfile: "balanced"
     property bool powerProfilesSupported: true
+    property bool hasAssistKey: true
+    property bool hasTrackpad: true
 
     function reset() {
         batteryLevel = 80;

@@ -6,6 +6,10 @@
 //! live in `~/.config/marathon/app-permissions.json`. Requests that arrive
 //! together become one prompt per app. Apps whose grants another system keeps
 //! (Android's, for deckardd) get a "foreign" prompt that stores nothing.
+#![allow(
+    clippy::fn_params_excessive_bools,
+    reason = "QML's respondWith(granted, once, precise, limited)"
+)]
 
 use crate::i18n::fl;
 use std::collections::{BTreeMap, HashMap, VecDeque};
@@ -86,10 +90,17 @@ mod qobject {
         fn request_declared_permissions(self: Pin<&mut Permissions>, app_id: &QString);
         #[qinvokable]
         fn respond(self: Pin<&mut Permissions>, granted: bool);
-        /// With a foreign prompt's choices: only this time, precise.
+        /// With a foreign prompt's choices: only this time, precise, only
+        /// the photos the person picks.
         #[qinvokable]
         #[cxx_name = "respondWith"]
-        fn respond_with(self: Pin<&mut Permissions>, granted: bool, once: bool, precise: bool);
+        fn respond_with(
+            self: Pin<&mut Permissions>,
+            granted: bool,
+            once: bool,
+            precise: bool,
+            limited: bool,
+        );
         /// Back: deny a Marathon prompt, cancel a foreign one.
         #[qinvokable]
         #[cxx_name = "respondToBack"]
@@ -155,6 +166,14 @@ struct ForeignOptions {
     once: bool,
     accuracy: String,
     precise_default: bool,
+    limited: bool,
+}
+
+/// A foreign prompt's answer beyond allow or deny.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct Choices {
+    precise: bool,
+    limited: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -184,7 +203,7 @@ enum Event {
     Denied(String, String),
     Revoked(String, String),
     Requested(String, Vec<String>),
-    Answered(String, &'static str, bool),
+    Answered(String, &'static str, Choices),
     PromptChanged,
     // Look at the queue again, after this long.
     Recheck(u64),
@@ -394,7 +413,7 @@ impl Core {
         &mut self,
         key: &str,
         answer: &'static str,
-        precise: bool,
+        choices: Choices,
         out: &mut Vec<Event>,
     ) {
         let Some(i) = self.foreign.iter().position(|f| f.key == key) else {
@@ -410,10 +429,17 @@ impl Core {
             self.close(out);
             self.check_queue(out);
         }
-        out.push(Event::Answered(key.to_owned(), answer, precise));
+        out.push(Event::Answered(key.to_owned(), answer, choices));
     }
 
-    fn respond(&mut self, granted: bool, once: bool, precise: Option<bool>, out: &mut Vec<Event>) {
+    fn respond(
+        &mut self,
+        granted: bool,
+        once: bool,
+        precise: Option<bool>,
+        limited: bool,
+        out: &mut Vec<Event>,
+    ) {
         let Some(prompt) = self.prompt.clone() else {
             return;
         };
@@ -429,7 +455,11 @@ impl Core {
                 Some(p) if options.accuracy == "choice" => p,
                 _ => options.precise_default,
             };
-            return self.finish_foreign(&key, answer, granted && exact, out);
+            let choices = Choices {
+                precise: granted && exact,
+                limited: granted && limited && options.limited,
+            };
+            return self.finish_foreign(&key, answer, choices, out);
         }
         // Stored as denied: the user has been told, so it is not shown again.
         let grants = self.stored.entry(prompt.app.clone()).or_default();
@@ -502,7 +532,7 @@ impl Core {
             .map(|f| f.key.clone())
             .collect();
         for key in keys {
-            self.finish_foreign(&key, "cancel", false, out);
+            self.finish_foreign(&key, "cancel", Choices::default(), out);
         }
         self.pending
             .retain(|(a, _)| app.is_some_and(|app| a != app));
@@ -537,7 +567,7 @@ static CORE: LazyLock<Mutex<Core>> = LazyLock::new(|| {
     ))
 });
 static QT: OnceLock<cxx_qt::CxxQtThread<Permissions>> = OnceLock::new();
-type Answer = (String, bool);
+type Answer = (String, Choices);
 // Permissions1.PromptAndroid's callers, by prompt key.
 static WAITING: LazyLock<Mutex<HashMap<String, Sender<Answer>>>> = LazyLock::new(Mutex::default);
 
@@ -630,13 +660,13 @@ impl Permissions {
                 Event::Requested(a, ps) => self
                     .as_mut()
                     .permissions_requested(&QString::from(&a), &list(&ps)),
-                Event::Answered(k, a, precise) => {
+                Event::Answered(k, a, choices) => {
                     if let Some(waiter) = WAITING
                         .lock()
                         .unwrap_or_else(|_| std::process::abort())
                         .remove(&k)
                     {
-                        waiter.try_send((a.to_owned(), precise)).ok();
+                        waiter.try_send((a.to_owned(), choices)).ok();
                     }
                 }
                 Event::PromptChanged => self.as_mut().show_prompt(),
@@ -662,6 +692,7 @@ impl Permissions {
                 QString::from("preciseDefault"),
                 QVariant::from(&o.precise_default),
             );
+            options.insert(QString::from("limited"), QVariant::from(&o.limited));
         }
         let mut rust = self.as_mut().rust_mut();
         let p = prompt.as_ref();
@@ -742,22 +773,26 @@ impl Permissions {
     }
 
     fn cancel_foreign(self: Pin<&mut Self>, key: &str) {
-        self.with(|core, out| core.finish_foreign(key, "cancel", false, out));
+        self.with(|core, out| core.finish_foreign(key, "cancel", Choices::default(), out));
     }
 
     fn respond(self: Pin<&mut Self>, granted: bool) {
-        self.with(|core, out| core.respond(granted, false, None, out));
+        self.with(|core, out| core.respond(granted, false, None, false, out));
     }
 
-    fn respond_with(self: Pin<&mut Self>, granted: bool, once: bool, precise: bool) {
-        self.with(|core, out| core.respond(granted, once, Some(precise), out));
+    #[expect(
+        clippy::fn_params_excessive_bools,
+        reason = "one per switch of the prompt QML calls it from"
+    )]
+    fn respond_with(self: Pin<&mut Self>, granted: bool, once: bool, precise: bool, limited: bool) {
+        self.with(|core, out| core.respond(granted, once, Some(precise), limited, out));
     }
 
     fn respond_to_back(self: Pin<&mut Self>) {
         self.with(
             |core, out| match core.prompt.as_ref().and_then(|p| p.foreign.clone()) {
-                Some((key, _)) => core.finish_foreign(&key, "cancel", false, out),
-                None => core.respond(false, false, None, out),
+                Some((key, _)) => core.finish_foreign(&key, "cancel", Choices::default(), out),
+                None => core.respond(false, false, None, false, out),
             },
         );
     }
@@ -915,6 +950,7 @@ fn foreign_options(options: &State) -> Option<ForeignOptions> {
         once: flag("once")?,
         accuracy,
         precise_default: flag("preciseDefault")?,
+        limited: flag("limited")?,
     })
 }
 
@@ -1018,8 +1054,8 @@ impl Permissions1 {
     }
 
     /// deckardd's prompt for an Android app, `deckard.<package>`; options
-    /// request (16 hex digits), kind, once, accuracy and preciseDefault.
-    /// Answers allow, once, deny or cancel, and precise.
+    /// request (16 hex digits), kind, once, accuracy, preciseDefault and
+    /// limited. Answers allow, once, deny or cancel, precise and limited.
     async fn prompt_android(
         &self,
         app_id: String,
@@ -1074,13 +1110,14 @@ impl Permissions1 {
             None
         })
         .await;
-        let Some((answer, precise)) = answered else {
+        let Some((answer, choices)) = answered else {
             ipc::on_gui(&self.qt, move |obj| obj.cancel_foreign(&key)).await?;
             return Err(fdo::Error::Failed("The prompter left".into()));
         };
         Ok(State::from([
             ("answer".to_owned(), value(answer)),
-            ("precise".to_owned(), value(precise)),
+            ("precise".to_owned(), value(choices.precise)),
+            ("limited".to_owned(), value(choices.limited)),
         ]))
     }
 
@@ -1217,7 +1254,7 @@ mod tests {
             c.set("maps", &["location".into()], true, true, o);
         });
         assert_eq!(c.prompt.as_ref().unwrap().app, "mail");
-        let answered = run(&mut c, |c, o| c.respond(true, false, None, o));
+        let answered = run(&mut c, |c, o| c.respond(true, false, None, false, o));
         assert!(answered.contains(&Event::Granted("mail".into(), "storage".into())));
         assert!(c.prompt.is_none());
         // maps' request was answered meanwhile, so it is not asked again.
@@ -1256,7 +1293,7 @@ mod tests {
         run(&mut c, |c, o| c.request("rogue", "system", o));
         run(&mut c, Core::process);
         assert_eq!(c.prompt.as_ref().unwrap().refused, ["system"]);
-        let out = run(&mut c, |c, o| c.respond(true, false, None, o));
+        let out = run(&mut c, |c, o| c.respond(true, false, None, false, o));
         assert!(out.contains(&Event::Denied("rogue".into(), "system".into())));
         assert_eq!(
             run(&mut c, |c, o| c.request("rogue", "system", o)),
@@ -1277,23 +1314,35 @@ mod tests {
                     once,
                     accuracy: accuracy.into(),
                     precise_default: true,
+                    limited: accuracy.is_empty(),
                 },
             });
             run(c, Core::process);
         };
+        let choices = |precise, limited| Choices { precise, limited };
         ask(&mut c, "k1", false, "approximate");
-        let out = run(&mut c, |c, o| c.respond(true, true, Some(false), o));
+        let out = run(&mut c, |c, o| c.respond(true, true, Some(false), false, o));
         assert!(
-            out.contains(&Event::Answered("k1".into(), "allow", true)),
+            out.contains(&Event::Answered("k1".into(), "allow", choices(true, false))),
             "{out:?}"
         );
         ask(&mut c, "k2", true, "choice");
-        let out = run(&mut c, |c, o| c.respond(true, true, Some(false), o));
-        assert!(out.contains(&Event::Answered("k2".into(), "once", false)));
+        let out = run(&mut c, |c, o| c.respond(true, true, Some(false), false, o));
+        assert!(out.contains(&Event::Answered("k2".into(), "once", Choices::default())));
         assert_eq!(c.stored, BTreeMap::new());
         ask(&mut c, "k3", false, "");
         let out = run(&mut c, |c, o| c.dismiss_for(Some("deckard.org.a"), o));
-        assert!(out.contains(&Event::Answered("k3".into(), "cancel", false)));
+        assert!(out.contains(&Event::Answered("k3".into(), "cancel", Choices::default())));
+        // Only the photos the person picks, when Android offered it.
+        ask(&mut c, "k4", false, "");
+        let out = run(&mut c, |c, o| c.respond(true, false, Some(false), true, o));
+        assert!(out.contains(&Event::Answered("k4".into(), "allow", choices(true, true))));
+        ask(&mut c, "k5", false, "choice");
+        let out = run(&mut c, |c, o| c.respond(true, false, Some(true), true, o));
+        assert!(out.contains(&Event::Answered("k5".into(), "allow", choices(true, false))));
+        ask(&mut c, "k6", false, "");
+        let out = run(&mut c, |c, o| c.respond(false, false, Some(false), true, o));
+        assert!(out.contains(&Event::Answered("k6".into(), "deny", Choices::default())));
     }
 
     #[test]
@@ -1344,12 +1393,14 @@ mod tests {
         let o = State::from([
             ("kind".to_owned(), value("background")),
             ("once".to_owned(), value(true)),
+            ("limited".to_owned(), value(true)),
         ]);
-        assert!(foreign_options(&o).is_some_and(|o| o.kind == "background" && o.once));
+        assert!(foreign_options(&o).is_some_and(|o| o.kind == "background" && o.once && o.limited));
         for (k, v) in [
             ("kind", value("always")),
             ("accuracy", value("fine")),
             ("once", value("yes")),
+            ("limited", value("yes")),
         ] {
             assert!(
                 foreign_options(&State::from([(k.to_owned(), v)])).is_none(),
