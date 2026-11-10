@@ -54,11 +54,11 @@ async fn watch(qt: &Qt) -> zbus::Result<()> {
     let bus = io::session_bus().await?;
     let rule = MatchRule::builder()
         .msg_type(zbus::message::Type::Signal)
-        .sender(BUS)?
-        .path(PATH)?
-        .interface(INTERFACE)?
-        .member("EventsChanged")?
-        .build();
+        .sender(BUS)
+        .path(PATH)
+        .interface(INTERFACE)
+        .member("EventsChanged")
+        .build()?;
     let changed = MessageStream::for_match_rule(rule, &bus, None).await?;
     let dbus = zbus::fdo::DBusProxy::new(&bus).await?;
     let owners = dbus
