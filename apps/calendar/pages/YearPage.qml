@@ -9,6 +9,7 @@ Page {
     property int year: new Date().getFullYear()
     readonly property date today: new Date()
     readonly property int weekStart: Qt.locale().firstDayOfWeek
+    readonly property real minimumMonthWidth: 7 * Math.ceil(widestDay.advanceWidth) + 2 * Theme.paddingSmall
 
     signal monthChosen(int year, int month)
 
@@ -16,12 +17,16 @@ Page {
         id: widestDay
 
         font.pixelSize: Theme.fontSizeTiny
+        font.family: Theme.fontFamily
         text: "28"
     }
 
     SilicaFlickable {
+        id: yearView
+
         objectName: "yearView"
         anchors.fill: parent
+        contentWidth: Math.max(width, page.minimumMonthWidth + 2 * Theme.paddingSmall)
         contentHeight: column.height + Theme.paddingLarge
 
         PullDownMenu {
@@ -46,7 +51,7 @@ Page {
         Column {
             id: column
 
-            width: parent.width
+            width: yearView.contentWidth
 
             PageHeader {
                 objectName: "yearHeader"
@@ -57,9 +62,9 @@ Page {
                 id: grid
 
                 objectName: "yearGrid"
-                x: Theme.horizontalPageMargin - Theme.paddingSmall
+                x: Math.min(Theme.horizontalPageMargin - Theme.paddingSmall, Math.max(Theme.paddingSmall, (parent.width - page.minimumMonthWidth) / 2))
                 width: parent.width - 2 * x
-                columns: Math.max(1, Math.min(3, Math.floor(width / (7 * widestDay.width + 5 * Theme.paddingSmall))))
+                columns: Math.max(1, Math.min(3, Math.floor(width / (7 * widestDay.advanceWidth + 5 * Theme.paddingSmall))))
                 rowSpacing: Theme.paddingLarge
 
                 Repeater {
@@ -102,7 +107,7 @@ Page {
                                 margins: Theme.paddingSmall
                             }
                             columns: 7
-                            columnSpacing: Theme.paddingSmall / 2
+                            columnSpacing: Math.min(Theme.paddingSmall / 2, Math.max(0, (width - 7 * widestDay.advanceWidth) / 6))
 
                             Repeater {
                                 model: 42
@@ -126,5 +131,6 @@ Page {
         }
 
         VerticalScrollDecorator {}
+        HorizontalScrollDecorator {}
     }
 }

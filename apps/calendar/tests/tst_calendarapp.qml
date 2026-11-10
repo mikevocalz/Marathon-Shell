@@ -483,7 +483,7 @@ TestCase {
         app.pageStack.push(Qt.resolvedUrl("../pages/AgendaPage.qml"), {
             app: app
         }, PageStackAction.Immediate);
-        child(app.pageStack.currentPage, "searchItem").clicked(null);
+        child(app.pageStack.currentPage, "searchItem").clicked();
         compare(pushed(app, 3).objectName, "searchPage");
     }
 
@@ -553,7 +553,7 @@ TestCase {
         compare(title.textFormat, Text.PlainText);
         compare(details.textFormat, Text.PlainText);
         verify(details.text.indexOf(remote.accountLabel) >= 0);
-        verify(details.mapToItem(row, 0, details.height).y <= row.contentHeight);
+        tryVerify(() => details.mapToItem(row, 0, details.height).y <= row.contentHeight, 3000, "event details must fit inside the grown row");
         compare(row.menu, null);
         app.width = 1024;
         app.height = 768;
@@ -589,11 +589,13 @@ TestCase {
         const grid = child(page, "yearGrid");
         tryVerify(() => grid.columns < 3);
         const firstMonth = child(page, "months").itemAt(0);
-        const days = child(firstMonth, "miniDays").children;
+        const miniDays = child(firstMonth, "miniDays");
+        const days = miniDays.children;
         const day = Array.from(days).find(item => item.text === "28");
         verify(day !== undefined);
         compare(day.font.pixelSize, Theme.fontSizeTiny);
-        verify(day.contentWidth <= day.width + 1);
+        verify(waitForPolish(page.Window.window));
+        verify(day.contentWidth <= day.width + 1, "day text width " + day.contentWidth + " exceeds cell " + day.width + " at font " + day.font.pixelSize);
         compare(child(page, "months").count, 12);
     }
 
