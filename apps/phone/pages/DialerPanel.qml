@@ -93,6 +93,7 @@ Item {
 
             Label {
                 id: numberLabel
+                textFormat: Text.PlainText
 
                 objectName: "numberLabel"
                 // Placeholder may run under the hidden backspace button.
@@ -135,6 +136,7 @@ Item {
         }
 
         Label {
+            textFormat: Text.PlainText
             objectName: "matchLabel"
             x: root._wide ? Theme.horizontalPageMargin : 0
             width: root._wide ? side.width - 2 * Theme.horizontalPageMargin : parent.width

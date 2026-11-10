@@ -66,6 +66,29 @@ TestCase {
         tryVerify(() => !app.pageStack.busy);
     }
 
+    function actionRect(page, button) {
+        const start = button.mapToItem(page, 0, 0);
+        verify(start.x >= 0 && start.y >= 0);
+        verify(start.x + button.width <= page.width + 1, button.objectName + " x " + start.x + " width " + button.width + " parent width " + button.parent.width + " parent x " + button.parent.x + " exceeds page width " + page.width);
+        verify(start.y + button.height <= page.height + 1);
+        return Qt.rect(start.x, start.y, button.width, button.height);
+    }
+
+    function compactWindows() {
+        return [
+            {
+                tag: "320 by 480",
+                width: 320,
+                height: 480
+            },
+            {
+                tag: "360 by 400",
+                width: 360,
+                height: 400
+            }
+        ];
+    }
+
     function test_incomingShowsCallerAndAnswerActivates() {
         const app = makeApp();
         Telephony.incomingCall("5551234567");
@@ -80,6 +103,45 @@ TestCase {
         verify(app.callStartedAt > 0);
         waitIdle(app);
         compare(app.pageStack.depth, 2);
+    }
+
+    function test_longIncomingCallerScrollsAboveAnswer_data() {
+        return compactWindows();
+    }
+
+    function test_longIncomingCallerScrollsAboveAnswer(data) {
+        const caller = "<b>Admiral Grace Murray Hopper from the international engineering department</b>";
+        Contacts.updateContact(1, {
+            name: caller
+        });
+        const app = makeApp();
+        app.width = data.width;
+        app.height = data.height;
+        Telephony.incomingCall("5551234567");
+        tryVerify(() => app.incomingPage !== null && app.pageStack.currentPage === app.incomingPage);
+        waitIdle(app);
+        const page = app.incomingPage;
+        const label = findChild(page, "callerLabel");
+        const info = findChild(page, "callInfo");
+        const answer = findChild(page, "answerButton");
+        label.font.pixelSize = Theme.fontSizeHuge;
+        verify(waitForPolish(page.Window.window));
+        tryVerify(() => label.lineCount > 2 && info.contentHeight > info.height && info.height > 0);
+        compare(label.text, caller);
+        compare(label.textFormat, Text.PlainText);
+        verify(!label.truncated);
+        verify(info.clip);
+        const before = actionRect(page, answer);
+        const decline = actionRect(page, findChild(page, "declineButton"));
+        verify(info.mapToItem(page, 0, info.height).y <= decline.y);
+        info.contentY = info.contentHeight - info.height;
+        tryVerify(() => info.contentY > 0);
+        compare(actionRect(page, answer), before);
+        compare(answer.Accessible.name, "Answer call from " + caller);
+        answer.forceActiveFocus();
+        keyClick(Qt.Key_Return);
+        compare(Telephony.log, ["answer"]);
+        compare(app.callNumber, "5551234567");
     }
 
     function test_declineHangsUpAndCloses() {
@@ -122,6 +184,51 @@ TestCase {
         compare(Telephony.log, ["dial:5551234567", "mute:true", "speaker:true", "dtmf:5"]);
         findChild(page, "endCallButton").clicked(null);
         compare(Telephony.log[4], "hangup");
+        tryVerify(() => app.pageStack.depth === 1 && !app.pageStack.busy);
+    }
+
+    function test_longCallerAndTonesScrollAboveEndCall_data() {
+        return compactWindows();
+    }
+
+    function test_longCallerAndTonesScrollAboveEndCall(data) {
+        const caller = "<b>Admiral Grace Murray Hopper from the international engineering department</b>";
+        Contacts.updateContact(1, {
+            name: caller
+        });
+        const app = makeApp();
+        app.width = data.width;
+        app.height = data.height;
+        app.call("5551234567");
+        tryVerify(() => app.callPage !== null && app.pageStack.currentPage === app.callPage);
+        waitIdle(app);
+        const page = app.callPage;
+        const name = findChild(page, "nameLabel");
+        const body = findChild(page, "callBody");
+        const end = findChild(page, "endCallButton");
+        name.font.pixelSize = Theme.fontSizeHuge;
+        findChild(page, "keypadButton").clicked(null);
+        const tones = "1234567890123456789012345678901234567890#";
+        const keypad = findChild(page, "dtmfKeypad");
+        for (const digit of tones)
+            keypad.clicked(digit);
+        compare(page.tones, tones);
+        compare(Telephony.log, ["dial:5551234567"].concat(tones.split("").map(digit => "dtmf:" + digit)));
+        verify(waitForPolish(page.Window.window));
+        tryVerify(() => name.lineCount > 2 && body.contentHeight > body.height && body.height > 0);
+        compare(name.text, caller);
+        compare(name.textFormat, Text.PlainText);
+        verify(!name.truncated);
+        verify(body.clip);
+        const before = actionRect(page, end);
+        verify(body.mapToItem(page, 0, body.height).y <= before.y);
+        body.contentY = body.contentHeight - body.height;
+        tryVerify(() => body.contentY > 0);
+        compare(actionRect(page, end), before);
+        verify(keypad.mapToItem(body, 0, keypad.height).y <= body.height + 1, "keypad bottom " + keypad.mapToItem(body, 0, keypad.height).y + ", viewport " + body.height + ", content " + body.contentHeight + ", scroll " + body.contentY);
+        end.forceActiveFocus();
+        keyClick(Qt.Key_Return);
+        compare(Telephony.log[Telephony.log.length - 1], "hangup");
         tryVerify(() => app.pageStack.depth === 1 && !app.pageStack.busy);
     }
 

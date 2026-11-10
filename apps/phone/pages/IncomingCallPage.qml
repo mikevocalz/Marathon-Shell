@@ -11,54 +11,72 @@ Page {
 
     backNavigation: false
 
-    Column {
+    SilicaFlickable {
+        objectName: "callInfo"
         anchors {
+            top: parent.top
             left: parent.left
             right: parent.right
-            leftMargin: Theme.horizontalPageMargin
-            rightMargin: Theme.horizontalPageMargin
-            top: parent.top
-            topMargin: Theme.itemSizeLarge
+            bottom: actions.top
+            bottomMargin: Theme.paddingLarge
         }
-        spacing: Theme.paddingMedium
+        clip: true
+        contentHeight: callerInfo.height + 2 * Theme.paddingLarge
 
-        Label {
-            width: parent.width
-            horizontalAlignment: Text.AlignHCenter
-            text: qsTr("Incoming call")
-            color: Theme.highlightColor
+        Column {
+            id: callerInfo
+            x: Theme.horizontalPageMargin
+            y: Theme.paddingLarge
+            width: parent.width - 2 * x
+            spacing: Theme.paddingMedium
+
+            Label {
+                textFormat: Text.PlainText
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                text: qsTr("Incoming call")
+                wrapMode: Text.Wrap
+                color: Theme.highlightColor
+            }
+            Label {
+                textFormat: Text.PlainText
+                objectName: "callerLabel"
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                text: root.phone.callName || Phone.format(root.phone.callNumber) || qsTr("Unknown number")
+                font.pixelSize: Theme.fontSizeHuge
+                font.weight: Font.ExtraLight
+                wrapMode: Text.Wrap
+                Accessible.role: Accessible.Heading
+            }
+            Label {
+                textFormat: Text.PlainText
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                visible: root.phone.callName.length > 0
+                text: Phone.format(root.phone.callNumber)
+                wrapMode: Text.Wrap
+                color: Theme.secondaryColor
+            }
         }
-        Label {
-            objectName: "callerLabel"
-            width: parent.width
-            horizontalAlignment: Text.AlignHCenter
-            text: root.phone.callName || Phone.format(root.phone.callNumber) || qsTr("Unknown number")
-            font.pixelSize: Theme.fontSizeHuge
-            font.weight: Font.ExtraLight
-            wrapMode: Text.Wrap
-            maximumLineCount: 2
-            elide: Text.ElideRight
-            Accessible.role: Accessible.Heading
-        }
-        Label {
-            width: parent.width
-            horizontalAlignment: Text.AlignHCenter
-            visible: root.phone.callName.length > 0
-            text: Phone.format(root.phone.callNumber)
-            color: Theme.secondaryColor
-        }
+
+        VerticalScrollDecorator {}
     }
 
     Row {
+        id: actions
+
+        width: parent.width - 2 * Theme.horizontalPageMargin
         anchors {
             horizontalCenter: parent.horizontalCenter
             bottom: answerButton.top
-            bottomMargin: Theme.itemSizeMedium
+            bottomMargin: Theme.paddingLarge
         }
         spacing: Theme.paddingLarge
 
         LabelledButton {
             name: "message"
+            width: (actions.width - actions.spacing) / 2
             visible: root.phone.callNumber.length > 0
             icon: "image://theme/icon-m-message"
             text: qsTr("Message")
@@ -72,6 +90,7 @@ Page {
         }
         LabelledButton {
             name: "decline"
+            width: root.phone.callNumber.length > 0 ? (actions.width - actions.spacing) / 2 : actions.width
             icon: "image://theme/icon-m-end-call"
             text: qsTr("Decline")
             accessibleName: qsTr("Decline call from %1").arg(root.phone.callName || root.phone.callNumber)
@@ -91,7 +110,7 @@ Page {
             bottom: parent.bottom
             bottomMargin: 2 * Theme.paddingLarge
         }
-        preferredWidth: Theme.buttonWidthLarge
+        preferredWidth: Math.min(Theme.buttonWidthLarge, parent.width - 2 * Theme.horizontalPageMargin)
         icon.source: "image://theme/icon-m-answer"
         text: qsTr("Answer")
         Accessible.name: qsTr("Answer call from %1").arg(root.phone.callName || root.phone.callNumber)
@@ -120,6 +139,7 @@ Page {
             onClicked: labelled.clicked()
         }
         Label {
+            textFormat: Text.PlainText
             width: parent.width
             horizontalAlignment: Text.AlignHCenter
             text: labelled.text

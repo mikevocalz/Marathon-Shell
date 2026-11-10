@@ -114,6 +114,7 @@ Dialog {
             onClicked: details.add()
 
             Label {
+                textFormat: Text.PlainText
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * x
                 anchors.verticalCenter: parent.verticalCenter

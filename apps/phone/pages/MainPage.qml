@@ -39,6 +39,7 @@ Page {
 
         Label {
             id: label
+            textFormat: Text.PlainText
 
             anchors.centerIn: parent
             width: parent.width - 2 * Theme.horizontalPageMargin
