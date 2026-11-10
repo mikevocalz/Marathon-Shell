@@ -25,7 +25,7 @@ TestCase {
         Permissions.reset();
         Contacts.contacts = [
             { id: 41, name: "Grace Murray Hopper · International engineering", phone: "+1 555 123 4567", email: "grace@example.org", favorite: true },
-            { id: 42, name: "Grace Murray Hopper · International engineering", phone: "+1 555 123 4568", email: "", favorite: false },
+            { id: 42, name: "Grace Murray Hopper · International engineering", phone: "+1 555 123 4568", email: "", favorite: true },
             { id: 43, name: "Ada Lovelace", phone: "+44 20 7946 0001", email: "ada@example.org", favorite: false }
         ];
         const app = createTemporaryObject(appComponent, testCase, {
