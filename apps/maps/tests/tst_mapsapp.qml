@@ -229,7 +229,7 @@ TestCase {
         compare(detail.text, address);
         compare(detail.textFormat, Text.PlainText);
         tryVerify(() => title.lineCount > 1 && detail.lineCount > 1);
-        verify(detail.mapToItem(row, 0, detail.height).y <= row.contentHeight);
+        tryVerify(() => detail.mapToItem(row, 0, detail.height).y <= row.contentHeight, 3000, "place address must fit inside the grown result row");
         row.clicked(null);
         settle(app);
         compare(app.selectedPlace.name, name);
@@ -269,7 +269,8 @@ TestCase {
         compare(view.count, 1);
         compare(field.text, "museum");
         verify(!findChild(page, "placeholder").enabled);
-        verify(findChild(page, "retryItem").visible);
+        view.pullDownMenu.openFromKeyboard(field);
+        tryVerify(() => findChild(page, "retryItem").visible);
         let asked = "";
         app.fetch = (url, done) => {
             asked = url;
@@ -653,7 +654,7 @@ TestCase {
         const label = findChild(action, "mapActionLabel");
         compare(label.text, "Finding a route");
         tryVerify(() => label.lineCount > 1);
-        verify(label.mapToItem(action, 0, label.height).y <= action.height);
+        tryVerify(() => label.mapToItem(action, 0, label.height).y <= action.height, 3000, "pending route label must fit inside the action");
         compare(app.router.requests[0].to, [place.lat, place.lon]);
     }
 

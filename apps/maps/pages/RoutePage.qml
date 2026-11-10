@@ -30,13 +30,15 @@ Page {
                 view.positionViewAtBeginning()
 
             PageHeader {
+                id: routeHeader
+
                 title: root.active ? qsTr("Directions") : qsTr("Route")
                 description: root.app.router.routing ? qsTr("Finding a route…") : root.app.selectedPlace ? root.app.selectedPlace.name : ""
                 wrapMode: Text.Wrap
                 descriptionWrapMode: Text.Wrap
 
                 BusyIndicator {
-                    parent: parent.extraContent
+                    parent: routeHeader.extraContent
                     anchors.verticalCenter: parent.verticalCenter
                     size: BusyIndicatorSize.Small
                     running: root.app.router.routing
