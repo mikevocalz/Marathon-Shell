@@ -158,7 +158,7 @@ TestCase {
         tryVerify(() => title.lineCount > 1);
         compare(title.textFormat, Text.PlainText);
         verify(!title.truncated);
-        verify(title.mapToItem(row, 0, title.height).y <= row.contentHeight);
+        tryVerify(() => title.mapToItem(row, 0, title.height).y <= row.contentHeight);
         row.clicked(null);
         tryCompare(app.pageStack, "busy", false);
         compare(app.pageStack.currentPage.albumId, "Trip");

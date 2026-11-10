@@ -36,9 +36,11 @@ TestCase {
         const keys = buttons(keypad);
         compare(keys.length, 12);
         for (const key of keys) {
+            tryVerify(() => {
+                const x = key.mapToItem(keypad, 0, 0).x;
+                return x >= 0 && x + key.width <= keypad.width;
+            }, 5000, "Every key must fit after native row layout");
             const position = key.mapToItem(keypad, 0, 0);
-            verify(position.x >= 0);
-            verify(position.x + key.width <= keypad.width);
             verify(position.y >= 0);
             verify(position.y + key.height <= keypad.height);
             verify(key.width >= Theme.itemSizeSmall);
