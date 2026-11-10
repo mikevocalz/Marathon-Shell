@@ -142,6 +142,7 @@ TestCase {
             property alias flick: flick
             property alias field: field
             property alias before: before
+            property alias last: last
             Button {
                 id: before
                 text: "Before"
@@ -156,6 +157,12 @@ TestCase {
                     id: field
                     width: 500
                     label: "Title"
+                }
+                Button {
+                    id: last
+
+                    y: 2400
+                    text: "Last control"
                 }
             }
         }
@@ -173,6 +180,23 @@ TestCase {
         tryVerify(function () {
             return f.flick.contentY > 0;
         });
+    }
+
+    function test_tabRevealsControlsWithoutLosingContext() {
+        const f = createTemporaryObject(form, testCase);
+        f.field.forceActiveFocus();
+        keyClick(Qt.Key_Tab);
+        tryVerify(() => f.last.activeFocus);
+        tryVerify(() => f.last.mapToItem(f.flick, 0, f.last.height).y <= f.flick.height);
+        verify(f.last.mapToItem(f.flick, 0, 0).y >= 0);
+        const position = f.flick.contentY;
+        f.visible = false;
+        f.visible = true;
+        compare(f.flick.contentY, position);
+        f.last.forceActiveFocus();
+        keyClick(Qt.Key_Tab, Qt.ShiftModifier);
+        tryVerify(() => f.field.activeFocus);
+        tryVerify(() => f.field.mapToItem(f.flick, 0, 0).y >= 0);
     }
 
     function test_flickableArrowsScroll() {
