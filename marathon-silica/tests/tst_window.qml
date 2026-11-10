@@ -26,6 +26,10 @@ TestCase {
                     SectionHeader {
                         text: "Today"
                     }
+                    Label {
+                        objectName: "providerLabel"
+                        text: "<b>Account name</b>"
+                    }
                     Button {
                         objectName: "focusTarget"
                         y: 300
@@ -113,9 +117,11 @@ TestCase {
         const a = createTemporaryObject(app, testCase);
         tryVerify(() => a.pageStack.currentPage !== null);
         compare(a._defaultLabelFormat, Text.PlainText);
-        const label = Qt.createQmlObject('import QtQuick; import Sailfish.Silica 1.0; Label { text: "<b>Account name</b>" }', a.pageStack.currentPage);
+        const label = findChild(a.pageStack.currentPage, "providerLabel");
+        verify(label);
         compare(label.textFormat, Text.PlainText);
-        label.destroy();
+        label.text = "<i>A newly synchronized account</i>";
+        compare(label.textFormat, Text.PlainText);
     }
 
     function test_backPopsPage() {
