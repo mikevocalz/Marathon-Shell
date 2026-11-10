@@ -80,6 +80,16 @@ def manifest_inventory(raw):
     package = root.get("package")
     app = root.find("application")
     sdk = root.find("uses-sdk")
+    application_permission = app.get(ANDROID + "permission") if app is not None else None
+    config_split = root.get("configForSplit")
+    legacy_config_split = root.get(ANDROID + "configForSplit")
+    if (config_split is not None and legacy_config_split is not None
+            and config_split != legacy_config_split):
+        raise ValueError("conflicting configForSplit declarations across namespaces")
+    # Current AOSP/bundletool use no namespace. Android 8.1's parser matched
+    # the local attribute name, so retain qualified evidence with provenance.
+    config_split_source = ("unqualified" if config_split is not None else
+                           "android_namespace_legacy" if legacy_config_split is not None else None)
     components = []
     if app is not None:
         for node in app:
@@ -90,10 +100,12 @@ def manifest_inventory(raw):
                 name = package + name
             elif name and "." not in name:
                 name = package + "." + name
-            components.append({
+            permission = node.get(ANDROID + "permission", application_permission)
+            component = {
                 "type": node.tag, "name": name,
                 "exported_declared": node.get(ANDROID + "exported"),
-                "permission": node.get(ANDROID + "permission", app.get(ANDROID + "permission")),
+                "permission": permission,
+                "permission_declared": node.get(ANDROID + "permission"),
                 "authorities": node.get(ANDROID + "authorities"),
                 "process": node.get(ANDROID + "process", app.get(ANDROID + "process")),
                 "intent_filters": [
@@ -102,12 +114,26 @@ def manifest_inventory(raw):
                      "data": [{k.removeprefix(ANDROID): v for k, v in e.attrib.items()}
                               for e in intent.findall("data")]}
                     for intent in node.findall("intent-filter")],
-            })
+            }
+            if node.tag == "provider":
+                component["permission_effective"] = permission or None
+                for operation in ("read", "write"):
+                    attribute = ANDROID + operation + "Permission"
+                    component[operation + "_permission_declared"] = node.get(attribute)
+                    # Empty strings explicitly clear the inherited permission.
+                    # Fall back only when the attribute is absent, not empty.
+                    component[operation + "_permission_effective"] = node.get(attribute, permission) or None
+            components.append(component)
     return {
         "package": package, "version_code": root.get(ANDROID + "versionCode"),
         "version_code_major": root.get(ANDROID + "versionCodeMajor", "0"),
         "version_name": root.get(ANDROID + "versionName"), "split": root.get("split") or None,
-        "config_for_split": root.get("configForSplit"),
+        "config_for_split": config_split if config_split is not None else legacy_config_split,
+        "config_for_split_source": config_split_source,
+        "config_for_split_declared": {
+            "unqualified": config_split, "android_namespace": legacy_config_split},
+        "application_permission_declared": application_permission,
+        "application_permission_effective": application_permission or None,
         "min_sdk": sdk.get(ANDROID + "minSdkVersion") if sdk is not None else None,
         "target_sdk": sdk.get(ANDROID + "targetSdkVersion") if sdk is not None else None,
         "uses_splits": [e.get(ANDROID + "name") for e in root.findall("uses-split")],
@@ -185,7 +211,7 @@ def inspect(args):
     if args.archive_only and args.decompile:
         raise ValueError("--decompile requires manifest and signature analysis")
     output = Path(args.output).expanduser().resolve()
-    output.mkdir(parents=True, exist_ok=False)
+    output.mkdir(mode=0o700, parents=True, exist_ok=False)
     level = ("archive_only" if args.archive_only else
              "manifest_signature_and_decompilation" if args.decompile else "manifest_and_signature")
     report = {"schema_version": 1, "created_at": datetime.now(timezone.utc).isoformat(),
@@ -265,11 +291,12 @@ def pull(args):
     if not adb:
         raise ValueError("adb is unavailable; install Android SDK Platform Tools")
     output = Path(args.output).expanduser().resolve()
-    output.mkdir(parents=True, exist_ok=False)
+    output.mkdir(mode=0o700, parents=True, exist_ok=False)
     result = run([adb, "-s", args.serial, "shell", "pm", "path", args.package],
-                 output / "package-paths.txt", args.timeout)
+                 output / "package-paths.txt", args.timeout,
+                 error_log=output / "package-paths-stderr.txt")
     if result["status"] != "ok":
-        raise ValueError("pm path failed; see package-paths.txt")
+        raise ValueError("pm path failed; see package-paths.txt and package-paths-stderr.txt")
     lines = (output / "package-paths.txt").read_text(errors="strict").splitlines()
     paths = []
     for line in lines:

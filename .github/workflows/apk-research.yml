@@ -22,9 +22,14 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+      - name: Check whitespace in the committed change
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: python3 tools/blackberry-apk-lab/check_whitespace.py "$BASE_SHA" "$GITHUB_SHA"
       - name: Run registered local-tool behavior cases
         run: |
           cmake -S tools/blackberry-apk-lab -B build-apk-research
           ctest --test-dir build-apk-research --output-on-failure
           python3 tests/lint/check-test-reachability.py
-          git diff --check

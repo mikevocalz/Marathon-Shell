@@ -42,6 +42,8 @@ python3 tools/blackberry-apk-lab/apk_lab.py pull \
 
 Every path returned by `pm path` is copied, including splits. `collection.json` records the selected serial, collection time, paths and hashes, and is written only after all copies succeed. A failed/denied pull remains a failure; there is no root or permission-bypass fallback. Use a new output directory for a new collection.
 
+The package list is retained in `package-paths.txt`; adb diagnostics go to `package-paths-stderr.txt`. Normal daemon startup messages cannot be mistaken for package paths. A failed `pm path` command still stops collection and preserves both logs without writing `collection.json`.
+
 ## 2. Inspect identity, permissions, and components
 
 ```sh
@@ -54,6 +56,20 @@ python3 tools/blackberry-apk-lab/apk_lab.py inspect \
 The report records each input's SHA-256, size, archive inventory, native library paths, signature-verification result, signer fingerprints, package/version/split identity, SDK levels, requested/declarative permissions, component declarations, intent filters, provider authorities, and package queries. Tool output stays beside the normalized `inventory.json` as evidence. Manifest stderr is retained separately so tool warnings cannot corrupt the decoded XML.
 
 The runner rejects duplicate inputs, existing output directories, unsafe or aliased ZIP paths, encrypted/symlink members, and excessive archive expansion. It checks that each package has one base, consistent version codes (including the major code)/signers, unique splits, and dependencies declared through `uses-split` or `configForSplit`. Those checks cannot establish that every device-specific configuration split is present; collection from `pm path` is the preferred way to retain the installed set.
+
+### Provider permission evidence
+
+The inventory retains `application_permission_declared` and each component's `permission_declared`. Providers also record `read_permission_declared` and `write_permission_declared`. A JSON `null` means the attribute was absent; `""` preserves an explicitly empty declaration. The existing component `permission` field retains its original application-fallback representation.
+
+For providers, the new `permission_effective`, `read_permission_effective`, and `write_permission_effective` fields describe the static manifest fallback. A read/write-specific attribute takes precedence, then the provider's `permission`, then the application's `permission`. An explicitly empty attribute clears that restriction instead of inheriting it; the effective field becomes `null`. The application has its own `application_permission_effective` field. This follows the [Android provider contract](https://developer.android.com/guide/topics/manifest/provider-element) and the explicit null-versus-empty handling in [Android 8.1's provider parser](https://android.googlesource.com/platform/frameworks/base/+/android-8.1.0_r1/core/java/android/content/pm/PackageParser.java).
+
+These fields do not prove that an external caller can access a provider. Export state, URI grants, path permissions, caller identity, and runtime checks can also affect access. Values come from the decoded manifest; the collector does not resolve resource references or simulate Android permission checks.
+
+### Configuration-split namespace evidence
+
+Current [AOSP APK parsing](https://android.googlesource.com/platform/frameworks/base/+/main/core/java/android/content/pm/parsing/ApkLiteParseUtils.java) and [bundletool output](https://github.com/google/bundletool/blob/master/src/main/java/com/android/tools/build/bundletool/model/ManifestEditor.java) use unqualified `configForSplit`. [Android 8.1's APK parser](https://android.googlesource.com/platform/frameworks/base/+/android-8.1.0_r1/core/java/android/content/pm/PackageParser.java) instead compared local attribute names without checking their namespace.
+
+The report retains both raw declarations in `config_for_split_declared`. `config_for_split_source` is `unqualified` for the current form or `android_namespace_legacy` when only `android:configForSplit` is present. Both forms participate in missing-feature checks; differing declarations make inspection incomplete. The legacy label records historical evidence and does not claim that modern Android accepts the qualified form. These checks establish declared dependency consistency, not platform installability.
 
 **A successful signature verification establishes integrity under the reported certificate. It does not identify that signer as BlackBerry.** Compare the fingerprint to a trusted original, record the acquisition source/version in the findings, and keep that provenance claim separate from the cryptographic result.
 
@@ -90,6 +106,8 @@ The expected output is a reviewed dependency map and interaction specification u
 
 ## Repository boundary
 
+Both collection and inspection create their new evidence directory with owner-only access (`0700`), containing generated APK copies, decoded files, and logs.
+
 `.local-apk-research/` and APK/bundle file types are ignored. Keep raw/decompiled code, extracted assets, private screenshots, and account information there. Only deliberately reviewed observations and original Marathon implementation belong in a PR. Gitignore is a convenience, not a secret scanner; inspect the staged diff before publishing anything.
 
 Work/Personal Spaces and enterprise deployment remain Marathon 2.1 scope. The consumer Hub research does not require UEM or Work APKs.
@@ -103,4 +121,4 @@ ctest --test-dir /tmp/marathon-apk-lab-tests --output-on-failure
 python3 tests/lint/check-test-reachability.py
 ```
 
-`BlackBerry_ApkResearch` is also registered in the repository's normal CTest suite. Tests cover archive/manifest boundaries, split consistency, literal subprocess arguments, incomplete-tool/decoder/signature outcomes, timeouts, and complete/partial device collections. Real BlackBerry analysis and local Artcraft/device interaction require your APKs and remain unverified until that run.
+`BlackBerry_ApkResearch` is also registered in the repository's normal CTest suite. Tests cover archive/manifest boundaries, canonical and historical split dependencies, conflicting namespace declarations, provider permission fallback and explicit clearing, literal subprocess arguments, incomplete-tool/decoder/signature outcomes, timeouts, separate adb diagnostics, and complete/partial device collections. Real BlackBerry analysis and local Artcraft/device interaction require your APKs and remain unverified until that run.

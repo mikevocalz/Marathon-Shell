@@ -7,10 +7,12 @@ import json
 import os
 from pathlib import Path
 import stat
+import subprocess
 import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+import xml.etree.ElementTree as ET
 import zipfile
 
 import apk_lab as lab
@@ -72,6 +74,104 @@ class ApkLabTests(unittest.TestCase):
         self.assertEqual(result["files"][2]["path"], "lib/arm64-v8a/libexample.so")
         self.assertFalse((self.root / "classes.dex").exists())
 
+    def test_workflow_checks_committed_ranges_with_a_fetched_base(self):
+        repository = self.root / "repository"
+        repository.mkdir()
+
+        def git(*args, cwd=repository, check=True):
+            return subprocess.run(["git", *args], cwd=cwd, capture_output=True,
+                                  text=True, check=check)
+
+        def commit(message):
+            git("add", ".")
+            git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                "commit", "-qm", message)
+            return git("rev-parse", "HEAD").stdout.strip()
+
+        git("init", "-q")
+        (repository / "fixture.py").write_text("value = 1\n")
+        base = commit("fixture: base")
+        (repository / "fixture.py").write_text("value = 1\nadded = 2 \n")
+        commit("fixture: committed whitespace")
+        (repository / "another.py").write_text("clean = True\n")
+        head = commit("fixture: later clean commit")
+        checkout = self.root / "shallow checkout"
+        git("clone", "--quiet", "--depth=1", repository.as_uri(), str(checkout))
+        self.assertNotEqual(git("cat-file", "-e", f"{base}^{{commit}}",
+                                cwd=checkout, check=False).returncode, 0)
+        self.assertEqual(git("status", "--porcelain", cwd=checkout).stdout, "")
+        self.assertEqual(git("diff", "--check", cwd=checkout).returncode, 0)
+        checker = Path(__file__).with_name("check_whitespace.py")
+
+        def check_range(before, after, cwd=checkout):
+            return subprocess.run([sys.executable, str(checker), before, after], cwd=cwd,
+                                  capture_output=True, text=True, check=False)
+
+        result = check_range(base, head)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("fixture.py:2: trailing whitespace", result.stdout)
+        self.assertEqual(git("cat-file", "-e", f"{base}^{{commit}}", cwd=checkout).returncode, 0)
+        self.assertNotEqual(check_range("0" * 40, head).returncode, 0)
+        self.assertNotEqual(check_range("--output=unexpected", head).returncode, 0)
+        self.assertFalse((checkout / "unexpected").exists())
+        (repository / "fixture.py").write_text("value = 1\nadded = 2\n")
+        corrected = commit("fixture: correct whitespace")
+        self.assertEqual(check_range(base, corrected, cwd=repository).returncode, 0)
+        self.assertEqual(check_range("0" * 40, corrected, cwd=repository).returncode, 0)
+
+    def test_inspection_output_is_private_without_changing_input_or_umask(self):
+        ancestor = self.root / "existing parent"
+        ancestor.mkdir(mode=0o710)
+        ancestor_mode = stat.S_IMODE(ancestor.stat().st_mode)
+        self.apk.chmod(0o640)
+        for mask in (0o000, 0o022):
+            with self.subTest(umask=mask):
+                output = ancestor / f"inspection-{mask:o}"
+                previous = os.umask(mask)
+                try:
+                    code = self.invoke("inspect", str(self.apk), "--archive-only",
+                                       "--output", str(output))
+                finally:
+                    remaining = os.umask(previous)
+                self.assertEqual(code, 0)
+                self.assertEqual(remaining, mask)
+                self.assertEqual(stat.S_IMODE(output.stat().st_mode), 0o700)
+                self.assertEqual(stat.S_IMODE(ancestor.stat().st_mode), ancestor_mode)
+                self.assertEqual(stat.S_IMODE(self.apk.stat().st_mode), 0o640)
+                original = (output / "inventory.json").read_bytes()
+                self.assertEqual(self.invoke("inspect", str(self.apk), "--archive-only",
+                                             "--output", str(output)), 2)
+                self.assertEqual((output / "inventory.json").read_bytes(), original)
+
+    def test_collection_output_is_private_without_changing_parent_or_umask(self):
+        adb = self.tool("adb", "import sys\nfrom pathlib import Path\n"
+            "if sys.argv[3:6] == ['shell', 'pm', 'path']:\n"
+            " print('package:/data/app/example/base.apk')\n"
+            "elif sys.argv[3] == 'pull':\n"
+            " Path(sys.argv[5]).write_bytes(b'synthetic APK')\n"
+            "else:\n raise AssertionError(sys.argv)\n")
+        ancestor = self.root / "existing parent"
+        ancestor.mkdir(mode=0o710)
+        ancestor_mode = stat.S_IMODE(ancestor.stat().st_mode)
+        for mask in (0o000, 0o022):
+            with self.subTest(umask=mask), patch.object(lab.shutil, "which", return_value=adb):
+                output = ancestor / f"collection-{mask:o}"
+                previous = os.umask(mask)
+                try:
+                    code = self.invoke("pull", "--serial", "fixture-device", "--package",
+                                       "com.example.hub", "--output", str(output))
+                finally:
+                    remaining = os.umask(previous)
+                self.assertEqual(code, 0)
+                self.assertEqual(remaining, mask)
+                self.assertEqual(stat.S_IMODE(output.stat().st_mode), 0o700)
+                self.assertEqual(stat.S_IMODE(ancestor.stat().st_mode), ancestor_mode)
+                self.assertEqual((output / "00-base.apk").read_bytes(), b"synthetic APK")
+                original = (output / "collection.json").read_bytes()
+                self.assertEqual(self.invoke("pull", "--serial", "fixture-device", "--package",
+                                             "com.example.hub", "--output", str(output)), 2)
+                self.assertEqual((output / "collection.json").read_bytes(), original)
+
     def test_reject_unsafe_archive_paths(self):
         for name in ("../outside", "/absolute", "a\\..\\b", "C:/drive", "line\nbreak",
                      "a/./b", "a//b", "a//"):
@@ -108,6 +208,53 @@ class ApkLabTests(unittest.TestCase):
         self.assertIsNone(provider["exported_declared"])
         self.assertEqual(provider["permission"], "com.example.ACCESS")
         self.assertEqual(activity["intent_filters"][0]["data"][0]["host"], "message")
+
+    def test_provider_permissions_keep_declared_and_effective_controls(self):
+        android = "{http://schemas.android.com/apk/res/android}"
+        app_permission, common = "com.example.APP", "com.example.PROVIDER"
+        read, write = "com.example.READ", "com.example.WRITE"
+        cases = [
+            ("separate", app_permission, common, read, write,
+             (app_permission, common, read, write)),
+            ("provider_fallback", app_permission, common, None, None,
+             (app_permission, common, common, common)),
+            ("application_fallback", app_permission, None, None, None,
+             (app_permission, app_permission, app_permission, app_permission)),
+            ("absent", None, None, None, None, (None, None, None, None)),
+            ("clear_provider", app_permission, "", None, None,
+             (app_permission, None, None, None)),
+            ("clear_read", app_permission, common, "", None,
+             (app_permission, common, None, common)),
+            ("clear_write", app_permission, common, None, "",
+             (app_permission, common, common, None)),
+            ("clear_application_read", app_permission, None, "", None,
+             (app_permission, app_permission, None, app_permission)),
+            ("clear_application", "", None, None, None, (None, None, None, None)),
+            ("read_over_cleared_provider", app_permission, "", read, None,
+             (app_permission, None, read, None)),
+        ]
+        for name, app_value, provider_value, read_value, write_value, effective in cases:
+            with self.subTest(name=name):
+                root = ET.fromstring(MANIFEST)
+                app = root.find("application")
+                if app_value is None:
+                    del app.attrib[android + "permission"]
+                else:
+                    app.set(android + "permission", app_value)
+                provider = app.find("provider")
+                for attribute, value in [("permission", provider_value),
+                                         ("readPermission", read_value), ("writePermission", write_value)]:
+                    if value is not None:
+                        provider.set(android + attribute, value)
+                inventory = lab.manifest_inventory(ET.tostring(root))
+                provider = inventory["components"][1]
+                self.assertEqual(inventory["application_permission_declared"], app_value)
+                self.assertEqual(provider["permission_declared"], provider_value)
+                self.assertEqual(provider["read_permission_declared"], read_value)
+                self.assertEqual(provider["write_permission_declared"], write_value)
+                self.assertEqual((inventory["application_permission_effective"],
+                                  provider["permission_effective"], provider["read_permission_effective"],
+                                  provider["write_permission_effective"]), effective)
 
     def test_reject_manifest_entities_and_oversize(self):
         with self.assertRaises(ValueError):
@@ -211,6 +358,39 @@ class ApkLabTests(unittest.TestCase):
         feature["manifest"]["version_code_major"] = "1"
         self.assertTrue(any("mixed version" in p for p in lab.check_groups([base, feature, config])))
 
+    def test_split_namespace_provenance_and_missing_feature(self):
+        base = {"manifest": lab.manifest_inventory(MANIFEST), "signers_sha256": [FINGERPRINT]}
+        feature = {"manifest": dict(base["manifest"], split="feature"), "signers_sha256": [FINGERPRINT]}
+        for declaration, source, declared in [
+            (b'configForSplit="feature"', "unqualified",
+             {"unqualified": "feature", "android_namespace": None}),
+            (b'android:configForSplit="feature"', "android_namespace_legacy",
+             {"unqualified": None, "android_namespace": "feature"}),
+            (b'configForSplit="feature" android:configForSplit="feature"', "unqualified",
+             {"unqualified": "feature", "android_namespace": "feature"}),
+        ]:
+            with self.subTest(declaration=declaration):
+                xml = MANIFEST.replace(b'package="com.example.hub"',
+                    b'package="com.example.hub" split="feature.config.en" ' + declaration)
+                manifest = lab.manifest_inventory(xml)
+                self.assertEqual(manifest["config_for_split"], "feature")
+                self.assertEqual(manifest["config_for_split_source"], source)
+                self.assertEqual(manifest["config_for_split_declared"], declared)
+                config = {"manifest": manifest, "signers_sha256": [FINGERPRINT]}
+                self.assertTrue(any("dependency" in p for p in lab.check_groups([base, config])))
+                self.assertEqual(lab.check_groups([base, feature, config]), [])
+
+    def test_conflicting_split_namespaces_remain_incomplete(self):
+        xml = MANIFEST.replace(b'package="com.example.hub"',
+            b'package="com.example.hub" split="config.en" '
+            b'configForSplit="feature" android:configForSplit="other"')
+        output = self.root / "conflicting split namespaces"
+        self.assertEqual(self.invoke("inspect", str(self.apk), "--output", str(output),
+                                     tools=self.sdk(manifest=xml)), 2)
+        report = json.loads((output / "inventory.json").read_text())
+        self.assertEqual(report["status"], "incomplete")
+        self.assertTrue(any("conflicting configForSplit" in p for p in report["problems"]))
+
     def test_tool_timeout_is_explicit(self):
         result = lab.run([sys.executable, "-c", "import time; time.sleep(10)"],
                          self.root / "timeout.txt", 0.05)
@@ -234,6 +414,37 @@ class ApkLabTests(unittest.TestCase):
         self.assertTrue(report["created_at"])
         self.assertEqual(len(report["apks"]), 2)
         self.assertEqual(len(list(output.glob("*.apk"))), 2)
+
+    def test_collection_keeps_adb_stderr_separate_from_package_paths(self):
+        adb = self.tool("adb", "import sys\nfrom pathlib import Path\n"
+            "assert sys.argv[1:3] == ['-s', 'device-123']\n"
+            "if sys.argv[3:6] == ['shell', 'pm', 'path']:\n"
+            " print('* daemon not running; starting now at tcp:5037', file=sys.stderr)\n"
+            " print('* daemon started successfully', file=sys.stderr)\n"
+            " print('package:/data/app/example/base.apk')\n"
+            "elif sys.argv[3] == 'pull':\n"
+            " Path(sys.argv[5]).write_bytes(b'synthetic APK')\n")
+        output = self.root / "adb starting"
+        with patch.object(lab.shutil, "which", return_value=adb):
+            self.assertEqual(self.invoke("pull", "--serial", "device-123", "--package", "com.example.hub",
+                                         "--output", str(output)), 0)
+        self.assertEqual((output / "package-paths.txt").read_text(),
+                         "package:/data/app/example/base.apk\n")
+        self.assertIn("daemon started successfully", (output / "package-paths-stderr.txt").read_text())
+        report = json.loads((output / "collection.json").read_text())
+        self.assertEqual(len(report["apks"]), 1)
+
+    def test_failed_pm_path_retains_diagnostics_and_no_completion_manifest(self):
+        adb = self.tool("adb", "import sys\n"
+            "print('error: device unauthorized', file=sys.stderr)\n"
+            "sys.exit(1)\n")
+        output = self.root / "adb refused"
+        with patch.object(lab.shutil, "which", return_value=adb):
+            self.assertEqual(self.invoke("pull", "--serial", "device-123", "--package", "com.example.hub",
+                                         "--output", str(output)), 2)
+        self.assertEqual((output / "package-paths.txt").read_text(), "")
+        self.assertIn("device unauthorized", (output / "package-paths-stderr.txt").read_text())
+        self.assertFalse((output / "collection.json").exists())
 
     def test_collection_rejects_package_shell_syntax(self):
         with patch.object(lab, "run", side_effect=AssertionError("unexpected tool execution")):
