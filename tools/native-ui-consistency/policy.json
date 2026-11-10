@@ -13,6 +13,10 @@
     ],
     "shell/qml/theme/MSpacing.qml": [
       "spacing"
+    ],
+    "marathon-silica/Marathon/Silica/ContentStyle.qml": [
+      "color",
+      "font"
     ]
   },
   "apps": [
