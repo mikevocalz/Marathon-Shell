@@ -112,6 +112,32 @@ else()
         -input "${MARATHON_SOURCE_ROOT}/apps/settings/tests/tst_permissionpages.qml")
     set_tests_properties(Qml_settings_PermissionPages PROPERTIES LABELS "native-ui-required"
         FIXTURES_REQUIRED NativeKeel TIMEOUT 180 ENVIRONMENT "QML_XHR_ALLOW_FILE_READ=1")
+    add_test(NAME Qml_silica_SummaryListItem COMMAND "${Python3_EXECUTABLE}"
+        "${MARATHON_SOURCE_ROOT}/scripts/ci/run-qml-suite.py"
+        --report "${CMAKE_CURRENT_BINARY_DIR}/reports/summary-list-item.xml" --
+        "${QMLTESTRUNNER}" -import "${KEEL_QML}"
+        -import "${MARATHON_SOURCE_ROOT}/marathon-silica"
+        -input "${MARATHON_SOURCE_ROOT}/marathon-silica/tests/tst_summarylistitem.qml")
+    set_tests_properties(Qml_silica_SummaryListItem PROPERTIES LABELS "native-ui-required"
+        FIXTURES_REQUIRED NativeKeel TIMEOUT 60)
+    add_test(NAME Qml_settings_RowPresentation COMMAND "${Python3_EXECUTABLE}"
+        "${MARATHON_SOURCE_ROOT}/scripts/ci/run-qml-suite.py"
+        --report "${CMAKE_CURRENT_BINARY_DIR}/reports/settings-rows.xml" --
+        "${QMLTESTRUNNER}" -import "${KEEL_QML}"
+        -import "${MARATHON_SOURCE_ROOT}/marathon-silica"
+        -import "${MARATHON_SOURCE_ROOT}/apps/settings/tests/stubs"
+        -input "${MARATHON_SOURCE_ROOT}/apps/settings/tests/tst_rowpresentation.qml")
+    set_tests_properties(Qml_settings_RowPresentation PROPERTIES LABELS "native-ui-required"
+        FIXTURES_REQUIRED NativeKeel TIMEOUT 180 ENVIRONMENT "QML_XHR_ALLOW_FILE_READ=1")
+    add_test(NAME Qml_phone_PeopleRows COMMAND "${Python3_EXECUTABLE}"
+        "${MARATHON_SOURCE_ROOT}/scripts/ci/run-qml-suite.py"
+        --report "${CMAKE_CURRENT_BINARY_DIR}/reports/people-rows.xml" --
+        "${QMLTESTRUNNER}" -import "${KEEL_QML}"
+        -import "${MARATHON_SOURCE_ROOT}/marathon-silica"
+        -import "${MARATHON_SOURCE_ROOT}/apps/phone/tests/stubs"
+        -input "${MARATHON_SOURCE_ROOT}/apps/phone/tests/tst_peoplerows.qml")
+    set_tests_properties(Qml_phone_PeopleRows PROPERTIES LABELS "native-ui-required"
+        FIXTURES_REQUIRED NativeKeel TIMEOUT 180 ENVIRONMENT "QML_XHR_ALLOW_FILE_READ=1")
     # PageViewHub covers the launcher's accepted/partial/failed uninstall UI.
     # Its real component imports QtWayland.Compositor; this is not a server or
     # task-card rendering test. The existing shell-service doubles stay local.
@@ -154,7 +180,7 @@ else()
         -input "${MARATHON_SOURCE_ROOT}/tests/ui/tst_taskswitcher.qml")
     set_tests_properties(Qml_shell_TaskSwitcher PROPERTIES LABELS "native-ui-required"
         FIXTURES_REQUIRED NativeKeel TIMEOUT 180)
-    message(STATUS "Required native UI scope: toolkit + complete Notes + real Hub/Notes wire + Settings AppPages/PermissionPages + PageViewHub + Hub + overview geometry/task switcher; broader suites remain separate")
+    message(STATUS "Required native UI scope: toolkit + complete Notes + real Hub/Notes wire + Settings AppPages/PermissionPages/rows + Silica summary rows + Phone people rows + PageViewHub + Hub + overview geometry/task switcher; broader suites remain separate")
 endif()
 
 if(Python3_Interpreter_FOUND)
