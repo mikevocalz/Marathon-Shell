@@ -1,0 +1,220 @@
+{
+  "review_date": "2026-11-10",
+  "kind": "actual-native-viewport-captures",
+  "source_commit": "1b98e77ffb585c6ff4adbc7ff70260e1d2766bdb",
+  "source_tree": "fdf6b917838fc5bd40e47fd3d7863db0a152ad11",
+  "source_dirty": false,
+  "source_identity_note": "The capture checkout commit can differ from the integrated publication commit. Source file and aggregate input digests identify the actual captured inputs.",
+  "source_inputs": {
+    "tree_digest_format": "SHA-256 of sorted UTF-8 'repository-relative-path NUL file-sha256 LF' records; QML, JS, JSON, qmldir and .qml.in files",
+    "trees": [
+      {
+        "path": "apps/email",
+        "file_count": 23,
+        "source_sha256": "c8032779ccf1d0d479c312f82642acb83b4a80eb11236199d14999be50fc60d0",
+        "git_tree": "d167f2094bcfe8979dc765053062c7f9fa7dec87"
+      },
+      {
+        "path": "apps/phone",
+        "file_count": 28,
+        "source_sha256": "ed91c211f5dd4b9e8d94d91bb3d2a6c6d0fe0abf2fc360693cc5946c504fbd93",
+        "git_tree": "a92a99ec49597943a51c6cd1fde6abaed2b11d45"
+      },
+      {
+        "path": "apps/notes",
+        "file_count": 23,
+        "source_sha256": "dfcad4cb4ee2396f92577fb5755c3b4d068b4ae4eecbc8dc81be2de01bc59536",
+        "git_tree": "419b5dad174b6fb5ee9b1193f79a8220041986ac"
+      },
+      {
+        "path": "apps/pilot",
+        "file_count": 34,
+        "source_sha256": "e3150da2993a221b2e1922231d8e88cd524991dc2a90481201af280756f2e259",
+        "git_tree": "1451f60a830aa8b7cd99d812dee5ac0180bfa472"
+      },
+      {
+        "path": "marathon-silica/Marathon/Silica",
+        "file_count": 51,
+        "source_sha256": "fdfced460e9bde0cafa5d3d60286895ae95cef119657f54fefe5b4c1ed7ab865",
+        "git_tree": "0b6929ad2fc917b383ce682a17f883047811b7e7"
+      },
+      {
+        "path": "tools/native-ui-consistency/capture_templates",
+        "file_count": 4,
+        "source_sha256": "3a54cb229e86589aa1ae23b3c6c68ff7a11f3ff77b69f3562d6a91eebc5a003f",
+        "git_tree": "e867bbe7286a2aae21d593f791cca723a818b72a"
+      }
+    ],
+    "files": {
+      "tools/native-ui-consistency/capture_native.py": "b88976dfc4fa7d8cda0d0da8090aa80c5879cfb25f8a74fc92c1366910d2aa21",
+      "packaging/packages/keel-silica/APKBUILD": "2d21e0e5a37c2706a1561f56ddec37ee65817017db871f8502952fdc4f67b885",
+      "apps/email/EmailApp.qml": "6a264c59e8dd54acbeaefebeaff8869db50f74830bbff265d52535b495146989",
+      "apps/email/pages/InboxPage.qml": "f32bcffb42759ac4ac74512ea00c79cfd73ae817c1a67aaff74fb88b3c8b66a8",
+      "apps/email/pages/MailMessagePage.qml": "7733c46863a88278e7d2ceb7d9f312d70e03a2ea82aef3f199d996cff993cd98",
+      "apps/phone/PhoneApp.qml": "dc95ab902428037085d9456ccd1a3d85349cb8bdd96ac9a336e21d108d6ca5e9",
+      "apps/phone/pages/IncomingCallPage.qml": "b61d8239fc67906e8f6327f4e7792d554db1968c267e9e65bf4c554ffc9cf20f",
+      "apps/phone/pages/PeopleTab.qml": "4f2213a8f0a49fdc2e952f7c96df2d2fcf4a9d1aa845aa2e07a4cf232dc35c3f",
+      "apps/notes/NotesApp.qml": "51c369f42c8c629db255a56e30944c8da1998baf15f0225b93a405b438524418",
+      "apps/notes/pages/NotesWorkspace.qml": "621cfc4d2484d363082e744b5c1484fd26aa8d8b694b1259bd06a851cecf20a5",
+      "apps/notes/pages/TasksPage.qml": "4e13c38aa3883d057ed468487ef0d168f09862718adec3be222080ac5ada97d0",
+      "apps/notes/pages/NoteEditorPage.qml": "dafec6020eeede6cf13bf3063eb90bd87d2e60c129bcb2a8bfdb53a09045becb",
+      "apps/pilot/ui/pages/MainPage.qml": "98cf47b843d00b79419ac8d4c4a8850830ba387f3082b287bb19d112e9a0de73",
+      "apps/pilot/ui/components/Conversation.qml": "05f13996fb5d63ce42d69aec8564ba8c8562d31fb2e803e8fdefa252d250a4df",
+      "apps/pilot/ui/components/PromptField.qml": "2e87c0feb57d1ef04b44ba81f9fee2e83b1b41f8192a1cf88308a27adf74857a"
+    }
+  },
+  "runtime": {
+    "qt_versions": [
+      "6.11.1"
+    ],
+    "packaged_keel_revision": "0df499bf34e02cec7f571853cbf5a4323dc1609e",
+    "renderer": "Qt Quick offscreen software, Qt device scale 1, Keel theme pixel ratio 1",
+    "theme": [
+      {
+        "name": "mail-inbox-320x640",
+        "width": 320,
+        "height": 640,
+        "fontFamily": "Sail Sans Pro Light",
+        "fontSizeMedium": 32,
+        "pixelRatio": 1
+      },
+      {
+        "name": "mail-source-720x720",
+        "width": 720,
+        "height": 720,
+        "fontFamily": "Sail Sans Pro Light",
+        "fontSizeMedium": 32,
+        "pixelRatio": 1
+      },
+      {
+        "name": "phone-incoming-320x640",
+        "width": 320,
+        "height": 640,
+        "fontFamily": "Sail Sans Pro Light",
+        "fontSizeMedium": 32,
+        "pixelRatio": 1
+      },
+      {
+        "name": "phone-contacts-720x720",
+        "width": 720,
+        "height": 720,
+        "fontFamily": "Sail Sans Pro Light",
+        "fontSizeMedium": 32,
+        "pixelRatio": 1
+      },
+      {
+        "name": "notes-task-large-320x640",
+        "width": 320,
+        "height": 640,
+        "fontFamily": "Sail Sans Pro Light",
+        "fontSizeMedium": 40,
+        "pixelRatio": 1
+      },
+      {
+        "name": "notes-workspace-1024x768",
+        "width": 1024,
+        "height": 768,
+        "fontFamily": "Sail Sans Pro Light",
+        "fontSizeMedium": 32,
+        "pixelRatio": 1
+      },
+      {
+        "name": "pilot-main-320x640",
+        "width": 320,
+        "height": 640,
+        "fontFamily": "Sail Sans Pro Light",
+        "fontSizeMedium": 32,
+        "pixelRatio": 1
+      },
+      {
+        "name": "pilot-main-1024x768",
+        "width": 1024,
+        "height": 768,
+        "fontFamily": "Sail Sans Pro Light",
+        "fontSizeMedium": 32,
+        "pixelRatio": 1
+      }
+    ],
+    "icons": "Real generated production Phosphor theme mappings, with native busy indicator assets",
+    "harness_results": {
+      "test_functions": 4,
+      "total_qt_results": 12,
+      "failures": 0,
+      "skips": 0
+    }
+  },
+  "data": "Synthetic fixture data only; no real account, message, contact or provider is read",
+  "limits": [
+    "Visual review captures, not pixel comparison tests or proof of all app states",
+    "Native controls and production QML; app services use the existing test fixtures",
+    "Pilot uses the production MainPage in a shared native ApplicationWindow, as its native tests do",
+    "No shell decorations, system keyboard, modem/provider integration or device GPU evidence",
+    "Fonts and Qt/Keel versions can change rasterization; use the recorded runtime when comparing"
+  ],
+  "images": [
+    {
+      "app": "email",
+      "file": "mail-inbox-320x640.png",
+      "width": 320,
+      "height": 640,
+      "description": "Inbox with long sender, preview and account context",
+      "sha256": "5127ad75f28300ef1c8a02798d086be1d8ff99fc8cc13738bd37bbed9fdfede7"
+    },
+    {
+      "app": "email",
+      "file": "mail-source-720x720.png",
+      "width": 720,
+      "height": 720,
+      "description": "Keyboard-opened source message, with a duplicate-name decoy",
+      "sha256": "d8f4bdc30c0612655e7b26e8aefe9bc3059d99124adce3b61a849596e086ec98"
+    },
+    {
+      "app": "phone",
+      "file": "phone-incoming-320x640.png",
+      "width": 320,
+      "height": 640,
+      "description": "Incoming call: long identity above fixed native actions",
+      "sha256": "870edea873ca6dc6c7c46595f918a4483437501392c805de37828a6941db7090"
+    },
+    {
+      "app": "phone",
+      "file": "phone-contacts-720x720.png",
+      "width": 720,
+      "height": 720,
+      "description": "Native contacts tab: same names, distinct numbers",
+      "sha256": "92652e182a1efef8778c542470dc166d4a69fca10d32f508ea00e6d2371425d7"
+    },
+    {
+      "app": "notes",
+      "file": "notes-task-large-320x640.png",
+      "width": 320,
+      "height": 640,
+      "description": "Long task with the native huge text setting",
+      "sha256": "f8e4696b91fb34c49babe30ade95b557d83e7ca33383ec3a713f2987169fc728"
+    },
+    {
+      "app": "notes",
+      "file": "notes-workspace-1024x768.png",
+      "width": 1024,
+      "height": 768,
+      "description": "Task collection and its original note in the wide workspace",
+      "sha256": "576d565af12af1262c4006167adcc3f7ab3c52148b1bd3cdeea8996d59012c83"
+    },
+    {
+      "app": "pilot",
+      "file": "pilot-main-320x640.png",
+      "width": 320,
+      "height": 640,
+      "description": "Production MainPage with a source explanation and retained prompt",
+      "sha256": "c80b160f88507729680008fae0d9e83eed1999adb397cf63a9ea56bebbb7701a"
+    },
+    {
+      "app": "pilot",
+      "file": "pilot-main-1024x768.png",
+      "width": 1024,
+      "height": 768,
+      "description": "The same conversation and prompt after widening the native page",
+      "sha256": "c3c7e33800202e92aab314a35d896ea9a65c1f0d66fce05ffb66b437aea9da2c"
+    }
+  ]
+}
