@@ -25,9 +25,14 @@ jobs:
         with:
           fetch-depth: 0
       - name: Check whitespace in the committed change
+        # New branches use their default-branch ancestor; without one the helper
+        # reports an unavailable range. PRs and existing pushes use exact SHAs.
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: python3 tools/blackberry-apk-lab/check_whitespace.py "$BASE_SHA" "$GITHUB_SHA"
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: >-
+          python3 tools/blackberry-apk-lab/check_whitespace.py "$BASE_SHA" "$GITHUB_SHA"
+          --default-branch "$DEFAULT_BRANCH" --head-ref "$GITHUB_REF"
       - name: Run registered local-tool behavior cases
         run: |
           cmake -S tools/blackberry-apk-lab -B build-apk-research

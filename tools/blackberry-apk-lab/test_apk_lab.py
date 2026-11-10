@@ -111,13 +111,59 @@ class ApkLabTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("fixture.py:2: trailing whitespace", result.stdout)
         self.assertEqual(git("cat-file", "-e", f"{base}^{{commit}}", cwd=checkout).returncode, 0)
-        self.assertNotEqual(check_range("0" * 40, head).returncode, 0)
         self.assertNotEqual(check_range("--output=unexpected", head).returncode, 0)
         self.assertFalse((checkout / "unexpected").exists())
         (repository / "fixture.py").write_text("value = 1\nadded = 2\n")
         corrected = commit("fixture: correct whitespace")
         self.assertEqual(check_range(base, corrected, cwd=repository).returncode, 0)
-        self.assertEqual(check_range("0" * 40, corrected, cwd=repository).returncode, 0)
+
+    def test_workflow_branch_creation_checks_changes_from_default_ancestor(self):
+        repository = self.root / "default repository"
+        repository.mkdir()
+
+        def git(*args, cwd=repository):
+            return subprocess.run(["git", *args], cwd=cwd, capture_output=True,
+                                  text=True, check=True)
+
+        def commit(message, cwd=repository):
+            git("add", ".", cwd=cwd)
+            git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                "commit", "-qm", message, cwd=cwd)
+            return git("rev-parse", "HEAD", cwd=cwd).stdout.strip()
+
+        git("init", "-q", "--initial-branch=main")
+        (repository / "inherited.py").write_text("inherited = True \n")
+        commit("fixture: existing default-branch whitespace")
+        checkout = self.root / "new branch checkout"
+        git("clone", "--quiet", repository.as_uri(), str(checkout))
+        git("checkout", "-qb", "v2", cwd=checkout)
+        checker = Path(__file__).with_name("check_whitespace.py")
+
+        def check_creation(default="main", head_ref="refs/heads/v2"):
+            head = git("rev-parse", "HEAD", cwd=checkout).stdout.strip()
+            return subprocess.run([sys.executable, str(checker), "0" * 40, head,
+                                   "--default-branch", default, "--head-ref", head_ref],
+                                  cwd=checkout, capture_output=True, text=True, check=False)
+
+        result = check_creation()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("unavailable", result.stdout)
+        (checkout / "added.py").write_text("new_whitespace = True \n")
+        commit("fixture: new branch whitespace", cwd=checkout)
+        result = check_creation()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("added.py:1: trailing whitespace", result.stdout)
+        self.assertNotIn("inherited.py", result.stdout)
+        for default, head_ref in (("missing", "refs/heads/v2"), ("main", "refs/heads/main")):
+            with self.subTest(default=default, head_ref=head_ref):
+                result = check_creation(default, head_ref)
+                self.assertEqual(result.returncode, 0)
+                self.assertIn("range unavailable for branch creation", result.stdout)
+        git("checkout", "--orphan", "unrelated", cwd=checkout)
+        commit("fixture: unrelated history", cwd=checkout)
+        result = check_creation()
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("unrelated histories", result.stdout)
 
     def test_inspection_output_is_private_without_changing_input_or_umask(self):
         ancestor = self.root / "existing parent"
