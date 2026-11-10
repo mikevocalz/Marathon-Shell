@@ -8,7 +8,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 else()
     set(_native_required_default OFF)
 endif()
-option(MARATHON_REQUIRE_NATIVE_UI_TESTS "Require real Notes, Calendar, Settings, Hub and overview UI" ${_native_required_default})
+option(MARATHON_REQUIRE_NATIVE_UI_TESTS "Require every product app, shared controls and focused shell UI with real Qt/Keel" ${_native_required_default})
 set(MARATHON_SOURCE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 find_package(Python3 COMPONENTS Interpreter QUIET)
 set(KEEL_QML "$ENV{KEEL_QML}" CACHE PATH "Real Keel build/install QML directory")
@@ -55,16 +55,31 @@ endif()
 if(NOT _native_dbus_run)
     list(APPEND _missing "dbus-run-session for the required private Notes wire test")
 endif()
-foreach(module Keel Keel/Actions Sailfish/Silica Sailfish/Share Nemo/Configuration Nemo/Ngf)
+foreach(module Keel Keel/Actions Sailfish/Silica Sailfish/Share
+    Sailfish/Pickers Sailfish/Gallery Nemo/Configuration Nemo/Ngf
+    Nemo/KeepAlive Nemo/Thumbnailer Nemo/Notifications)
     if(NOT KEEL_QML OR NOT EXISTS "${KEEL_QML}/${module}/qmldir")
         list(APPEND _missing "${module}")
+    endif()
+endforeach()
+# Each product app owns its native staging/service fixtures in one runner. Keep
+# this inventory literal so the repository's reachability check follows it too.
+set(_native_suites
+    marathon-silica/tests
+    apps/browser/tests apps/calculator/tests apps/calendar/tests apps/camera/tests
+    apps/clock/tests apps/email/tests apps/gallery/tests apps/maps/tests
+    apps/messages/tests apps/music/tests apps/notes/tests apps/phone/tests
+    apps/pilot/tests apps/reef/tests apps/settings/tests apps/terminal/tests)
+foreach(suite ${_native_suites})
+    if(NOT EXISTS "${MARATHON_SOURCE_ROOT}/${suite}/run.sh")
+        list(APPEND _missing "${suite}/run.sh")
     endif()
 endforeach()
 if(_missing)
     if(MARATHON_REQUIRE_NATIVE_UI_TESTS)
         message(FATAL_ERROR "Required native UI gate cannot run; missing: ${_missing}. Set KEEL_QML and QMLTESTRUNNER to real Qt 6/Keel builds.")
     endif()
-    message(STATUS "Focused native UI gate NOT REGISTERED in this optional developer build; missing: ${_missing}. Use MARATHON_REQUIRE_NATIVE_UI_TESTS=ON for required coverage.")
+    message(STATUS "Complete native UI gate NOT REGISTERED in this optional developer build; missing: ${_missing}. Use MARATHON_REQUIRE_NATIVE_UI_TESTS=ON for required coverage.")
 else()
     add_test(NAME NativeUI_Toolkit COMMAND "${Python3_EXECUTABLE}"
         "${MARATHON_SOURCE_ROOT}/scripts/ci/run-qml-suite.py"
@@ -72,35 +87,19 @@ else()
         "${QMLTESTRUNNER}" -import "${KEEL_QML}" -input "${CMAKE_CURRENT_SOURCE_DIR}/tst_toolkit.qml")
     set_tests_properties(NativeUI_Toolkit PROPERTIES
         LABELS "native-ui-required" FIXTURES_SETUP NativeKeel TIMEOUT 60)
-    # The unchanged production Notes suite uses real Silica/Actions/Share and
-    # Configuration, with its existing platform-service doubles only.
-    add_test(NAME Qml_apps_notes_tests COMMAND "${Python3_EXECUTABLE}"
-        "${MARATHON_SOURCE_ROOT}/scripts/ci/run-qml-suite.py"
-        --report "${CMAKE_CURRENT_BINARY_DIR}/reports/notes.xml" --
-        sh "${MARATHON_SOURCE_ROOT}/apps/notes/tests/run.sh")
-    set_tests_properties(Qml_apps_notes_tests PROPERTIES LABELS "native-ui-required"
-        FIXTURES_REQUIRED NativeKeel TIMEOUT 180
-        ENVIRONMENT "KEEL_QML=${KEEL_QML};QMLTESTRUNNER=${QMLTESTRUNNER}")
-    # The routing/inbox suites use real native pages with the mail-service
-    # fixture. HTML body rendering still belongs to the WebEngine app suite.
-    foreach(_mail_case mailrouting emailapp)
-        add_test(NAME NativeUI_Mail_${_mail_case} COMMAND "${Python3_EXECUTABLE}"
+    # One complete runner per product app and one shared-control suite. The
+    # wrapper requires real Qt test cases and fails on missing reports/skips.
+    # Camera keeps its production module staging; Mail loads real WebEngine.
+    foreach(suite ${_native_suites})
+        string(REPLACE "/" "_" name "Qml_${suite}")
+        add_test(NAME ${name} COMMAND "${Python3_EXECUTABLE}"
             "${MARATHON_SOURCE_ROOT}/scripts/ci/run-qml-suite.py"
-            --report "${CMAKE_CURRENT_BINARY_DIR}/reports/${_mail_case}.xml" --
-            "${QMLTESTRUNNER}" -import "${KEEL_QML}"
-            -import "${MARATHON_SOURCE_ROOT}/marathon-silica"
-            -import "${MARATHON_SOURCE_ROOT}/apps/email/tests/stubs"
-            -input "${MARATHON_SOURCE_ROOT}/apps/email/tests/tst_${_mail_case}.qml")
-        set_tests_properties(NativeUI_Mail_${_mail_case} PROPERTIES LABELS "native-ui-required"
-            FIXTURES_REQUIRED NativeKeel TIMEOUT 180 ENVIRONMENT "QML_XHR_ALLOW_FILE_READ=1")
+            --report "${CMAKE_CURRENT_BINARY_DIR}/reports/${name}.xml" --
+            sh "${MARATHON_SOURCE_ROOT}/${suite}/run.sh")
+        set_tests_properties(${name} PROPERTIES LABELS "native-ui-required"
+            FIXTURES_REQUIRED NativeKeel TIMEOUT 300
+            ENVIRONMENT "KEEL_QML=${KEEL_QML};QMLTESTRUNNER=${QMLTESTRUNNER}")
     endforeach()
-    add_test(NAME Qml_apps_calendar_tests COMMAND "${Python3_EXECUTABLE}"
-        "${MARATHON_SOURCE_ROOT}/scripts/ci/run-qml-suite.py"
-        --report "${CMAKE_CURRENT_BINARY_DIR}/reports/calendar.xml" --
-        sh "${MARATHON_SOURCE_ROOT}/apps/calendar/tests/run.sh")
-    set_tests_properties(Qml_apps_calendar_tests PROPERTIES LABELS "native-ui-required"
-        FIXTURES_REQUIRED NativeKeel TIMEOUT 180
-        ENVIRONMENT "KEEL_QML=${KEEL_QML};QMLTESTRUNNER=${QMLTESTRUNNER}")
     # Production Rust transport, actual Notes app/schema/actions/store/editor.
     # The conductor owns a private bus and isolated Configuration state; a
     # small Navigation1 admission fixture cannot claim real cgroup thaw.
@@ -112,52 +111,6 @@ else()
         -input "${CMAKE_CURRENT_SOURCE_DIR}/tst_noteswire.qml")
     set_tests_properties(NativeUI_NotesWire PROPERTIES LABELS "native-ui-required"
         FIXTURES_REQUIRED NativeKeel TIMEOUT 180)
-    # The changed uninstall/cleanup UI lives in Settings AppPages. Keep this
-    # input explicit: it does not claim the rest of Settings is qualified.
-    add_test(NAME Qml_settings_AppPages COMMAND "${Python3_EXECUTABLE}"
-        "${MARATHON_SOURCE_ROOT}/scripts/ci/run-qml-suite.py"
-        --report "${CMAKE_CURRENT_BINARY_DIR}/reports/settings-apppages.xml" --
-        "${QMLTESTRUNNER}" -import "${KEEL_QML}"
-        -import "${MARATHON_SOURCE_ROOT}/marathon-silica"
-        -import "${MARATHON_SOURCE_ROOT}/apps/settings/tests/stubs"
-        -input "${MARATHON_SOURCE_ROOT}/apps/settings/tests/tst_apppages.qml")
-    set_tests_properties(Qml_settings_AppPages PROPERTIES LABELS "native-ui-required"
-        FIXTURES_REQUIRED NativeKeel TIMEOUT 180 ENVIRONMENT "QML_XHR_ALLOW_FILE_READ=1")
-    add_test(NAME Qml_settings_PermissionPages COMMAND "${Python3_EXECUTABLE}"
-        "${MARATHON_SOURCE_ROOT}/scripts/ci/run-qml-suite.py"
-        --report "${CMAKE_CURRENT_BINARY_DIR}/reports/settings-permissionpages.xml" --
-        "${QMLTESTRUNNER}" -import "${KEEL_QML}"
-        -import "${MARATHON_SOURCE_ROOT}/marathon-silica"
-        -import "${MARATHON_SOURCE_ROOT}/apps/settings/tests/stubs"
-        -input "${MARATHON_SOURCE_ROOT}/apps/settings/tests/tst_permissionpages.qml")
-    set_tests_properties(Qml_settings_PermissionPages PROPERTIES LABELS "native-ui-required"
-        FIXTURES_REQUIRED NativeKeel TIMEOUT 180 ENVIRONMENT "QML_XHR_ALLOW_FILE_READ=1")
-    add_test(NAME Qml_silica_SummaryListItem COMMAND "${Python3_EXECUTABLE}"
-        "${MARATHON_SOURCE_ROOT}/scripts/ci/run-qml-suite.py"
-        --report "${CMAKE_CURRENT_BINARY_DIR}/reports/summary-list-item.xml" --
-        "${QMLTESTRUNNER}" -import "${KEEL_QML}"
-        -import "${MARATHON_SOURCE_ROOT}/marathon-silica"
-        -input "${MARATHON_SOURCE_ROOT}/marathon-silica/tests/tst_summarylistitem.qml")
-    set_tests_properties(Qml_silica_SummaryListItem PROPERTIES LABELS "native-ui-required"
-        FIXTURES_REQUIRED NativeKeel TIMEOUT 60)
-    add_test(NAME Qml_settings_RowPresentation COMMAND "${Python3_EXECUTABLE}"
-        "${MARATHON_SOURCE_ROOT}/scripts/ci/run-qml-suite.py"
-        --report "${CMAKE_CURRENT_BINARY_DIR}/reports/settings-rows.xml" --
-        "${QMLTESTRUNNER}" -import "${KEEL_QML}"
-        -import "${MARATHON_SOURCE_ROOT}/marathon-silica"
-        -import "${MARATHON_SOURCE_ROOT}/apps/settings/tests/stubs"
-        -input "${MARATHON_SOURCE_ROOT}/apps/settings/tests/tst_rowpresentation.qml")
-    set_tests_properties(Qml_settings_RowPresentation PROPERTIES LABELS "native-ui-required"
-        FIXTURES_REQUIRED NativeKeel TIMEOUT 180 ENVIRONMENT "QML_XHR_ALLOW_FILE_READ=1")
-    add_test(NAME Qml_phone_PeopleRows COMMAND "${Python3_EXECUTABLE}"
-        "${MARATHON_SOURCE_ROOT}/scripts/ci/run-qml-suite.py"
-        --report "${CMAKE_CURRENT_BINARY_DIR}/reports/people-rows.xml" --
-        "${QMLTESTRUNNER}" -import "${KEEL_QML}"
-        -import "${MARATHON_SOURCE_ROOT}/marathon-silica"
-        -import "${MARATHON_SOURCE_ROOT}/apps/phone/tests/stubs"
-        -input "${MARATHON_SOURCE_ROOT}/apps/phone/tests/tst_peoplerows.qml")
-    set_tests_properties(Qml_phone_PeopleRows PROPERTIES LABELS "native-ui-required"
-        FIXTURES_REQUIRED NativeKeel TIMEOUT 180 ENVIRONMENT "QML_XHR_ALLOW_FILE_READ=1")
     # PageViewHub covers the launcher's accepted/partial/failed uninstall UI.
     # Its real component imports QtWayland.Compositor; this is not a server or
     # task-card rendering test. The existing shell-service doubles stay local.
@@ -200,7 +153,21 @@ else()
         -input "${MARATHON_SOURCE_ROOT}/tests/ui/tst_taskswitcher.qml")
     set_tests_properties(Qml_shell_TaskSwitcher PROPERTIES LABELS "native-ui-required"
         FIXTURES_REQUIRED NativeKeel TIMEOUT 180)
-    message(STATUS "Required native UI scope: toolkit + complete Notes and Calendar + real Hub/Notes wire + Mail routing/inbox + Settings AppPages/PermissionPages/rows + Silica summary rows + Phone people rows + PageViewHub + Hub + overview geometry/task switcher; broader suites remain separate")
+    add_test(NAME Qml_shell_TaskPageIndicator COMMAND "${Python3_EXECUTABLE}"
+        "${MARATHON_SOURCE_ROOT}/scripts/ci/run-qml-suite.py"
+        --report "${CMAKE_CURRENT_BINARY_DIR}/reports/taskpageindicator.xml" --
+        "${QMLTESTRUNNER}" -import "${KEEL_QML}"
+        -import "${MARATHON_SOURCE_ROOT}/marathon-silica"
+        -import "${MARATHON_SOURCE_ROOT}/tests/ui/stubs"
+        -input "${MARATHON_SOURCE_ROOT}/tests/ui/tst_taskpageindicator.qml")
+    set_tests_properties(Qml_shell_TaskPageIndicator PROPERTIES LABELS "native-ui-required"
+        FIXTURES_REQUIRED NativeKeel TIMEOUT 180)
+    add_test(NAME NativeUI_RegistrationContract COMMAND "${Python3_EXECUTABLE}"
+        "${MARATHON_SOURCE_ROOT}/tests/lint/test_native_ui_gate.py" NativeRegistrationTests)
+    set_tests_properties(NativeUI_RegistrationContract PROPERTIES
+        LABELS "native-ui-required" TIMEOUT 60
+        ENVIRONMENT "QMLTESTRUNNER=${QMLTESTRUNNER};CMAKE_COMMAND=${CMAKE_COMMAND};KEEL_QML=${KEEL_QML};MARATHON_NOTES_WIRE_CLIENT=${MARATHON_NOTES_WIRE_CLIENT}")
+    message(STATUS "Required native UI scope: real toolkit/icons + all 16 product apps + all shared controls + real Hub/Notes wire + PageViewHub + Hub + overview/task switcher/page indicator")
 endif()
 
 if(Python3_Interpreter_FOUND)

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Exercise required dependency checks and real Qt test result handling."""
+import json
 import os
 from pathlib import Path
 import shutil
@@ -12,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 WRAPPER = ROOT / 'scripts/ci/run-qml-suite.py'
 
 
-class NativeGateTests(unittest.TestCase):
+class NativeGateTools(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.runner = os.environ.get('QMLTESTRUNNER')
@@ -27,6 +28,8 @@ class NativeGateTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
 
+
+class NativeGateTests(NativeGateTools):
     def run_suite(self, body):
         fixture = self.root / 'tst_contract.qml'
         fixture.write_text('import QtQuick 6.0\nimport QtTest 1.3\nTestCase { name: "GateContract"; ' + body + ' }\n')
@@ -103,5 +106,42 @@ class NativeGateTests(unittest.TestCase):
         self.assertIn('QML validation is required', result.stdout + result.stderr)
 
 
+class NativeRegistrationTests(NativeGateTools):
+    def test_every_product_app_is_required_once(self):
+        # Use the independently maintained product inventory, not a second
+        # hard-coded copy of the gate list. Support/demo apps stay separate.
+        policy = json.loads((ROOT / 'tools/native-ui-consistency/policy.json').read_text())
+        runners = {f"Qml_apps_{app['directory']}_tests": ROOT / 'apps' / app['directory'] / 'tests/run.sh'
+                   for app in policy['apps'] if app['stage'] != 'support-only'}
+        expected = set(runners)
+        runners['Qml_marathon-silica_tests'] = ROOT / 'marathon-silica/tests/run.sh'
+        build = self.root / 'complete gate'
+        configured = subprocess.run([self.cmake, '-S', str(ROOT / 'tests/native-ui'), '-B', str(build),
+                                     '-DMARATHON_REQUIRE_NATIVE_UI_TESTS=ON',
+                                     f'-DQMLTESTRUNNER={self.runner}'], capture_output=True, text=True)
+        self.assertEqual(configured.returncode, 0, configured.stdout + configured.stderr)
+        ctest = Path(self.cmake).with_name('ctest')
+        listed = subprocess.run([str(ctest), '--test-dir', str(build), '--show-only=json-v1',
+                                 '-L', 'native-ui-required'], capture_output=True, text=True)
+        self.assertEqual(listed.returncode, 0, listed.stdout + listed.stderr)
+        tests = json.loads(listed.stdout)['tests']
+        apps = [test['name'] for test in tests if test['name'].startswith('Qml_apps_')]
+        self.assertEqual(set(apps), expected)
+        self.assertEqual(len(apps), len(expected), 'duplicate product app registrations')
+        names = [test['name'] for test in tests]
+        for name in ('Qml_marathon-silica_tests', 'NativeUI_Toolkit', 'NativeUI_NotesWire',
+                     'Qml_shell_PageViewHub', 'Qml_shell_Hub', 'Qml_shell_OverviewGrid',
+                     'Qml_shell_TaskSwitcher', 'Qml_shell_TaskPageIndicator'):
+            self.assertEqual(names.count(name), 1, name)
+        for test in tests:
+            if test['name'] in expected or test['name'] == 'Qml_marathon-silica_tests':
+                command = test['command']
+                self.assertTrue(any(Path(arg).resolve() == WRAPPER for arg in command), command)
+                self.assertEqual(command[-2], 'sh')
+                self.assertEqual(Path(command[-1]).resolve(), runners[test['name']])
+
+
 if __name__ == '__main__':
-    unittest.main()
+    # General shell CI has Qt without Keel. The complete native gate selects
+    # NativeRegistrationTests explicitly once its real dependencies exist.
+    unittest.main(defaultTest='NativeGateTests')

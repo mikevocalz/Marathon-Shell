@@ -24,4 +24,4 @@ cp "$here"/native/*.qml "$module"
 ) >"$module/qmldir"
 
 KEEL_DCONF_FILE=$stage/dconf.json QML_XHR_ALLOW_FILE_READ=1 QT_FORCE_STDERR_LOGGING=1 QT_QPA_PLATFORM=offscreen "$runner" \
-	-import "$KEEL_QML" -import "$here/../../../marathon-silica" -import "$here/stubs" -import "$stage" -input "$here"
+	-import "$KEEL_QML" -import "$here/../../../marathon-silica" -import "$here/stubs" -import "$stage" -input "$here" "$@"

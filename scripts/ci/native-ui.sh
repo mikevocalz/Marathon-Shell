@@ -1,12 +1,14 @@
 #!/bin/sh
-# Required Notes, Settings, Hub and overview UI with the APK Keel pin.
+# Required product apps, shared controls and shell UI with the APK Keel pin.
 # Reproduce with the alpine:edge container invocation in .github/workflows/ci.yml.
 set -eu
 
 if [ "${1:-}" != --build ]; then
     apk add --no-cache build-base cmake samurai pkgconf git python3 cargo \
         qt6-qtbase-dev qt6-qtbase-private-dev qt6-qtdeclarative-dev \
-        qt6-qtdeclarative-private-dev qt6-qtsvg-dev qt6-qtwayland-dev libxkbcommon-dev dbus
+        qt6-qtdeclarative-private-dev qt6-qtsvg-dev qt6-qtwayland-dev \
+        qt6-qtmultimedia-dev qt6-qtpositioning-dev qt6-qt5compat-dev \
+        qt6-qtwebengine-dev qt6-qtwebchannel-dev libxkbcommon-dev dbus
     adduser -D ci
     cp -a /src /home/ci/src
     chown -R ci:ci /home/ci/src
@@ -30,13 +32,19 @@ git -C build-keel-source fetch --depth=1 origin "$keel_commit"
 git -C build-keel-source checkout --detach FETCH_HEAD
 [ "$(git -C build-keel-source rev-parse HEAD)" = "$keel_commit" ]
 
-# Native, unmodified Silica, Actions, Share and Configuration plugins. The
-# supported JSON Configuration backend isolates tests; device mlite/dconf,
-# compositor/hardware, and the broader platform modules are separate gates.
+# Native, unmodified Keel modules required by the product app imports.
+# The supported JSON Configuration backend isolates tests;
+# compositor/hardware and unrelated platform modules remain separate gates.
 cmake -S build-keel-source/keel -B build-keel -G Ninja \
     -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=OFF \
     -DKEEL_BUILD_NEMO_COMPAT=ON -DKEEL_BUILD_ACTIONS=ON \
-    -DKEEL_BUILD_SAILFISHAPP=OFF -DKEEL_BUILD_PLATFORM=OFF \
+    -DKEEL_BUILD_SAILFISHAPP=OFF -DKEEL_BUILD_PLATFORM=ON \
+    -DKEEL_PLATFORM_PICKERS=ON -DKEEL_PLATFORM_GALLERY=ON \
+    -DKEEL_PLATFORM_WEBVIEW=OFF -DKEEL_PLATFORM_SECRETS=OFF \
+    -DKEEL_PLATFORM_AMBER_WEB_AUTHORIZATION=OFF -DKEEL_PLATFORM_MPRIS=OFF \
+    -DKEEL_PLATFORM_AMBER_MPRIS=OFF -DKEEL_PLATFORM_THUMBNAILER=ON \
+    -DKEEL_PLATFORM_MCE=OFF -DKEEL_PLATFORM_ACCOUNTS=OFF \
+    -DKEEL_PLATFORM_SAILFISH_ACCOUNTS=OFF -DKEEL_PLATFORM_POLICY=OFF \
     -DKEEL_BUILD_QT5COMPAT=OFF -DKEEL_BUILD_BOOSTER=OFF \
     -DKEEL_REQUIRE_MLITE=OFF -DKEEL_REQUIRE_LIBDCONF=OFF \
     -DKEEL_REQUIRE_IPHB=OFF -DKEEL_REQUIRE_GIO=OFF \
@@ -44,7 +52,8 @@ cmake -S build-keel-source/keel -B build-keel -G Ninja \
 cmake --build build-keel --parallel 2 --target \
     keelplugin silicacoreplugin silicaprivateplugin silicaplugin \
     silicascreenplugin silicabackgroundplugin silicashareplugin \
-    nemoconfiguration nemongf keelactionsplugin
+    nemoconfiguration nemongf keepaliveplugin keelactionsplugin \
+    sailfishpickersplugin sailfishgalleryplugin nemothumbnailer nemonotifications
 
 # Alpine keeps Qt's tools outside PATH. Use its Qt 6 installation explicitly.
 qtpaths=/usr/lib/qt6/bin/qtpaths6
@@ -66,6 +75,15 @@ for tool in "$QMLTESTRUNNER" "$QMLLINT"; do
 done
 export KEEL_QML="$PWD/build-keel/qml"
 export QT_QPA_PLATFORM=offscreen
+
+# Generate and install the production Phosphor mappings with the unchanged
+# icon-theme CMake project. The toolkit fixture requires a real provider image;
+# absent icons must not pass as a merely logged rendering warning.
+cmake -S tests/native-ui/icons -B build-native-icons -G Ninja \
+    -DCMAKE_INSTALL_PREFIX="$PWD/build-native-icons-root"
+cmake --install build-native-icons > build-native-icons-install.log
+export KEEL_THEME_PIXEL_RATIO=1
+export KEEL_THEME_ICON_DIRS="$PWD/build-native-icons-root/share/themes/sailfish-default/silica/z1.0/icons-monochrome"
 # Compile the exact production Rust capture transport with its checked-in
 # lock. This small client needs no compositor or platform-native build.
 cargo build --manifest-path tests/native-ui/notes-wire/Cargo.toml --locked \
