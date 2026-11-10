@@ -6,9 +6,9 @@ on:
       - 'v*'
   workflow_dispatch:
 
-# Builds the marathon-shell apk and attaches it to a GitHub Release.
-# Devices poll the Releases API via the in-shell UpdateService and
-# tap-to-update -- no custom server required.
+# Builds the shell and its UI runtime packages for a GitHub Release and
+# the image job below. Settings receives whole-image updates through
+# systemd-sysupdate; the APKs are also available for development installs.
 #
 # Two things this deliberately does NOT do, both of which the previous
 # version got wrong:
@@ -48,24 +48,31 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq podman
 
-      - name: Build marathon-shell apk (aarch64)
+      - name: Build shell and UI runtime apks (aarch64)
         env:
           MARATHON_SHELL_SRC: ${{ github.workspace }}
         run: |
           mkdir -p "$HOME/.cache/marathon-build/duranium/mkosi.packages"
+          bash scripts/qemu/lib/build-keel-silica-apk.sh
           bash scripts/qemu/lib/build-marathon-shell-apk.sh
 
       - name: Stage artifacts
         id: stage
         run: |
           mkdir -p artifacts
-          find "$HOME/.cache/marathon-build/duranium/mkosi.packages" \
-               -name 'marathon-shell-*.apk' -exec cp {} artifacts/ \;
-          # Fail loudly rather than publishing an empty release.
-          if [ -z "$(ls -A artifacts)" ]; then
-            echo "no apk produced" >&2
-            exit 1
-          fi
+          pkg_dir="$HOME/.cache/marathon-build/duranium/mkosi.packages"
+          shell_version=$(set +u; . packaging/packages/marathon-shell/APKBUILD; printf '%s-r%s' "$pkgver" "$pkgrel")
+          keel_version=$(set +u; . packaging/packages/keel-silica/APKBUILD; printf '%s-r%s' "$pkgver" "$pkgrel")
+          # Keep every runtime dependency and optional app from this build.
+          # A missing current version fails cp rather than publishing a
+          # partial set or accepting an older package left in the cache.
+          for package in marathon-shell marathon-icon-theme marathon-silica \
+                         marathon-shell-browser marathon-shell-test-app; do
+            cp "$pkg_dir/$package-$shell_version.apk" artifacts/
+          done
+          for package in keel-silica keel-silica-dev; do
+            cp "$pkg_dir/$package-$keel_version.apk" artifacts/
+          done
           ls -la artifacts/
 
       - uses: actions/upload-artifact@v4

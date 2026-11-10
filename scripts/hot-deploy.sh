@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # hot-deploy.sh — iterate on apps without a full APK/image cycle.
 #
-# Tar-pipes the disk-imported QML modules (per-app trees)
+# Tar-pipes the disk-imported QML modules (shared controls and per-app trees)
 # straight into the device's import paths and restarts greetd so the next
 # session picks up the new code. ~5 s end-to-end vs ~20 min for the
 # build + flash path.
@@ -14,7 +14,7 @@
 # SettingsManagerCpp / Logger become "not defined", FilteredAppModel
 # breaks → empty home grid). Shell QML changes require a binary rebuild
 # (--bin) or a full APK cycle. The disk-imported modules below
-# (apps/*) ARE hot-reloadable because they aren't qrc.
+# (marathon-silica/Marathon and apps/*) ARE hot-reloadable because they aren't qrc.
 #
 # rsync isn't shipped on the L5 image so this uses busybox tar instead. The
 # trade-off: orphans from deleted files aren't cleaned automatically. Pass
@@ -81,6 +81,9 @@ echo "==> target: $HOST"
 # Shell QML (shell/qml/) lives in qrc:/qt/qml/MarathonOS/Shell/... inside
 # the binary — not hot-reloadable. Use --bin to push a rebuilt
 # marathon-shell-bin, or rebuild the marathon-shell APK for a full cycle.
+
+echo "==> push shared controls → /usr/lib/qt6/qml/Marathon"
+push_tree "$SRC/marathon-silica/Marathon" "/usr/lib/qt6/qml/Marathon"
 
 echo "==> push apps/* → /usr/share/marathon-apps"
 for app_dir in "$SRC"/apps/*/; do

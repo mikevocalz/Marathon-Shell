@@ -218,16 +218,50 @@ If you already have a working image and just need to rebuild the shell
 APK with local edits:
 
 ```sh
-cd $HOME/.cache/marathon-build/duranium
-PATH=$HOME/.cache/marathon-build/mkosi-src/bin:$PATH \
-MARATHON_SHELL_SRC=$HOME/Developer/Marathon-Shell \
-  ./marathon-extras/build-marathon-shell-apk.sh
+cd "$HOME/Developer/Marathon-Shell"
+export DURANIUM_DIR="${MARATHON_BUILD_DIR:-$HOME/.cache/marathon-build}/duranium"
+./scripts/qemu/lib/build-keel-silica-apk.sh
+./scripts/qemu/lib/build-marathon-shell-apk.sh
 ```
 
-The APK lands in `mkosi.packages/marathon-shell-1.0.0-r<N>.apk`. To
-ship it without rebuilding the full image, `scp` it to the device and
-`apk add --allow-untrusted <file>`. The shell needs to be restarted
-(easiest: `sudo reboot`).
+The APKs land in `$DURANIUM_DIR/mkosi.packages/`. The shell depends on the
+matching `marathon-silica` shared controls, which also depend on the
+matching `marathon-icon-theme`. Install them together. Keel has its own
+version, read from its APKBUILD; its development package is needed by the
+build host, not the device.
+
+This sequence copies the required packages and updates the optional
+browser or test app only when it is already installed:
+
+```sh
+device=user@marathon.local
+apk_dir="$DURANIUM_DIR/mkosi.packages"
+shell_version=$(set +u; . packaging/packages/marathon-shell/APKBUILD; printf '%s-r%s' "$pkgver" "$pkgrel")
+keel_version=$(set +u; . packaging/packages/keel-silica/APKBUILD; printf '%s-r%s' "$pkgver" "$pkgrel")
+packages=("keel-silica-$keel_version.apk")
+for package in marathon-shell marathon-silica marathon-icon-theme; do
+    packages+=("$package-$shell_version.apk")
+done
+for package in marathon-shell-browser marathon-shell-test-app; do
+    if ssh "$device" apk info --exists "$package" >/dev/null; then
+        packages+=("$package-$shell_version.apk")
+    fi
+done
+local_apks=()
+remote_apks=()
+for package in "${packages[@]}"; do
+    local_apks+=("$apk_dir/$package")
+    remote_apks+=("/tmp/$package")
+done
+scp "${local_apks[@]}" "$device:/tmp/"
+ssh -t "$device" sudo apk add --allow-untrusted "${remote_apks[@]}"
+ssh -t "$device" sudo systemctl restart greetd
+```
+
+`packaging/scripts/push-cm5.sh` performs the matching-package installation
+for its pmbootstrap development loop. `scripts/hot-deploy.sh` copies both
+app QML and the shared `Marathon.Silica` controls when an APK rebuild is
+unnecessary.
 
 ## Refreshing the patch series
 

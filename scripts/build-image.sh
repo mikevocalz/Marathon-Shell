@@ -130,8 +130,11 @@ fi
 # guard a pkgrel bump in the source would silently fall back to the
 # previous build (the bug that shipped r2 on a r5 source twice in a
 # row).
+# $5 names subpackages this builder must also have staged at the same
+# version. A restored main APK alone is not a complete build cache.
 build_if_missing() {
     local label="$1" glob="$2" script="$3" aport_apkbuild="${4:-}"
+    local required_subpackages="${5:-}"
     if [ "${FORCE_REBUILD:-0}" = "1" ]; then
         rm -f "$MKOSI_PKG_DIR"/$glob 2>/dev/null || true
     fi
@@ -149,8 +152,17 @@ build_if_missing() {
         if [ -n "$pkgver" ] && [ -n "$pkgrel" ] && [ -n "$pkgname" ]; then
             expected="${pkgname}-${pkgver}-r${pkgrel}.apk"
             if [ -f "$MKOSI_PKG_DIR/$expected" ]; then
-                echo "==> $label: cached ($expected)"
-                return 0
+                local subpackage missing=()
+                for subpackage in $required_subpackages; do
+                    if [ ! -f "$MKOSI_PKG_DIR/$subpackage-${pkgver}-r${pkgrel}.apk" ]; then
+                        missing+=("$subpackage-${pkgver}-r${pkgrel}.apk")
+                    fi
+                done
+                if [ "${#missing[@]}" -eq 0 ]; then
+                    echo "==> $label: cached ($expected)"
+                    return 0
+                fi
+                echo "==> $label: incomplete cache (missing ${missing[*]}) — rebuilding"
             fi
             if compgen -G "$MKOSI_PKG_DIR/$glob" >/dev/null; then
                 local stale
@@ -182,7 +194,8 @@ echo "==> stage 3: build apks"
 APORTS_DIR="$MARATHON_IMAGE_DIR/packages"
 build_if_missing "marathon-base-config"      'marathon-base-config-*.apk'     "$LIB/build-marathon-base-config-apk.sh"      "$APORTS_DIR/marathon-base-config/APKBUILD"
 build_if_missing "marathon-plymouth-theme"   'marathon-plymouth-theme-*.apk'  "$LIB/build-marathon-plymouth-theme-apk.sh"   "$APORTS_DIR/marathon-plymouth-theme/APKBUILD"
-build_if_missing "keel-silica"               'keel-silica-*.apk'              "$LIB/build-keel-silica-apk.sh"               "$APORTS_DIR/keel-silica/APKBUILD"
+build_if_missing "keel-silica"               'keel-silica-*.apk'              "$LIB/build-keel-silica-apk.sh"               "$APORTS_DIR/keel-silica/APKBUILD" \
+    "keel-silica-dev"
 APORT=wpewebkit \
 build_if_missing "wpewebkit"                 'wpewebkit-[0-9]*.apk'           "$LIB/build-aport-apk.sh"                     "$APORTS_DIR/wpewebkit/APKBUILD"
 APORT=libjxl0.11 NO_DEPS=1 \
@@ -245,7 +258,8 @@ if [ "$DEVICE" = zinwa-q25 ]; then
     APORT=mesa build_if_missing "mesa" 'mesa-[0-9]*.apk' \
         "$LIB/build-aport-apk.sh" "$APORTS_DIR/mesa/APKBUILD"
 fi
-build_if_missing "marathon-shell"            'marathon-shell-*.apk'           "$LIB/build-marathon-shell-apk.sh"            "$APORTS_DIR/marathon-shell/APKBUILD"
+build_if_missing "marathon-shell"            'marathon-shell-*.apk'           "$LIB/build-marathon-shell-apk.sh"            "$APORTS_DIR/marathon-shell/APKBUILD" \
+    "marathon-icon-theme marathon-silica marathon-shell-browser marathon-shell-test-app"
 build_if_missing "postmarketos-ui-marathon"  'postmarketos-ui-marathon-*.apk' "$LIB/build-postmarketos-ui-marathon-apk.sh"  "$APORTS_DIR/postmarketos-ui-marathon/APKBUILD"
 
 # Device-specific Marathon overlay (pulls the upstream pmaports

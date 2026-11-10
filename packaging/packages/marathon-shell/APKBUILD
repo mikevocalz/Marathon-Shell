@@ -2,7 +2,7 @@
 # Maintainer: Patrick Quinn <patrick@jquinn.com>
 pkgname=marathon-shell
 pkgver=1.0.0
-pkgrel=529
+pkgrel=530
 pkgdesc="Marathon Shell - Modern Wayland compositor with Qt6/QML"
 url="https://github.com/patrickjquinn/Marathon-Shell"
 arch="aarch64"
@@ -371,7 +371,7 @@ testapp() {
 # sha512sums regenerate with `abuild checksum` on build host.
 silica() {
 	pkgdesc="Shared native Marathon QML controls and content styles"
-	depends="keel-silica qt6-qtdeclarative"
+	depends="keel-silica qt6-qtdeclarative marathon-icon-theme=$pkgver-r$pkgrel"
 	amove usr/lib/qt6/qml/Marathon
 }
 
