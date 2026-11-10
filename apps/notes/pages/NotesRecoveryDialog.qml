@@ -26,6 +26,7 @@ Dialog {
                 cancelText: qsTr("Back")
             }
             Label {
+                textFormat: Text.PlainText
                 x: Theme.horizontalPageMargin
                 width: parent.width - x * 2
                 wrapMode: Text.Wrap
@@ -41,6 +42,7 @@ Dialog {
                 onClicked: Clipboard.text = root.store.store.value
             }
             Label {
+                textFormat: Text.PlainText
                 x: Theme.horizontalPageMargin
                 width: parent.width - x * 2
                 wrapMode: Text.Wrap
@@ -64,6 +66,7 @@ Dialog {
                 onClicked: root.workspace.commitEditor()
             }
             Label {
+                textFormat: Text.PlainText
                 x: Theme.horizontalPageMargin
                 width: parent.width - x * 2
                 wrapMode: Text.Wrap

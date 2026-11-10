@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Layouts
 import Sailfish.Silica 1.0
 import Marathon.Silica 1.0
 import "../NotesStore.js" as Store
@@ -94,8 +95,9 @@ Page {
 
             required property var modelData
 
-            contentHeight: Theme.itemSizeLarge
+            contentHeight: Math.max(Theme.itemSizeLarge, labels.height + 2 * Theme.paddingMedium)
             Accessible.name: (modelData.pinned ? qsTr("Pinned") + ", " : "") + titleLabel.text
+            Accessible.description: Store.preview(modelData)
             Accessible.selected: !!page.workspace && !!page.workspace.currentEditor && page.workspace.currentEditor.noteId === modelData.id
             menu: ContextMenu {
                 MenuItem {
@@ -140,53 +142,57 @@ Page {
                     });
             }
 
-            Icon {
-                id: pin
+            Column {
+                id: labels
 
                 x: Theme.horizontalPageMargin
-                anchors.verticalCenter: titleLabel.verticalCenter
-                visible: item.modelData.pinned === true
-                source: "image://theme/icon-s-favorite"
-                color: item.highlighted || item.Accessible.selected ? Theme.highlightColor : Theme.primaryColor
-            }
-            Label {
-                id: titleLabel
+                width: parent.width - 2 * x
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Theme.paddingSmall
 
-                anchors {
-                    left: pin.visible ? pin.right : parent.left
-                    leftMargin: pin.visible ? Theme.paddingSmall : Theme.horizontalPageMargin
-                    right: dateLabel.left
-                    rightMargin: Theme.paddingMedium
-                    bottom: parent.verticalCenter
-                }
-                text: item.modelData.title || qsTr("Untitled")
-                truncationMode: TruncationMode.Fade
-                color: item.highlighted || item.Accessible.selected ? Theme.highlightColor : Theme.primaryColor
-            }
-            Label {
-                id: dateLabel
+                RowLayout {
+                    width: parent.width
+                    spacing: Theme.paddingSmall
 
-                anchors {
-                    right: parent.right
-                    rightMargin: Theme.horizontalPageMargin
-                    baseline: titleLabel.baseline
+                    Icon {
+                        visible: item.modelData.pinned === true
+                        source: "image://theme/icon-s-favorite"
+                        color: item.highlighted || item.Accessible.selected ? Theme.highlightColor : Theme.primaryColor
+                    }
+                    Label {
+                        id: titleLabel
+
+                        objectName: "noteTitle"
+                        Layout.fillWidth: true
+                        text: item.modelData.title || qsTr("Untitled")
+                        textFormat: Text.PlainText
+                        wrapMode: Text.Wrap
+                        maximumLineCount: 3
+                        elide: Text.ElideRight
+                        color: item.highlighted || item.Accessible.selected ? Theme.highlightColor : Theme.primaryColor
+                    }
                 }
-                text: Store.when(item.modelData.timestamp, new Date())
-                font.pixelSize: Theme.fontSizeExtraSmall
-                color: item.highlighted || item.Accessible.selected ? Theme.secondaryHighlightColor : Theme.secondaryColor
-            }
-            Label {
-                anchors {
-                    left: parent.left
-                    leftMargin: Theme.horizontalPageMargin
-                    right: parent.right
-                    rightMargin: Theme.horizontalPageMargin
-                    top: parent.verticalCenter
+                Label {
+                    objectName: "notePreview"
+                    width: parent.width
+                    text: Store.preview(item.modelData)
+                    textFormat: Text.PlainText
+                    visible: text !== ""
+                    font.pixelSize: Theme.fontSizeSmall
+                    wrapMode: Text.Wrap
+                    maximumLineCount: 2
+                    elide: Text.ElideRight
+                    color: item.highlighted || item.Accessible.selected ? Theme.secondaryHighlightColor : Theme.secondaryColor
                 }
-                text: Store.preview(item.modelData)
-                font.pixelSize: Theme.fontSizeSmall
-                truncationMode: TruncationMode.Fade
-                color: item.highlighted || item.Accessible.selected ? Theme.secondaryHighlightColor : Theme.secondaryColor
+                Label {
+                    objectName: "noteDate"
+                    width: parent.width
+                    text: Store.when(item.modelData.timestamp, new Date())
+                    textFormat: Text.PlainText
+                    wrapMode: Text.Wrap
+                    font.pixelSize: Theme.fontSizeExtraSmall
+                    color: item.highlighted || item.Accessible.selected ? Theme.secondaryHighlightColor : Theme.secondaryColor
+                }
             }
 
             Rectangle {

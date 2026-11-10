@@ -479,6 +479,51 @@ TestCase {
         compare(findChild(collection(app), "notesView").count, 1);
     }
 
+    function test_collectionRowsGrowAndOpenTheExactNote() {
+        Native.Ambience.applyForwarded("/desktop/jolla/theme/font/sizeCategory='huge'\n");
+        const title = "<b>A long note title with its literal markup</b>";
+        const content = title + "\nA longer preview which wraps beneath the title without overlapping the date";
+        const app = makeApp([note(37, content), note(12, "Another note")], 360);
+        const list = findChild(collection(app), "notesView");
+        const row = delegateAt(list, 0);
+        const heading = findChild(row, "noteTitle");
+        const preview = findChild(row, "notePreview");
+        const date = findChild(row, "noteDate");
+        tryVerify(() => heading.lineCount > 1 && preview.lineCount > 1);
+        compare(heading.text, title);
+        compare(heading.textFormat, Text.PlainText);
+        compare(preview.textFormat, Text.PlainText);
+        tryVerify(() => preview.mapToItem(row, 0, 0).y >= heading.mapToItem(row, 0, heading.height).y);
+        tryVerify(() => date.mapToItem(row, 0, 0).y >= preview.mapToItem(row, 0, preview.height).y);
+        tryVerify(() => date.mapToItem(row, 0, date.height).y <= row.contentHeight);
+        row.forceActiveFocus();
+        keyClick(Qt.Key_Return);
+        const opened = editor(app);
+        compare(opened.noteId, 37);
+        compare(findChild(opened, "bodyField").text, content);
+    }
+
+    function test_longFolderRowKeepsItsTagAndKeyboardAction() {
+        const tag = "planning_for_the_international_conference_and_followup";
+        const app = makeApp([note(41, "Conference notes\n#" + tag)], 360);
+        app.workspace.showFolders();
+        const list = findChild(collection(app), "foldersView");
+        const row = delegateAt(list, 0);
+        row.font.pixelSize = Theme.fontSizeHuge;
+        const title = findChild(row, "summaryText");
+        const count = findChild(row, "summaryDescription");
+        tryVerify(() => title.lineCount > 1);
+        verify(!title.truncated);
+        compare(title.text, "#" + tag);
+        tryVerify(() => count.mapToItem(row, 0, count.height).y <= row.contentHeight);
+        row.forceActiveFocus();
+        keyClick(Qt.Key_Space);
+        compare(collection(app).folder, tag);
+        const filtered = findChild(collection(app), "notesView");
+        compare(filtered.count, 1);
+        compare(delegateAt(filtered, 0).modelData.id, 41);
+    }
+
     function test_largeTextNarrowWindowKeepsNavigationAndEditorReachable() {
         const normalSize = Theme.fontSizeMedium;
         Native.Ambience.applyForwarded("/desktop/jolla/theme/font/sizeCategory='huge'\n");

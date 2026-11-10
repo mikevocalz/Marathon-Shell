@@ -149,6 +149,7 @@ Page {
                         cancelText: qsTr("Back")
                     }
                     Label {
+                        textFormat: Text.PlainText
                         objectName: "recordingMeaning"
                         x: Theme.horizontalPageMargin
                         width: parent.width - x * 2
@@ -156,6 +157,7 @@ Page {
                         text: qsTr("Changes recorded means Notes has accepted your edits. This status cannot confirm that they have reached device storage.")
                     }
                     Label {
+                        textFormat: Text.PlainText
                         x: Theme.horizontalPageMargin
                         width: parent.width - x * 2
                         wrapMode: Text.Wrap
