@@ -56,6 +56,66 @@ TestCase {
         return found;
     }
 
+    function test_accountEventsOpenReadOnlyWithSourceAndSeriesNotice() {
+        const remote = ev("dav:account-event", {
+            source: "caldav",
+            readOnly: true,
+            accountLabel: "Personal",
+            recurrenceIncomplete: true
+        });
+        const app = makeApp([ev(1), remote]);
+        const detail = app.openEvent(remote);
+        tryCompare(detail, "status", PageStatus.Active);
+        compare(detail.shown.id, "dav:account-event");
+        compare(child(detail, "accountDetail").value, "Personal");
+        verify(child(detail, "accountCalendarNotice").text.indexOf("series preview") >= 0);
+        verify(!child(detail, "editItem").enabled);
+        verify(!child(detail, "deleteItem").enabled);
+        compare(app.editEvent(remote), null);
+        verify(!app.saveEvent(remote));
+        verify(!app.deleteEvent(remote.id));
+        compare(Calendar.events.length, 2);
+        compare(app._defaultLabelFormat, Text.PlainText);
+    }
+
+    function test_removedAccountEventClearsAnOpenDetailPage() {
+        const remote = ev("dav:account-event", {
+            source: "caldav",
+            readOnly: true,
+            title: "Private appointment",
+            accountLabel: "Personal",
+            description: "Private details"
+        });
+        const app = makeApp([ev(1), remote]);
+        const detail = app.openEvent(remote);
+        tryCompare(detail, "status", PageStatus.Active);
+        compare(detail.shown.title, "Private appointment");
+        Calendar.events = [ev(1)];
+        tryCompare(detail, "accountEventUnavailable", true);
+        compare(detail.shown, {});
+        compare(child(detail, "description").text, "");
+        verify(child(detail, "accountEventUnavailableNotice").visible);
+        verify(!child(detail, "editItem").enabled);
+        verify(!child(detail, "deleteItem").enabled);
+        Calendar.events = [ev(1), remote];
+        tryCompare(detail, "accountEventUnavailable", false);
+        compare(detail.shown.title, "Private appointment");
+    }
+
+    function test_accountFailureKeepsLocalEventsAndOffersReload() {
+        const app = makeApp([ev(1)]);
+        const page = app.pageStack.currentPage;
+        Calendar.syncedState = "unavailable";
+        verify(child(page, "calendarLoadNotice").visible);
+        compare(page.dayEvents.length, 1);
+        app.refreshSynced();
+        compare(Calendar.refreshCount, 1);
+        Calendar.syncedState = "denied";
+        verify(child(page, "calendarLoadNotice").text.indexOf("permission") >= 0);
+        Calendar.syncedState = "ready";
+        verify(!child(page, "calendarLoadNotice").visible);
+    }
+
     function test_monthListsTheDaysEvents() {
         const app = makeApp([ev(1, {
                 time: "15:00"

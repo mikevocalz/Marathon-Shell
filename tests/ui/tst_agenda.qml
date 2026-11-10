@@ -69,6 +69,17 @@ TestCase {
         compare(day.map(e => e.title), ["Holiday", "Pills", "Rent", "Standup", "Gym"]);
     }
 
+    function test_remoteAllDayEndIsExclusive() {
+        const event = {
+            source: "caldav",
+            date: "2026-10-20",
+            endDate: "2026-10-22",
+            allDay: true
+        };
+        compare(Agenda.forDay([event], new Date(2026, 9, 21)).length, 1);
+        compare(Agenda.forDay([event], new Date(2026, 9, 22)).length, 0);
+    }
+
     function test_emptyDay() {
         compare(Agenda.forDay([], new Date(2026, 9, 12)).length, 0);
         compare(Agenda.forDay(undefined, new Date(2026, 9, 12)).length, 0);

@@ -112,3 +112,91 @@ fn the_address_book_answers_permitted_callers() {
             if matches!(error.as_ref(), zbus::fdo::Error::AccessDenied(text) if text == "Missing permission: system")));
     });
 }
+
+#[test]
+fn the_calendar_feed_hides_disabled_accounts_and_requires_calendar_permission() {
+    let Some(mut bus) = PrivateBus::start() else {
+        return;
+    };
+    let home = tempfile::tempdir().unwrap();
+    let data = home.path().join("data/Marathon OS/Marathon Shell/marathon");
+    std::fs::create_dir_all(&data).unwrap();
+    std::fs::write(data.join("dav-accounts.json"),
+        r#"{"accounts":[{"id":"account-a","displayName":"Personal","enabled":true,"collectionsCalendar":["https://calendar.example/events/"]}]}"#).unwrap();
+    async_io::block_on(async {
+        let _shell = bus.shell(&[]).await.unwrap();
+        bus.run(env!("CARGO_BIN_EXE_marathon-davd"), home.path(), BUS)
+            .await
+            .unwrap();
+        let app = bus.connect().await.unwrap();
+        // Write a cached provider row after the real daemon creates its schema.
+        let database = rusqlite::Connection::open(data.join("dav-events.db")).unwrap();
+        database
+            .execute(
+                "INSERT INTO calendar_events VALUES (?1, ?2, ?3, ?4, '', ?5, '', ?6, ?7, 0, '', 0)",
+                rusqlite::params![
+                    "account-a",
+                    "https://calendar.example/events/",
+                    "event.ics",
+                    "event-uid",
+                    "Dentist",
+                    1_792_490_400_000i64,
+                    1_792_491_300_000i64
+                ],
+            )
+            .unwrap();
+        let events: Vec<OwnedValue> = call(&app, "CalendarEvents", "ListEvents", &())
+            .await
+            .unwrap();
+        assert_eq!(events.len(), 1);
+        let event =
+            HashMap::<String, OwnedValue>::try_from(events.into_iter().next().unwrap()).unwrap();
+        assert_eq!(text(&event, "title"), "Dentist");
+        assert_eq!(text(&event, "accountLabel"), "Personal");
+        assert_eq!(text(&event, "source"), "caldav");
+        assert!(bool::try_from(&event["readOnly"]).unwrap());
+        assert!(text(&event, "id").contains("account-a"));
+
+        call::<()>(&app, "Dav", "EnableAccount", &("account-a", false))
+            .await
+            .unwrap();
+        let hidden: Vec<OwnedValue> = call(&app, "CalendarEvents", "ListEvents", &())
+            .await
+            .unwrap();
+        assert_eq!(hidden, Vec::<OwnedValue>::new());
+        call::<()>(&app, "Dav", "EnableAccount", &("account-a", true))
+            .await
+            .unwrap();
+        let restored: Vec<OwnedValue> = call(&app, "CalendarEvents", "ListEvents", &())
+            .await
+            .unwrap();
+        assert_eq!(restored.len(), 1);
+        assert!(call::<bool>(&app, "Dav", "RemoveAccount", &("account-a",))
+            .await
+            .unwrap());
+        let removed: Vec<OwnedValue> = call(&app, "CalendarEvents", "ListEvents", &())
+            .await
+            .unwrap();
+        assert_eq!(removed, Vec::<OwnedValue>::new());
+    });
+
+    let Some(mut refused_bus) = PrivateBus::start() else {
+        return;
+    };
+    let refused_home = tempfile::tempdir().unwrap();
+    async_io::block_on(async {
+        let _shell = refused_bus.shell(&["calendar"]).await.unwrap();
+        refused_bus
+            .run(
+                env!("CARGO_BIN_EXE_marathon-davd"),
+                refused_home.path(),
+                BUS,
+            )
+            .await
+            .unwrap();
+        let app = refused_bus.connect().await.unwrap();
+        let refused = call::<Vec<OwnedValue>>(&app, "CalendarEvents", "ListEvents", &()).await;
+        assert!(matches!(refused, Err(zbus::Error::FDO(error))
+            if matches!(error.as_ref(), zbus::fdo::Error::AccessDenied(text) if text == "Missing permission: calendar")));
+    });
+}

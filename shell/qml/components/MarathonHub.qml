@@ -6,6 +6,7 @@ import QtQml.Models
 import QtQuick.Layouts
 import Sailfish.Silica 1.0 as Silica
 import Marathon.Silica 1.0 as Silica
+import Marathon.Silica 1.0 as MarathonControls
 import "../core/Agenda.js" as Agenda
 import "../core/Clock.js" as Clock
 
@@ -73,15 +74,14 @@ Rectangle {
                 events = [];
             }
         }
-        hub.agenda = Agenda.forDay(events, new Date());
+        hub.agenda = Agenda.forDay(events.concat(CalendarEventsClient.events), new Date());
     }
 
     onVisibleChanged: {
         if (visible) {
-            list.contentY = list.originY;
-            list.atTop = true;
             refreshAgenda();
             WeatherClient.refresh();
+            CalendarEventsClient.refresh();
         } else {
             dismissOverlay();
         }
@@ -89,7 +89,15 @@ Rectangle {
     Component.onCompleted: {
         refreshAgenda();
         WeatherClient.refresh();
+        CalendarEventsClient.refresh();
         refreshSources();
+    }
+
+    Connections {
+        target: CalendarEventsClient
+        function onEventsChanged() {
+            hub.refreshAgenda();
+        }
     }
 
     Connections {
@@ -202,9 +210,13 @@ Rectangle {
         // appearing once a second app posts, grow the list above its first
         // row and would push the date out of view.
         property bool atTop: true
+        onMovementStarted: atTop = false
         onMovementEnded: atTop = atYBeginning
         onOriginYChanged: if (atTop)
-            Qt.callLater(() => list.contentY = list.originY)
+            Qt.callLater(() => {
+                if (list.atTop)
+                    list.contentY = list.originY;
+            })
 
         add: Transition {
             NumberAnimation {
@@ -332,7 +344,8 @@ Rectangle {
                             objectName: "hubAgendaTitle"
                             Layout.minimumWidth: 0
                             Layout.fillWidth: true
-                            text: entry.modelData.title
+                            text: entry.modelData.title + (entry.modelData.recurrenceIncomplete ? qsTr(" · Series preview") : "")
+                            textFormat: Text.PlainText
                             wrapMode: Text.Wrap
                         }
                     }
@@ -395,11 +408,11 @@ Rectangle {
             }
         }
 
-        // In the pager the page bar sits over the bottom; the last row can
-        // scroll clear of it.
+        // The last row can scroll clear of the page bar and viewport action.
+        // This must not depend on effective visibility, which changes on hide.
         footer: Item {
             width: list.width
-            height: hub.isInPeekMode ? Silica.Theme.paddingLarge : Silica.Theme.itemSizeMedium
+            height: (hub.isInPeekMode ? Silica.Theme.paddingLarge : Silica.Theme.itemSizeMedium) + (list.atYBeginning ? 0 : newestNotifications.height + 2 * Silica.Theme.paddingLarge)
         }
 
         delegate: MHubRow {
@@ -467,7 +480,7 @@ Rectangle {
     Rectangle {
         anchors.bottom: parent.bottom
         width: parent.width
-        height: Silica.Theme.itemSizeMedium + Silica.Theme.paddingLarge
+        height: Silica.Theme.itemSizeMedium + Silica.Theme.paddingLarge + (list.atYBeginning ? 0 : newestNotifications.height + Silica.Theme.paddingLarge)
         gradient: Gradient {
             GradientStop {
                 position: 0.0
@@ -478,7 +491,26 @@ Rectangle {
                 color: Silica.Theme.rgba("black", 0.85)
             }
         }
-        visible: !hub.isInPeekMode && !list.atYEnd
+        visible: newestNotifications.visible || (!hub.isInPeekMode && !list.atYEnd)
+    }
+
+    MarathonControls.Button {
+        id: newestNotifications
+
+        objectName: "newestNotifications"
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: (hub.isInPeekMode ? 0 : Silica.Theme.itemSizeMedium) + Silica.Theme.paddingLarge
+        width: Math.max(0, Math.min(implicitWidth, parent.width - 2 * Silica.Theme.horizontalPageMargin))
+        visible: !hub.overlayOpen && list.count > 0 && !list.atYBeginning
+        text: qsTr("Newest notifications")
+        onClicked: {
+            list.cancelFlick();
+            list.atTop = true;
+            list.currentIndex = 0;
+            list.positionViewAtBeginning();
+            list.forceActiveFocus(Qt.OtherFocusReason);
+        }
     }
 
     WeatherSheet {

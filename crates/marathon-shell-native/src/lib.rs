@@ -20,6 +20,7 @@ mod audit;
 mod backdrop;
 pub mod bluetooth;
 mod boost;
+pub mod calendar_events;
 mod cgroup;
 pub mod clipboard;
 mod clock;

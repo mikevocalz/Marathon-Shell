@@ -37,6 +37,12 @@ Page {
 
         PullDownMenu {
             MenuItem {
+                objectName: "reloadCalendarsItem"
+                text: qsTr("Reload account calendars")
+                enabled: page.app.syncedState !== "loading"
+                onClicked: page.app.refreshSynced()
+            }
+            MenuItem {
                 objectName: "agendaItem"
                 text: qsTr("All events")
                 onClicked: pageStack.push(Qt.resolvedUrl("AgendaPage.qml"), {
@@ -72,6 +78,17 @@ Page {
                 objectName: "monthHeader"
                 title: Qt.locale().standaloneMonthName(page.date.getMonth())
                 description: page.date.getFullYear()
+            }
+
+            Label {
+                objectName: "calendarLoadNotice"
+                x: Theme.horizontalPageMargin
+                width: parent.width - 2 * Theme.horizontalPageMargin
+                visible: page.app.syncedState === "unavailable" || page.app.syncedState === "denied"
+                text: page.app.syncedState === "denied" ? qsTr("Calendar permission is needed to show account events.") : qsTr("Account calendars couldn’t refresh. Showing the events already loaded.")
+                wrapMode: Text.Wrap
+                color: Theme.secondaryColor
+                font.pixelSize: Theme.fontSizeSmall
             }
 
             // A square or landscape screen shows the day's events beside the month.

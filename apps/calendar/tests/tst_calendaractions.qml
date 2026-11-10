@@ -80,6 +80,23 @@ TestCase {
         }).map(e => e.id), [3, 2]);
     }
 
+    function test_listPreservesTheLocalIntegerIdContract() {
+        Calendar.events = Calendar.events.concat([
+            {
+                id: "dav:remote-event",
+                source: "caldav",
+                readOnly: true,
+                title: "Remote appointment",
+                date: "2026-10-21",
+                time: "12:00",
+                recurring: "none"
+            }
+        ]);
+        compare(list({
+            from: "2026-10-21"
+        }).map(e => e.id), [3, 2]);
+    }
+
     function test_listDefaultsToToday() {
         Calendar.reset([
             {

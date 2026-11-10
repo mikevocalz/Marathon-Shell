@@ -65,6 +65,7 @@ TestCase {
         hubWindow.width = 540;
         SettingsManagerCpp.timeFormat = "12h";
         SettingsManagerCpp.store = {};
+        CalendarEventsClient.events = [];
         hub.refreshAgenda();
         Keel.Ambience.applyForwarded("/desktop/sailfish/silica/font_size_multiplier=1");
         NotificationService.clear();
@@ -122,6 +123,30 @@ TestCase {
         return Qt.formatDate(d, "yyyy-MM-dd");
     }
 
+    function test_syncedCalendarUpdatesJoinLocalAgendaWithoutChangingLocalStorage() {
+        const today = isoDay(0);
+        const local = {
+            id: 1,
+            title: "Local",
+            date: today,
+            time: "10:00"
+        };
+        SettingsManagerCpp.set("calendar/events", [local]);
+        CalendarEventsClient.events = [
+            {
+                id: "dav:remote",
+                title: "Remote",
+                date: today,
+                time: "11:00",
+                readOnly: true
+            }
+        ];
+        tryCompare(hub, "agenda", [local, CalendarEventsClient.events[0]]);
+        compare(SettingsManagerCpp.get("calendar/events", []).length, 1);
+        CalendarEventsClient.events = [];
+        tryCompare(hub, "agenda", [local]);
+    }
+
     function test_dayLabels() {
         compare(hub.dayLabel(isoDay(0)), "Today");
         compare(hub.dayLabel(isoDay(1)), "Yesterday");
@@ -131,6 +156,74 @@ TestCase {
         const ten = new Date();
         ten.setDate(ten.getDate() - 10);
         compare(hub.dayLabel(isoDay(10)), Qt.formatDate(ten, "d MMMM"));
+    }
+
+    function test_reopenPreservesTriagePosition_data() {
+        return [
+            {
+                tag: "pointer",
+                keyboard: false
+            },
+            {
+                tag: "keyboard",
+                keyboard: true
+            }
+        ];
+    }
+
+    function test_reopenPreservesTriagePosition(data) {
+        hub.dismissOverlay();
+        for (let i = 0; i < 30; ++i)
+            addNotification(i + 1, "email");
+        hub.filterApp = "email";
+        hub.unreadOnly = true;
+        const list = findChild(hub, "hubList");
+        tryCompare(list, "count", 30);
+        list.positionViewAtIndex(15, ListView.Beginning);
+        tryVerify(() => !list.atYBeginning);
+        list.movementEnded();
+        verify(!list.atTop);
+        waitForPolish(list);
+        waitForRendering(hub);
+        const position = list.contentY;
+
+        hub.visible = false;
+        hub.visible = true;
+        waitForPolish(list);
+        waitForRendering(hub);
+
+        compare(hub.filterApp, "email");
+        verify(hub.unreadOnly);
+        compare(list.contentY, position);
+        verify(!list.atTop);
+        const newest = findChild(hub, "newestNotifications");
+        tryVerify(() => newest.visible);
+        const positionInHub = newest.mapToItem(hub, 0, 0);
+        verify(positionInHub.y >= Constants.statusBarHeight);
+        verify(positionInHub.y + newest.height <= hub.height - Silica.Theme.itemSizeMedium);
+        compare(newest.Accessible.name, "Newest notifications");
+        list.positionViewAtEnd();
+        tryVerify(() => list.atYEnd);
+        let last = null;
+        tryVerify(() => (last = list.itemAtIndex(list.count - 1)) !== null);
+        waitForPolish(list);
+        tryVerify(() => last.mapToItem(hub, 0, last.height).y <= positionInHub.y);
+        if (data.keyboard) {
+            hubWindow.requestActivate();
+            newest.forceActiveFocus(Qt.TabFocusReason);
+            tryVerify(() => newest.activeFocus);
+            verify(findChild(newest, "focusFrame").visible);
+            keyClick(Qt.Key_Return);
+        } else {
+            mouseClick(newest);
+        }
+        tryVerify(() => list.atYBeginning);
+        verify(list.atTop);
+        verify(!newest.visible);
+        compare(list.currentIndex, 0);
+        tryVerify(() => list.currentItem && list.currentItem.activeFocus);
+        compare(hub.filterApp, "email");
+        verify(hub.unreadOnly);
     }
 
     function test_agendaTextRemainsReadable_data() {

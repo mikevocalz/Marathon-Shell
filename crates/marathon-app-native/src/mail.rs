@@ -9,6 +9,7 @@
 
 use std::fs::File;
 use std::pin::Pin;
+use std::time::Duration;
 
 use cxx_qt::{CxxQtType, Threading};
 use cxx_qt_lib::{
@@ -126,6 +127,17 @@ pub mod qobject {
         #[cxx_name = "attachmentFailed"]
         fn attachment_failed(self: Pin<&mut MailService>, message_id: &QString, location: &QString);
         #[qsignal]
+        #[cxx_name = "messageLoaded"]
+        fn message_loaded(
+            self: Pin<&mut MailService>,
+            request: &QString,
+            message: &QMap_QString_QVariant,
+        );
+        /// not-found, timeout or unavailable. No message was marked as read.
+        #[qsignal]
+        #[cxx_name = "messageLoadFailed"]
+        fn message_load_failed(self: Pin<&mut MailService>, request: &QString, reason: &QString);
+        #[qsignal]
         #[cxx_name = "oauthAuthUrlReady"]
         fn oauth_auth_url_ready(self: Pin<&mut MailService>, url: &QString);
         #[qsignal]
@@ -138,9 +150,6 @@ pub mod qobject {
         /// Syncs the open folder and sends what waits; false with no account.
         #[qinvokable]
         fn refresh(self: &MailService) -> bool;
-        #[qinvokable]
-        #[cxx_name = "cancelSync"]
-        fn cancel_sync(self: &MailService);
         #[qinvokable]
         #[cxx_name = "refreshFolders"]
         fn refresh_folders(self: &MailService, account_id: &QString);
@@ -169,6 +178,15 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "openMessage"]
         fn open_message(self: &MailService, message_id: &QString) -> QMap_QString_QVariant;
+        /// An owned read; returns its request identity, or empty if not admitted.
+        /// Completion is delivered on the GUI thread. A closed page ignores it.
+        #[qinvokable]
+        #[cxx_name = "requestMessage"]
+        fn request_message(
+            self: Pin<&mut MailService>,
+            message_id: &QString,
+            account_id: &QString,
+        ) -> QString;
         #[qinvokable]
         #[cxx_name = "saveAttachment"]
         fn save_attachment(self: &MailService, message_id: &QString, location: &QString) -> bool;
@@ -253,6 +271,7 @@ pub struct MailServiceRust {
     oauth_providers: QStringList,
     sync_state: QString,
     last_error: QString,
+    message_request: u64,
 }
 
 impl Default for MailServiceRust {
@@ -271,6 +290,7 @@ impl Default for MailServiceRust {
             oauth_providers: QStringList::default(),
             sync_state: QString::from("offline"),
             last_error: QString::default(),
+            message_request: 0,
         }
     }
 }
@@ -289,6 +309,21 @@ fn number(map: &Map, key: &str) -> i64 {
 
 fn maps(list: &QList<QVariant>) -> Vec<Map> {
     list.iter().filter_map(QVariant::value).collect()
+}
+
+fn message_map(wire: &std::collections::HashMap<String, OwnedValue>) -> Map {
+    let mut message = variant::qmap(wire);
+    let date = number(&message, "date");
+    if date > 0 {
+        message.insert(
+            QString::from("date"),
+            QVariant::from(&QDateTime::from_msecs_since_epoch(
+                date,
+                &QTimeZone::system_time_zone(),
+            )),
+        );
+    }
+    message
 }
 
 impl cxx_qt::Initialize for MailService {
@@ -628,8 +663,6 @@ impl MailService {
         true
     }
 
-    fn cancel_sync(&self) {}
-
     calls! { MAIL;
         refresh_folders(account_id: &QString) => "RefreshFolders";
         cancel_account_setup() => "CancelAccountSetup";
@@ -700,18 +733,57 @@ impl MailService {
         ) else {
             return Map::default();
         };
-        let mut m = variant::qmap(&wire);
-        let date = number(&m, "date");
-        if date > 0 {
-            m.insert(
-                QString::from("date"),
-                QVariant::from(&QDateTime::from_msecs_since_epoch(
-                    date,
-                    &QTimeZone::system_time_zone(),
-                )),
-            );
+        message_map(&wire)
+    }
+
+    fn request_message(
+        mut self: Pin<&mut Self>,
+        message_id: &QString,
+        account_id: &QString,
+    ) -> QString {
+        self.as_mut().rust_mut().message_request += 1;
+        let request = self.message_request.to_string();
+        let response_id = request.clone();
+        let args = (message_id.to_string(), account_id.to_string());
+        let qt = self.qt_thread();
+        let task = async move {
+            let result = io::timeout(
+                Duration::from_secs(30),
+                MAIL.ask::<_, std::collections::HashMap<String, OwnedValue>>(
+                    "GetMessageInAccount",
+                    &args,
+                ),
+            )
+            .await;
+            qt.queue(move |obj| {
+                let request = QString::from(&response_id);
+                let reason = match result {
+                    Some(Ok(wire)) => {
+                        obj.message_loaded(&request, &message_map(&wire));
+                        return;
+                    }
+                    Some(Err(zbus::Error::FDO(error)))
+                        if matches!(*error, zbus::fdo::Error::FileNotFound(_)) =>
+                    {
+                        "not-found"
+                    }
+                    Some(Err(zbus::Error::MethodError(name, _, _)))
+                        if name.as_str() == "org.freedesktop.DBus.Error.FileNotFound" =>
+                    {
+                        "not-found"
+                    }
+                    Some(Err(_)) => "unavailable",
+                    None => "timeout",
+                };
+                obj.message_load_failed(&request, &QString::from(reason));
+            })
+            .ok();
+        };
+        if let Err(error) = io::try_spawn(task) {
+            marathon_rt::log::warn("Mail", format_args!("cannot load message: {error}"));
+            return QString::default();
         }
-        m
+        QString::from(&request)
     }
 
     fn save_attachment(&self, message_id: &QString, location: &QString) -> bool {
@@ -794,7 +866,7 @@ pub struct MailListRust {
     rows: Vec<Map>,
 }
 
-const ROLES: [&str; 11] = [
+const ROLES: [&str; 12] = [
     "messageId",
     "subject",
     "from",
@@ -806,6 +878,7 @@ const ROLES: [&str; 11] = [
     "id",
     "name",
     "address",
+    "reference",
 ];
 const FIRST_ROLE: i32 = 0x0100 + 1; // Qt::UserRole + 1
 

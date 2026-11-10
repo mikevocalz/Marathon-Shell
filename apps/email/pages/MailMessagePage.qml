@@ -9,7 +9,13 @@ Page {
 
     property var app
     property string messageId: ""
-    readonly property var msg: messageId !== "" ? app.mail.openMessage(messageId) : ({})
+    property string accountId: ""
+    property var msg: ({})
+    property string loadState: "loading"
+    property string loadError: ""
+    property string requestId: ""
+    property bool markedRead: false
+    readonly property string actionId: msg.messageId || messageId
     readonly property string subject: msg.subject || ""
     readonly property var toList: msg.to || []
     readonly property var ccList: msg.cc || []
@@ -25,6 +31,24 @@ Page {
     property bool showImages: false
     readonly property bool canShowImages: bodyHtml !== "" && !showImages
 
+    function loadMessage() {
+        loadState = "loading";
+        loadError = "";
+        msg = {};
+        requestId = app.mail.requestMessage(messageId, accountId);
+        if (requestId === "") {
+            loadState = "error";
+            loadError = "unavailable";
+        }
+    }
+
+    function markWhenRead() {
+        if (loadState === "ready" && status === PageStatus.Active && app.applicationActive && !markedRead) {
+            markedRead = true;
+            app.mail.markAsRead(actionId, true);
+        }
+    }
+
     function openAttachment(location) {
         if (savedPaths[location]) {
             Qt.openUrlExternally("file://" + savedPaths[location]);
@@ -36,7 +60,7 @@ Page {
     function saveAttachment(location, open) {
         if (fetching !== "")
             return;
-        if (!app.mail.saveAttachment(messageId, location)) {
+        if (!app.mail.saveAttachment(actionId, location)) {
             Notices.show(qsTr("Couldn't save the attachment."));
             return;
         }
@@ -48,11 +72,34 @@ Page {
         return bytes >= 1048576 ? qsTr("%1 MB").arg((bytes / 1048576).toFixed(1)) : qsTr("%1 kB").arg(Math.max(1, Math.round(bytes / 1024)));
     }
 
+    onStatusChanged: markWhenRead()
+    Component.onCompleted: loadMessage()
+
+    Connections {
+        target: page.app
+        function onApplicationActiveChanged() {
+            page.markWhenRead();
+        }
+    }
+
     Connections {
         target: page.app.mail
         ignoreUnknownSignals: true
+        function onMessageLoaded(request, message) {
+            if (request !== page.requestId)
+                return;
+            page.msg = message;
+            page.loadState = "ready";
+            page.markWhenRead();
+        }
+        function onMessageLoadFailed(request, reason) {
+            if (request !== page.requestId)
+                return;
+            page.loadError = reason;
+            page.loadState = "error";
+        }
         function onAttachmentSaved(messageId, location, path) {
-            if (messageId !== page.messageId || location !== page.fetching)
+            if (messageId !== page.actionId || location !== page.fetching)
                 return;
             page.fetching = "";
             page.savedPaths = Object.assign({}, page.savedPaths, {
@@ -64,7 +111,7 @@ Page {
                 Notices.show(qsTr("Saved to Downloads"));
         }
         function onAttachmentFailed(messageId, location) {
-            if (messageId !== page.messageId || location !== page.fetching)
+            if (messageId !== page.actionId || location !== page.fetching)
                 return;
             page.fetching = "";
             Notices.show(qsTr("Couldn't download the attachment. Check your connection and try again."));
@@ -81,6 +128,12 @@ Page {
 
         PullDownMenu {
             MenuItem {
+                objectName: "retryMessageItem"
+                text: qsTr("Try again")
+                visible: page.loadState === "error"
+                onClicked: page.loadMessage()
+            }
+            MenuItem {
                 objectName: "showImagesItem"
                 text: qsTr("Show images")
                 visible: page.canShowImages
@@ -89,36 +142,45 @@ Page {
             MenuItem {
                 objectName: "forwardItem"
                 text: qsTr("Forward")
+                visible: page.loadState === "ready"
                 onClicked: page.app.compose(Object.assign(Logic.forwardPrefill(page.msg, page.dateText), {
-                    draftKey: "forward-" + page.messageId
+                    draftKey: "forward-" + page.actionId,
+                    senderAccountId: page.msg.accountId || page.accountId,
+                    senderAccountName: page.msg.accountName || "",
+                    senderAccountAddress: page.msg.accountAddress || ""
                 }))
             }
             MenuItem {
                 objectName: "replyItem"
                 text: qsTr("Reply")
+                visible: page.loadState === "ready"
                 onClicked: page.app.compose(Object.assign(Logic.replyPrefill(page.msg), {
-                    draftKey: "reply-" + page.messageId
+                    draftKey: "reply-" + page.actionId,
+                    senderAccountId: page.msg.accountId || page.accountId,
+                    senderAccountName: page.msg.accountName || "",
+                    senderAccountAddress: page.msg.accountAddress || ""
                 }))
             }
         }
         PushUpMenu {
+            visible: page.loadState === "ready"
             MenuItem {
                 objectName: "unreadItem"
                 text: qsTr("Mark as unread")
                 onClicked: {
-                    page.app.mail.markAsRead(page.messageId, false);
+                    page.app.mail.markAsRead(page.actionId, false);
                     page.app.showInbox();
                 }
             }
             MenuItem {
                 objectName: "archiveItem"
                 text: qsTr("Archive")
-                onClicked: page.app.requestMove(page.messageId, "archive")
+                onClicked: page.app.requestMove(page.actionId, "archive")
             }
             MenuItem {
                 objectName: "deleteItem"
                 text: qsTr("Delete")
-                onClicked: page.app.requestMove(page.messageId, "trash")
+                onClicked: page.app.requestMove(page.actionId, "trash")
             }
         }
 
@@ -128,8 +190,25 @@ Page {
             width: parent.width
 
             PageHeader {
-                title: page.subject !== "" ? page.subject : qsTr("(No subject)")
+                title: page.loadState !== "ready" ? qsTr("Mail") : page.subject !== "" ? page.subject : qsTr("(No subject)")
+                description: page.msg.accountName || ""
                 wrapMode: Text.Wrap
+            }
+            BusyIndicator {
+                objectName: "messageLoading"
+                anchors.horizontalCenter: parent.horizontalCenter
+                running: page.loadState === "loading"
+                visible: running
+                size: BusyIndicatorSize.Medium
+            }
+            Label {
+                objectName: "messageError"
+                x: Theme.horizontalPageMargin
+                width: parent.width - 2 * x
+                visible: page.loadState === "error"
+                text: page.loadError === "not-found" ? qsTr("This message is no longer available in that account.") : qsTr("Couldn't load this message. Pull down to try again.")
+                wrapMode: Text.Wrap
+                color: Theme.secondaryHighlightColor
             }
             Label {
                 objectName: "fromLabel"
@@ -256,7 +335,7 @@ Page {
                 objectName: "plainBody"
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * Theme.horizontalPageMargin
-                visible: page.bodyHtml === ""
+                visible: page.loadState === "ready" && page.bodyHtml === ""
                 text: page.bodyPlain !== "" ? page.bodyPlain : qsTr("This message has no text.")
                 wrapMode: Text.Wrap
                 font.pixelSize: Theme.fontSizeSmall

@@ -654,9 +654,11 @@ impl Permissions {
                         .permission_denied(&QString::from(&a), &QString::from(&p));
                     ipc::signal("Permissions", "PermissionDenied", (a, p));
                 }
-                Event::Revoked(a, p) => self
-                    .as_mut()
-                    .permission_revoked(&QString::from(&a), &QString::from(&p)),
+                Event::Revoked(a, p) => {
+                    self.as_mut()
+                        .permission_revoked(&QString::from(&a), &QString::from(&p));
+                    ipc::signal("Permissions", "PermissionRevoked", (a, p));
+                }
                 Event::Requested(a, ps) => self
                     .as_mut()
                     .permissions_requested(&QString::from(&a), &list(&ps)),
