@@ -202,6 +202,7 @@ Page {
                 size: BusyIndicatorSize.Medium
             }
             Label {
+                textFormat: Text.PlainText
                 objectName: "messageError"
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * x
@@ -211,6 +212,7 @@ Page {
                 color: Theme.secondaryHighlightColor
             }
             Label {
+                textFormat: Text.PlainText
                 objectName: "fromLabel"
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * Theme.horizontalPageMargin
@@ -220,6 +222,7 @@ Page {
                 color: Theme.highlightColor
             }
             Label {
+                textFormat: Text.PlainText
                 objectName: "toLabel"
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * Theme.horizontalPageMargin
@@ -230,6 +233,7 @@ Page {
                 color: Theme.secondaryHighlightColor
             }
             Label {
+                textFormat: Text.PlainText
                 objectName: "ccLabel"
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * Theme.horizontalPageMargin
@@ -240,10 +244,12 @@ Page {
                 color: Theme.secondaryHighlightColor
             }
             Label {
+                textFormat: Text.PlainText
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * Theme.horizontalPageMargin
                 visible: text !== ""
                 text: page.dateText
+                wrapMode: Text.Wrap
                 font.pixelSize: Theme.fontSizeExtraSmall
                 color: Theme.secondaryHighlightColor
             }
@@ -267,7 +273,7 @@ Page {
                         readonly property bool busy: page.fetching !== "" && page.fetching === location
 
                         objectName: "attachment-" + (modelData.name || "")
-                        contentHeight: Theme.itemSizeSmall
+                        contentHeight: Math.max(Theme.itemSizeSmall, attachmentName.height + 2 * Theme.paddingMedium)
                         enabled: location !== ""
                         Accessible.name: (modelData.name || qsTr("Attachment")) + ", " + page.size(modelData.size || 0)
                         onClicked: page.openAttachment(location)
@@ -294,6 +300,9 @@ Page {
                             running: attachment.busy
                         }
                         Label {
+                            id: attachmentName
+                            textFormat: Text.PlainText
+                            objectName: "attachmentName"
                             anchors {
                                 left: attachIcon.right
                                 leftMargin: Theme.paddingMedium
@@ -302,12 +311,13 @@ Page {
                                 verticalCenter: parent.verticalCenter
                             }
                             text: attachment.modelData.name || qsTr("Attachment")
-                            truncationMode: TruncationMode.Fade
+                            wrapMode: Text.Wrap
                             font.pixelSize: Theme.fontSizeSmall
                             color: attachment.highlighted ? Theme.highlightColor : Theme.primaryColor
                         }
                         Label {
                             id: sizeLabel
+                            textFormat: Text.PlainText
 
                             anchors {
                                 right: parent.right
@@ -332,6 +342,7 @@ Page {
                 height: Theme.paddingLarge
             }
             Label {
+                textFormat: Text.PlainText
                 objectName: "plainBody"
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * Theme.horizontalPageMargin

@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Layouts
 import QtQml.Models
 import Sailfish.Silica 1.0
 import Marathon.Silica 1.0
@@ -82,6 +83,7 @@ Page {
                 description: page.app.hasAccount ? Logic.headerDescription(page.mail.currentAccountName, page.mail.unreadCount, page.mail.outboxCount) : ""
             }
             Label {
+                textFormat: Text.PlainText
                 objectName: "syncError"
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * Theme.horizontalPageMargin
@@ -132,7 +134,7 @@ Page {
             readonly property bool attachment: model.hasAttachment == true
 
             hidden: messageId === page.app.pendingMoveId
-            contentHeight: Theme.itemSizeExtraLarge
+            contentHeight: Math.max(Theme.itemSizeExtraLarge, messageLabels.height + 2 * Theme.paddingMedium)
             Accessible.name: (unread ? qsTr("Unread") + ", " : "") + (model.from || "") + ", " + (model.subject || "")
             onClicked: page.app.openMessage(messageId)
             menu: ContextMenu {
@@ -167,61 +169,69 @@ Page {
                 color: Theme.highlightColor
             }
             Column {
+                id: messageLabels
+
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * Theme.horizontalPageMargin
                 anchors.verticalCenter: parent.verticalCenter
+                spacing: Theme.paddingSmall
 
-                Item {
+                GridLayout {
                     width: parent.width
-                    height: sender.height
+                    columns: sender.implicitWidth + metadata.implicitWidth + columnSpacing <= width ? 2 : 1
+                    columnSpacing: Theme.paddingMedium
+                    rowSpacing: Theme.paddingSmall
 
                     Label {
                         id: sender
+                        textFormat: Text.PlainText
 
-                        anchors {
-                            left: parent.left
-                            right: attachIcon.visible ? attachIcon.left : time.left
-                            rightMargin: Theme.paddingMedium
-                        }
+                        objectName: "messageSender"
+                        Layout.fillWidth: true
                         text: item.model.from || ""
-                        truncationMode: TruncationMode.Fade
+                        wrapMode: Text.Wrap
                         color: item.unread || item.highlighted ? Theme.highlightColor : Theme.primaryColor
                     }
-                    Icon {
-                        id: attachIcon
+                    RowLayout {
+                        id: metadata
 
-                        anchors {
-                            right: time.left
-                            rightMargin: Theme.paddingSmall
-                            verticalCenter: sender.verticalCenter
-                        }
-                        visible: item.attachment
-                        source: "image://theme/icon-s-attach"
-                        color: item.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
-                    }
-                    Label {
-                        id: time
+                        Layout.fillWidth: parent.columns === 1
+                        spacing: Theme.paddingSmall
 
-                        anchors {
-                            right: parent.right
-                            baseline: sender.baseline
+                        Icon {
+                            visible: item.attachment
+                            source: "image://theme/icon-s-attach"
+                            color: item.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
                         }
-                        text: item.model.timestamp || ""
-                        font.pixelSize: Theme.fontSizeExtraSmall
-                        color: item.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
+                        Label {
+                            textFormat: Text.PlainText
+                            Layout.fillWidth: true
+                            text: item.model.timestamp || ""
+                            wrapMode: Text.Wrap
+                            font.pixelSize: Theme.fontSizeExtraSmall
+                            color: item.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
+                        }
                     }
                 }
                 Label {
+                    textFormat: Text.PlainText
+                    objectName: "messageSubject"
                     width: parent.width
                     text: item.model.subject || qsTr("(No subject)")
-                    truncationMode: TruncationMode.Fade
+                    wrapMode: Text.Wrap
+                    maximumLineCount: 2
+                    elide: Text.ElideRight
                     font.pixelSize: Theme.fontSizeSmall
                     color: item.highlighted ? Theme.highlightColor : Theme.primaryColor
                 }
                 Label {
+                    textFormat: Text.PlainText
+                    objectName: "messagePreview"
                     width: parent.width
                     text: String(item.model.snippet || "").replace(/\s+/g, " ").trim()
-                    truncationMode: TruncationMode.Fade
+                    wrapMode: Text.Wrap
+                    maximumLineCount: 2
+                    elide: Text.ElideRight
                     font.pixelSize: Theme.fontSizeExtraSmall
                     color: item.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
                 }

@@ -52,6 +52,7 @@ Page {
                         text: account.modelData.name
                     }
                     Label {
+                        textFormat: Text.PlainText
                         x: Theme.horizontalPageMargin
                         width: parent.width - 2 * Theme.horizontalPageMargin
                         visible: account.modelData.folders.length === 0
@@ -73,8 +74,9 @@ Page {
                             readonly property int shown: modelData.kind === "outbox" || modelData.kind === "drafts" ? modelData.count : modelData.unread
 
                             objectName: "folder-" + account.modelData.name + "-" + modelData.kind
-                            contentHeight: Theme.itemSizeSmall
+                            contentHeight: Math.max(Theme.itemSizeSmall, folderName.height + 2 * Theme.paddingMedium)
                             Accessible.name: modelData.name + (shown > 0 ? ", " + shown : "")
+                            Accessible.selected: current
                             onClicked: page.app.openFolder(account.modelData.id, modelData.id, modelData.kind)
 
                             Icon {
@@ -86,6 +88,8 @@ Page {
                                 color: folder.highlighted || folder.current ? Theme.highlightColor : Theme.primaryColor
                             }
                             Label {
+                                id: folderName
+                                textFormat: Text.PlainText
                                 anchors {
                                     left: folderIcon.right
                                     leftMargin: Theme.paddingMedium
@@ -95,11 +99,12 @@ Page {
                                 }
                                 objectName: "folderName"
                                 text: folder.modelData.name
-                                truncationMode: TruncationMode.Fade
+                                wrapMode: Text.Wrap
                                 color: folder.highlighted || folder.current ? Theme.highlightColor : Theme.primaryColor
                             }
                             Label {
                                 id: countLabel
+                                textFormat: Text.PlainText
 
                                 anchors {
                                     right: parent.right

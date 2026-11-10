@@ -124,6 +124,7 @@ Dialog {
                 title: kind === "forward" ? qsTr("Forward") : kind === "reply" ? qsTr("Reply") : qsTr("New message")
             }
             Label {
+                textFormat: Text.PlainText
                 objectName: "serviceNotice"
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * Theme.horizontalPageMargin
@@ -165,6 +166,7 @@ Dialog {
                 }
 
                 Label {
+                    textFormat: Text.PlainText
                     x: Theme.horizontalPageMargin
                     anchors.verticalCenter: parent.verticalCenter
                     text: qsTr("Cc/Bcc")
@@ -235,6 +237,7 @@ Dialog {
                         source: "image://theme/icon-s-attach"
                     }
                     Label {
+                        textFormat: Text.PlainText
                         anchors {
                             left: attachIcon.right
                             leftMargin: Theme.paddingMedium
