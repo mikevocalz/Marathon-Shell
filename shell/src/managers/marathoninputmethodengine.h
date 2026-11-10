@@ -6,6 +6,7 @@
 #include <QRect>
 #include <QString>
 #include <QStringList>
+#include <optional>
 
 class QKeyEvent;
 namespace marathon {
@@ -72,8 +73,8 @@ class MarathonInputMethodEngine : public QObject {
     const marathon::Settings *m_settings;
     // The hardware key typed as a capital, whose release and repeats the app must not see.
     quint32 m_heldCapital = 0;
-    // The text before the cursor at the last capital: a field reporting it still has not caught up.
-    QString m_capitalisedAt;
+    // The last prefix guards delayed text updates; an empty prefix is a valid recorded value.
+    std::optional<QString> m_capitalisedAt;
 };
 
 #endif
