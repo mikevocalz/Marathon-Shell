@@ -7,6 +7,7 @@
 // needs Lipstick, see ../../README.md).
 
 import QtQuick
+import QtQuick.Layouts
 import Sailfish.Silica 1.0
 import Marathon.Silica 1.0
 import Shipwright.Pilot 1.0
@@ -364,36 +365,47 @@ Page {
                     Pilot.refreshNow();
                 }
             }
-            Row {
+            GridLayout {
+                id: promptLayout
+
                 width: parent.width
+                columns: width >= Theme.itemSizeExtraLarge * 2 + Theme.itemSizeMedium * 2 ? 2 : 1
+                columnSpacing: 0
+                rowSpacing: Theme.paddingSmall
+
                 PromptField {
                     id: input
                     objectName: "input"
-                    width: parent.width - (send.visible ? send.width : 0) - mic.width
+                    Layout.fillWidth: true
                     placeholderText: qsTr("Ask Pilot")
                     label: qsTr("Ask Pilot")
                 }
-                IconButton {
-                    id: send
-                    objectName: "sendButton"
-                    visible: input.text.trim().length > 0
-                    icon.source: "image://theme/icon-m-send"
-                    enabled: Conversation.canSend
-                    Accessible.name: qsTr("Send question")
-                    onClicked: input.submit()
-                }
-                // Tap to talk.
-                Orb {
-                    id: mic
-                    objectName: "micButton"
-                    width: Theme.itemSizeMedium
-                    height: Theme.itemSizeMedium
-                    anchors.verticalCenter: input.verticalCenter
-                    enabled: Conversation.canSend && !Pilot.offline
-                    glyph: true
-                    mode: page.listening && !page.transcribing ? "listening" : Pilot.busy ? "thinking" : "idle"
-                    level: Conversation.level
-                    onClicked: page.listen()
+                RowLayout {
+                    Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                    Layout.rightMargin: promptLayout.columns === 1 ? Theme.horizontalPageMargin : 0
+                    spacing: 0
+
+                    IconButton {
+                        id: send
+                        objectName: "sendButton"
+                        visible: input.text.trim().length > 0
+                        icon.source: "image://theme/icon-m-send"
+                        enabled: Conversation.canSend
+                        Accessible.name: qsTr("Send question")
+                        onClicked: input.submit()
+                    }
+                    // Tap to talk.
+                    Orb {
+                        id: mic
+                        objectName: "micButton"
+                        Layout.preferredWidth: Theme.itemSizeMedium
+                        Layout.preferredHeight: Theme.itemSizeMedium
+                        enabled: Conversation.canSend && !Pilot.offline
+                        glyph: true
+                        mode: page.listening && !page.transcribing ? "listening" : Pilot.busy ? "thinking" : "idle"
+                        level: Conversation.level
+                        onClicked: page.listen()
+                    }
                 }
             }
         }

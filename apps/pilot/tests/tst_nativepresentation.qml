@@ -147,6 +147,73 @@ TestCase {
         overlay.hide();
     }
 
+    function test_compactComposerKeepsEditingRoomAndSelectionAcrossResize() {
+        const app = makeApp();
+        app.width = 320;
+        app.height = 640;
+        const page = app.pageStack.currentPage;
+        const field = findChild(page, "input");
+        const send = findChild(page, "sendButton");
+        const mic = findChild(page, "micButton");
+        field.text = "Review the planning meeting notes";
+        field.forceActiveFocus();
+        field.select(0, 6);
+        verify(waitForPolish(app.Window.window));
+        verify(field.width - field.textLeftMargin - field.textRightMargin >= Theme.itemSizeExtraLarge);
+        verify(send.mapToItem(field, 0, 0).y >= field.height);
+        for (const action of [send, mic]) {
+            tryVerify(() => {
+                const p = action.mapToItem(page, 0, 0);
+                return p.x >= 0 && p.y >= 0 && p.x + action.width <= page.width + 1 && p.y + action.height <= page.height + 1;
+            }, 5000, action.objectName + " stays inside the compact page after its panel transition");
+            verify(action.width >= Theme.itemSizeSmall && action.height >= Theme.itemSizeSmall);
+        }
+        app.width = 720;
+        verify(waitForPolish(app.Window.window));
+        compare(findChild(page, "input"), field);
+        compare(field.selectedText, "Review");
+        verify(field.activeFocus);
+        app.width = 320;
+        verify(waitForPolish(app.Window.window));
+        compare(field.selectedText, "Review");
+        keyClick(Qt.Key_Return);
+        compare(Pilot.requests, [
+            {
+                text: "Review the planning meeting notes",
+                spoken: false
+            }
+        ]);
+        compare(Conversation.draft, "");
+    }
+
+    function test_compactOverlayKeepsPromptAndContextInsideItsBounds() {
+        Conversation.now = {
+            on_screen: "Calendar"
+        };
+        const overlay = createTemporaryObject(overlayComponent, testCase, {
+            width: 320,
+            height: 640
+        });
+        overlay.show();
+        const field = findChild(overlay, "overlayInput");
+        field.text = "Keep this question while changing size";
+        field.select(5, 9);
+        verify(waitForPolish(overlay.Window.window));
+        verify(field.width - field.textLeftMargin - field.textRightMargin >= Theme.itemSizeExtraLarge);
+        const context = findChild(overlay, "overlayContext");
+        verify(context.width > 0 && !context.truncated);
+        for (const name of ["overlayInput", "overlaySend", "overlayMic", "overlayExpand", "overlayClose"]) {
+            const control = findChild(overlay, name);
+            const p = control.mapToItem(overlay, 0, 0);
+            verify(p.x >= 0 && p.y >= 0 && p.x + control.width <= overlay.width + 1 && p.y + control.height <= overlay.height + 1, name);
+        }
+        overlay.width = 720;
+        verify(waitForPolish(overlay.Window.window));
+        compare(field.selectedText, "this");
+        compare(field.text, Conversation.draft);
+        overlay.hide();
+    }
+
     function test_acceptedFollowupRevealsItsTurnAfterReadingOlderAnswers() {
         const app = makeApp();
         const main = app.pageStack.currentPage;
