@@ -3,9 +3,11 @@
 #![allow(clippy::unwrap_used, reason = "tests")]
 
 use std::collections::HashMap;
+use std::time::Duration;
 
+use futures_lite::StreamExt;
 use marathon_rt::testing::PrivateBus;
-use zbus::Connection;
+use zbus::{Connection, MatchRule, MessageStream};
 use zbus::{OwnedVariant as OwnedValue, Variant};
 
 const BUS: &str = "org.marathonos.Dav";
@@ -32,6 +34,53 @@ async fn call<R: serde::de::DeserializeOwned + zbus::Type>(
 
 fn text(row: &HashMap<String, OwnedValue>, key: &str) -> String {
     String::try_from(row[key].try_clone().unwrap()).unwrap()
+}
+
+#[test]
+fn sync_state_changes_reach_the_native_state_mirror() {
+    let Some(mut bus) = PrivateBus::start() else {
+        return;
+    };
+    let home = tempfile::tempdir().unwrap();
+    async_io::block_on(async {
+        let _shell = bus.shell(&[]).await.unwrap();
+        bus.run(env!("CARGO_BIN_EXE_marathon-davd"), home.path(), BUS)
+            .await
+            .unwrap();
+        let app = bus.connect().await.unwrap();
+        let rule = MatchRule::builder()
+            .msg_type(zbus::message::Type::Signal)
+            .sender(BUS)
+            .path("/org/marathonos/Shell/Dav")
+            .interface("org.marathonos.Shell.Dav1")
+            .member("StateChanged")
+            .build()
+            .unwrap();
+        let mut changes = MessageStream::for_match_rule(rule, &app, None)
+            .await
+            .unwrap();
+        call::<()>(&app, "Dav", "SyncNow", &()).await.unwrap();
+        for syncing in [true, false] {
+            let message = futures_lite::future::or(async { changes.next().await }, async {
+                async_io::Timer::after(Duration::from_secs(10)).await;
+                None
+            })
+            .await
+            .unwrap()
+            .unwrap();
+            // Match Marathon.Platform's real mirror: one a{sv} body, not an
+            // invalidation that would need a polling workaround.
+            let state: HashMap<String, OwnedValue> = message.body().deserialize().unwrap();
+            assert_eq!(bool::try_from(&state["syncing"]).unwrap(), syncing);
+            assert_eq!(text(&state, "lastError"), "");
+            if !syncing {
+                assert!(i64::try_from(&state["lastSyncMs"]).unwrap() > 0);
+                let read: HashMap<String, OwnedValue> =
+                    call(&app, "Dav", "GetState", &()).await.unwrap();
+                assert_eq!(state, read);
+            }
+        }
+    });
 }
 
 #[test]

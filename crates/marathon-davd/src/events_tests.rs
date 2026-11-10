@@ -12,7 +12,7 @@ fn parse(properties: &str) -> Result<Event, String> {
         .next()
         .ok_or("Missing test calendar")?
         .map_err(|e| e.to_string())?;
-    Event::from_ical(&calendar.events[0])
+    Event::from_ical(&calendar.events[0]).map_err(|error| error.to_string())
 }
 
 fn event(uid: &str, title: &str) -> Event {
@@ -129,6 +129,7 @@ fn identity_is_account_and_collection_scoped_and_survives_resource_moves() {
                 &[resource("old.ics", vec![event("same", "Title")])],
                 &[],
                 true,
+                &[],
             )
             .unwrap();
     }
@@ -143,6 +144,7 @@ fn identity_is_account_and_collection_scoped_and_survives_resource_moves() {
             &[resource("new.ics", vec![event("same", "Updated")])],
             &["old.ics".into()],
             false,
+            &[],
         )
         .unwrap();
     let after = store.list(&accounts).unwrap();
@@ -163,15 +165,16 @@ fn deletion_and_full_refresh_never_cross_accounts_or_collections() {
                 &[resource("shared.ics", vec![event("same", "Title")])],
                 &[],
                 true,
+                &[],
             )
             .unwrap();
     }
     let accounts = [account("a", &["one", "two"]), account("b", &["one"])];
     store
-        .apply("a", "one", &[], &["shared.ics".into()], false)
+        .apply("a", "one", &[], &["shared.ics".into()], false, &[])
         .unwrap();
     assert_eq!(store.list(&accounts).unwrap().len(), 2);
-    store.apply("a", "two", &[], &[], true).unwrap();
+    store.apply("a", "two", &[], &[], true, &[]).unwrap();
     let remaining = store.list(&accounts).unwrap();
     assert_eq!(remaining.len(), 1);
     assert_eq!(text(&remaining[0], "accountId"), "b");
@@ -188,6 +191,7 @@ fn a_failed_batch_keeps_the_previous_cache() {
             &[resource("old", vec![event("old", "Keep me")])],
             &[],
             true,
+            &[],
         )
         .unwrap();
     store.0.execute_batch("CREATE TRIGGER fail_one BEFORE INSERT ON calendar_events WHEN NEW.uid = 'bad' BEGIN SELECT RAISE(ABORT, 'test write failure'); END;").unwrap();
@@ -200,6 +204,7 @@ fn a_failed_batch_keeps_the_previous_cache() {
         )],
         &[],
         true,
+        &[],
     );
     assert!(result.is_err());
     let kept = store.list(&[account("a", &["c"])]).unwrap();
@@ -218,6 +223,7 @@ fn removed_disabled_and_undiscovered_accounts_are_hidden() {
             &[resource("event", vec![event("e", "Event")])],
             &[],
             true,
+            &[],
         )
         .unwrap();
     assert_eq!(store.list(&[]).unwrap(), Vec::<Value>::new());
