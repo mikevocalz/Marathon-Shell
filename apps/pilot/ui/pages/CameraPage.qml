@@ -9,6 +9,7 @@
 import QtQuick
 import QtMultimedia
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 import Shipwright.Pilot 1.0
 
 Page {
@@ -53,6 +54,7 @@ Page {
 
         Label {
             id: status
+            textFormat: Text.PlainText
             x: Theme.horizontalPageMargin
             width: parent.width - 2 * x
             wrapMode: Text.Wrap

@@ -6,7 +6,9 @@
 // calm line, not an error.
 
 import QtQuick
+import QtQuick.Layouts
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 
 Glass {
     id: card
@@ -27,17 +29,19 @@ Glass {
         }
     }
 
-    Row {
+    RowLayout {
+        width: parent.width
         spacing: Theme.paddingMedium
         Icon {
-            anchors.verticalCenter: parent.verticalCenter
             width: Theme.iconSizeSmallPlus
             height: width
             source: "image://theme/icon-m-date"
             color: Theme.highlightColor
         }
         Label {
-            anchors.verticalCenter: parent.verticalCenter
+            Layout.fillWidth: true
+            wrapMode: Text.Wrap
+            textFormat: Text.PlainText
             text: card.heading()
             font.pixelSize: Theme.fontSizeMedium
             color: Theme.highlightColor
@@ -45,6 +49,7 @@ Glass {
     }
 
     Label {
+        textFormat: Text.PlainText
         visible: card.events.length === 0
         width: parent.width
         wrapMode: Text.Wrap
@@ -61,7 +66,9 @@ Glass {
             width: parent ? parent.width : 0
             spacing: Theme.paddingLarge
             Label {
+                textFormat: Text.PlainText
                 width: Theme.itemSizeMedium
+                wrapMode: Text.Wrap
                 text: eventRow.modelData.all_day ? qsTr("All day") : Format.formatDate(new Date(eventRow.modelData.start * 1000), Formatter.TimeValue)
                 font.pixelSize: Theme.fontSizeSmall
                 color: Theme.highlightColor
@@ -69,18 +76,18 @@ Glass {
             Column {
                 width: parent.width - Theme.itemSizeMedium - Theme.paddingLarge
                 Label {
+                    textFormat: Text.PlainText
                     width: parent.width
                     text: eventRow.modelData.title
                     wrapMode: Text.Wrap
-                    maximumLineCount: 2
-                    truncationMode: TruncationMode.Fade
                     color: Theme.highlightColor
                 }
                 Label {
+                    textFormat: Text.PlainText
                     width: parent.width
                     visible: !!eventRow.modelData.location
                     text: eventRow.modelData.location || ""
-                    truncationMode: TruncationMode.Fade
+                    wrapMode: Text.Wrap
                     font.pixelSize: Theme.fontSizeExtraSmall
                     color: Theme.secondaryHighlightColor
                 }

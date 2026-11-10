@@ -11,6 +11,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 
 Glass {
     id: card
@@ -54,6 +55,7 @@ Glass {
         height: Math.max(heading.height, hide.height)
         Label {
             id: heading
+            textFormat: Text.PlainText
             anchors.verticalCenter: parent.verticalCenter
             width: parent.width - hide.width - Theme.paddingMedium
             wrapMode: Text.Wrap
@@ -64,6 +66,7 @@ Glass {
         IconButton {
             id: hide
             objectName: "guideHide"
+            Accessible.name: qsTr("Hide getting started")
             anchors {
                 right: parent.right
                 verticalCenter: parent.verticalCenter
@@ -84,6 +87,8 @@ Glass {
             width: parent ? parent.width : 0
             height: Math.max(Theme.itemSizeSmall, texts.height + Theme.paddingMedium)
             highlightedColor: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
+            Accessible.name: modelData.title + ", " + modelData.hint
+            Accessible.description: done ? qsTr("Completed") : ""
             onClicked: card.openLesson(lesson.modelData.step)
             // Done: Silica's ringed tick; to do: the ring alone.
             Item {
@@ -120,6 +125,7 @@ Glass {
                     verticalCenter: parent.verticalCenter
                 }
                 Label {
+                    textFormat: Text.PlainText
                     width: parent.width
                     wrapMode: Text.Wrap
                     text: lesson.modelData.title
@@ -127,6 +133,7 @@ Glass {
                     color: lesson.highlighted || !lesson.done ? Theme.highlightColor : Theme.secondaryHighlightColor
                 }
                 Label {
+                    textFormat: Text.PlainText
                     width: parent.width
                     wrapMode: Text.Wrap
                     text: lesson.modelData.hint
@@ -149,11 +156,16 @@ Glass {
     BackgroundItem {
         objectName: "guideCapabilities"
         width: parent.width
-        height: Theme.itemSizeSmall
+        height: Math.max(Theme.itemSizeSmall, capabilitiesLabel.height + 2 * Theme.paddingMedium)
+        Accessible.name: capabilitiesLabel.text
         highlightedColor: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
         onClicked: card.openCapabilities()
         Label {
+            id: capabilitiesLabel
+            textFormat: Text.PlainText
             anchors.verticalCenter: parent.verticalCenter
+            width: parent.width
+            wrapMode: Text.Wrap
             text: qsTr("Everything Pilot can do in your apps")
             font.pixelSize: Theme.fontSizeSmall
             color: Theme.highlightColor

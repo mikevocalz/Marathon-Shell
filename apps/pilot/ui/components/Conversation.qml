@@ -10,12 +10,16 @@ pragma Singleton
 
 import QtQuick
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 import Shipwright.Pilot 1.0
 
 QtObject {
     id: conversation
 
     readonly property ListModel model: ListModel {}
+    // One unfinished prompt follows the conversation between the app and overlay.
+    property string draft: ""
+    readonly property bool canSend: Pilot.connected && !Pilot.busy
     // The home (pilotd's Now) and the stage of the turn in progress.
     property var now: ({})
     property string stage: "thinking"
@@ -50,6 +54,8 @@ QtObject {
 
     // Entries were added: the views bring the newest into view.
     signal grew
+    // A user admitted a new turn; all views should reveal its reply.
+    signal turnStarted
 
     // Every entry has every role (a ListModel takes its roles from the
     // first one): who said it, the card, when, and how a confirmation was
@@ -123,8 +129,8 @@ QtObject {
 
     function send(text) {
         text = text.trim();
-        if (text.length === 0 || Pilot.busy)
-            return;
+        if (text.length === 0 || !canSend)
+            return false;
         model.append(entry({
             who: "you",
             kind: "you",
@@ -133,24 +139,30 @@ QtObject {
         grew();
         if (now.on_screen)
             markGuide("screen");
+        if (draft.trim() === text)
+            draft = "";
         Pilot.ask(text, false);
+        turnStarted();
+        return true;
     }
 
     function answer(index, approved) {
         var e = model.get(index);
-        if (e.answered)
+        if (e.answered || !canSend)
             return;
         model.setProperty(index, "allowed", approved);
         model.setProperty(index, "answered", true);
         Pilot.confirm(e.cardId, approved);
+        turnStarted();
     }
 
     function listen() {
-        if (Pilot.busy)
+        if (!canSend)
             return;
         listening = true;
         markGuide("voice");
         Pilot.listen();
+        turnStarted();
     }
 
     // A new conversation: on screen, and as context for Pilot's next answer.

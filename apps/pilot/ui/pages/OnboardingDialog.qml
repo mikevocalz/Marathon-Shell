@@ -16,6 +16,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 import Shipwright.Pilot 1.0
 import "../components"
 
@@ -69,6 +70,7 @@ Dialog {
                 mode: "idle"
             }
             Label {
+                textFormat: Text.PlainText
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * x
                 horizontalAlignment: Text.AlignHCenter
@@ -78,6 +80,7 @@ Dialog {
                 color: Theme.highlightColor
             }
             Label {
+                textFormat: Text.PlainText
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * x
                 horizontalAlignment: Text.AlignHCenter
@@ -159,12 +162,14 @@ Dialog {
                             Column {
                                 width: parent.width - abilityIcon.width - Theme.paddingLarge
                                 Label {
+                                    textFormat: Text.PlainText
                                     width: parent.width
                                     wrapMode: Text.Wrap
                                     text: ability.modelData.say
                                     color: Theme.highlightColor
                                 }
                                 Label {
+                                    textFormat: Text.PlainText
                                     width: parent.width
                                     wrapMode: Text.Wrap
                                     text: ability.modelData.what
@@ -202,6 +207,7 @@ Dialog {
                         anchors.horizontalCenter: parent.horizontalCenter
                     }
                     Label {
+                        textFormat: Text.PlainText
                         x: Theme.horizontalPageMargin
                         width: parent.width - 2 * x
                         wrapMode: Text.Wrap
@@ -210,6 +216,7 @@ Dialog {
                         color: Theme.highlightColor
                     }
                     Label {
+                        textFormat: Text.PlainText
                         x: Theme.horizontalPageMargin
                         width: parent.width - 2 * x
                         wrapMode: Text.Wrap
@@ -246,6 +253,7 @@ Dialog {
                         cancelText: qsTr("Back")
                     }
                     Label {
+                        textFormat: Text.PlainText
                         x: Theme.horizontalPageMargin
                         width: parent.width - 2 * x
                         wrapMode: Text.Wrap
@@ -253,6 +261,7 @@ Dialog {
                         text: qsTr("Timers, alarms, reminders, music and your calendar are handled on this phone.")
                     }
                     Label {
+                        textFormat: Text.PlainText
                         x: Theme.horizontalPageMargin
                         width: parent.width - 2 * x
                         wrapMode: Text.Wrap
@@ -260,6 +269,7 @@ Dialog {
                         text: qsTr("Other questions are answered in the cloud, with what I remember about you when it helps. " + "Names, numbers and addresses are replaced before anything is sent.")
                     }
                     Label {
+                        textFormat: Text.PlainText
                         x: Theme.horizontalPageMargin
                         width: parent.width - 2 * x
                         wrapMode: Text.Wrap
@@ -279,6 +289,7 @@ Dialog {
                         onCheckedChanged: first.spoken = checked
                     }
                     Label {
+                        textFormat: Text.PlainText
                         x: Theme.horizontalPageMargin
                         width: parent.width - 2 * x
                         wrapMode: Text.Wrap

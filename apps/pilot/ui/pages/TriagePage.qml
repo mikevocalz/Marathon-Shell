@@ -8,6 +8,7 @@
 
 import QtQuick
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 import Shipwright.Pilot 1.0
 
 Page {
@@ -92,24 +93,25 @@ Page {
                 width: parent.width - 2 * Theme.horizontalPageMargin
 
                 Label {
+                    textFormat: Text.PlainText
                     width: parent.width
-                    truncationMode: TruncationMode.Fade
+                    wrapMode: Text.Wrap
                     color: row.highlighted || row.urgent ? Theme.highlightColor : Theme.primaryColor
                     text: row.title
                 }
                 Label {
+                    textFormat: Text.PlainText
                     visible: text.length > 0
                     width: parent.width
-                    maximumLineCount: 2
                     wrapMode: Text.Wrap
-                    elide: Text.ElideRight
                     font.pixelSize: Theme.fontSizeSmall
                     color: row.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
                     text: row.body
                 }
                 Label {
+                    textFormat: Text.PlainText
                     width: parent.width
-                    truncationMode: TruncationMode.Fade
+                    wrapMode: Text.Wrap
                     font.pixelSize: Theme.fontSizeExtraSmall
                     color: row.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
                     text: (row.source.length > 0 ? row.source + " · " : "") + (row.ts > 0 ? Format.formatDate(new Date(row.ts), Formatter.TimepointRelative) : "")

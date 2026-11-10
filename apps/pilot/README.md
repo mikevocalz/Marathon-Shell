@@ -37,6 +37,44 @@ One turn without D-Bus, against whatever the config points at:
 pilotd --data-dir /tmp/pilot --ask "set a timer for 10 minutes"
 ```
 
+### Native presentation and unfinished prompts
+
+The standalone app imports `Marathon.Silica` after `Sailfish.Silica`. Its APK
+requires the `marathon-silica` runtime package, installed at Qt's normal QML
+module path; the app does not depend on the shell process to supply controls.
+The app and overlay use one native `PromptField` and one unfinished prompt in
+`Conversation.draft`. Closing the overlay, opening the main app, changing width,
+or a busy/disconnected submission attempt keeps that text. The draft lives in
+memory for this app process; it is not a durable draft store across termination.
+
+`Conversation.send()` reports whether the UI admitted a turn. A busy or
+unavailable service returns `false` without adding a question or clearing text.
+An admitted question is appended and passed to the existing native bridge;
+provider or transport errors still arrive through the existing result path.
+This return value does not claim that a remote request or requested action
+succeeded. A suggestion clears the draft only when it submits that same text.
+An accepted question, follow-up, confirmation or voice turn reveals its reply;
+background result updates preserve the position of someone reading older turns.
+
+Source labels and answer prose are plain text. Confirmation details remain
+fully readable before approval. Suggestions, provenance disclosures, copy,
+confirmation and voice actions use the shared keyboard and accessibility paths.
+Timer and alarm cards reflow at narrow widths; an approved plan says “Allowed”
+while its actual result is still pending.
+
+The presentation suite uses the real Qt/Keel and Marathon controls with a small
+`Shipwright.Pilot` service fixture. It exercises draft rejection/continuity,
+keyboard submission, long content, confirmation and follow-up behavior:
+
+```sh
+KEEL_QML=/path/to/real/keel/qml QMLTESTRUNNER=/path/to/qmltestrunner \
+    apps/pilot/tests/run.sh
+```
+
+This is presentation and action-wiring coverage. Daemon transport, model
+responses, voice, camera and device gestures retain their separate integration
+and hardware validation requirements.
+
 ## pilotd
 
 A turn (spec section 4):

@@ -5,7 +5,9 @@
 // that is ("in 2 h 5 min", "tomorrow"), what it is for, and Cancel.
 
 import QtQuick
+import QtQuick.Layouts
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 import Shipwright.Pilot 1.0
 
 Glass {
@@ -44,29 +46,33 @@ Glass {
     property real nowMs: Date.now()
     Timer {
         interval: 30000
-        running: !card.cancelled
+        running: !card.cancelled && card.visible && Window.active
+        triggeredOnStart: true
         repeat: true
         onTriggered: card.nowMs = Date.now()
     }
 
-    Row {
+    RowLayout {
         width: parent.width
         spacing: Theme.paddingLarge
 
         Icon {
-            anchors.verticalCenter: parent.verticalCenter
             source: card.kind === "alarm" ? "image://theme/icon-m-alarm" : "image://theme/icon-m-note"
             color: card.cancelled ? Theme.secondaryColor : Theme.highlightColor
         }
 
         Column {
-            width: parent.width - Theme.iconSizeMedium - 2 * Theme.paddingLarge - cancel.width
-            anchors.verticalCenter: parent.verticalCenter
+            Layout.fillWidth: true
+            spacing: Theme.paddingSmall
 
-            Row {
-                spacing: Theme.paddingMedium
+            Column {
+                width: parent.width
+                spacing: Theme.paddingSmall
                 Label {
+                    textFormat: Text.PlainText
                     objectName: "clockTime"
+                    width: parent.width
+                    wrapMode: Text.Wrap
                     text: Format.formatDate(card.when, Formatter.TimeValue)
                     font.pixelSize: Theme.fontSizeExtraLarge
                     font.family: Theme.fontFamilyHeading
@@ -74,33 +80,32 @@ Glass {
                     color: card.cancelled ? Theme.secondaryColor : Theme.primaryColor
                 }
                 Label {
-                    anchors.baseline: parent.children[0].baseline
+                    textFormat: Text.PlainText
+                    width: parent.width
+                    wrapMode: Text.Wrap
                     text: card.cancelled ? qsTr("Cancelled") : card.relative(card.nowMs)
                     font.pixelSize: Theme.fontSizeSmall
                     color: Theme.secondaryHighlightColor
                 }
             }
             Label {
+                textFormat: Text.PlainText
                 width: parent.width
                 visible: text.length > 0
                 text: card.title.length > 0 ? card.title.charAt(0).toUpperCase() + card.title.slice(1) : card.kind === "alarm" ? qsTr("Alarm") : ""
                 wrapMode: Text.Wrap
-                maximumLineCount: 2
-                truncationMode: TruncationMode.Fade
                 font.pixelSize: Theme.fontSizeMedium
                 color: Theme.secondaryHighlightColor
             }
         }
+    }
 
-        Chip {
-            id: cancel
-            objectName: "clockCancel"
-            anchors.verticalCenter: parent.verticalCenter
-            visible: !card.cancelled
-            text: qsTr("Cancel")
-            secondary: true
-            onClicked: Pilot.cancelClock(card.cookie)
-        }
+    Chip {
+        objectName: "clockCancel"
+        visible: !card.cancelled
+        text: qsTr("Cancel")
+        secondary: true
+        onClicked: Pilot.cancelClock(card.cookie)
     }
 
     Connections {

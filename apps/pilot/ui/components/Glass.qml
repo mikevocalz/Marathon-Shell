@@ -8,6 +8,7 @@
 
 import QtQuick
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 
 Item {
     id: glass
@@ -24,7 +25,7 @@ Item {
         x: Theme.horizontalPageMargin
         width: parent.width - 2 * Theme.horizontalPageMargin
         height: parent.height
-        radius: Theme.paddingLarge
+        radius: Theme.paddingSmall
         color: glass.accent ? Theme.rgba(Theme.highlightBackgroundColor, 0.16) : Theme.rgba(Theme.primaryColor, 0.06)
         border.width: 1
         border.color: glass.accent ? Theme.rgba(Theme.highlightColor, 0.28) : Theme.rgba(Theme.primaryColor, 0.10)

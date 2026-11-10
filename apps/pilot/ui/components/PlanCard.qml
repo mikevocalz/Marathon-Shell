@@ -7,7 +7,9 @@
 // Cancel. Answered, it says which, and the buttons go.
 
 import QtQuick
+import QtQuick.Layouts
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 
 Glass {
     id: card
@@ -23,18 +25,20 @@ Glass {
 
     accent: !answered
 
-    Row {
+    RowLayout {
+        width: parent.width
         spacing: Theme.paddingMedium
         Icon {
-            anchors.verticalCenter: parent.verticalCenter
             width: Theme.iconSizeSmallPlus
             height: width
             source: card.outbound ? "image://theme/icon-m-website" : "image://theme/icon-m-right"
             color: Theme.highlightColor
         }
         Label {
-            anchors.verticalCenter: parent.verticalCenter
-            text: card.answered ? (card.approved ? qsTr("Done") : qsTr("Cancelled")) : card.steps.length > 1 ? qsTr("Pilot will do this") : qsTr("Pilot wants to")
+            Layout.fillWidth: true
+            wrapMode: Text.Wrap
+            textFormat: Text.PlainText
+            text: card.answered ? (card.approved ? qsTr("Allowed") : qsTr("Cancelled")) : card.steps.length > 1 ? qsTr("Pilot will do this") : qsTr("Pilot wants to")
             color: Theme.highlightColor
         }
     }
@@ -60,6 +64,7 @@ Glass {
                 radius: width / 2
                 color: step.modelData.needs_yes ? Theme.rgba(Theme.highlightColor, 0.35) : Theme.rgba(Theme.primaryColor, 0.12)
                 Label {
+                    textFormat: Text.PlainText
                     anchors.centerIn: parent
                     text: step.index + 1
                     font.pixelSize: Theme.fontSizeExtraSmall
@@ -69,18 +74,18 @@ Glass {
             Column {
                 width: parent.width - Theme.iconSizeSmall - Theme.paddingMedium
                 Label {
+                    textFormat: Text.PlainText
                     width: parent.width
                     text: step.modelData.app ? step.modelData.app + " · " + step.modelData.title : step.modelData.title
                     wrapMode: Text.Wrap
                     color: Theme.highlightColor
                 }
                 Label {
+                    textFormat: Text.PlainText
                     width: parent.width
                     visible: text.length > 0
                     text: step.modelData.detail || ""
                     wrapMode: Text.Wrap
-                    maximumLineCount: 3
-                    truncationMode: TruncationMode.Fade
                     font.pixelSize: Theme.fontSizeSmall
                     color: Theme.secondaryHighlightColor
                 }
@@ -89,6 +94,7 @@ Glass {
     }
 
     Label {
+        textFormat: Text.PlainText
         visible: card.outbound && !card.answered
         width: parent.width
         wrapMode: Text.Wrap
@@ -97,20 +103,23 @@ Glass {
         color: Theme.secondaryHighlightColor
     }
 
-    Row {
+    Flow {
+        width: parent.width
         visible: !card.answered
         spacing: Theme.paddingMedium
         topPadding: Theme.paddingSmall
         Button {
             objectName: "allowButton"
-            preferredWidth: Theme.buttonWidthExtraSmall
+            enabled: Conversation.canSend
+            preferredWidth: Math.min(Theme.buttonWidthExtraSmall, parent.width)
             text: qsTr("Allow")
             highlighted: true
             onClicked: card.answer(true)
         }
         Button {
             objectName: "cancelButton"
-            preferredWidth: Theme.buttonWidthExtraSmall
+            enabled: Conversation.canSend
+            preferredWidth: Math.min(Theme.buttonWidthExtraSmall, parent.width)
             text: qsTr("Cancel")
             onClicked: card.answer(false)
         }

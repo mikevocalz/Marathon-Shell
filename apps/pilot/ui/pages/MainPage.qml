@@ -8,6 +8,7 @@
 
 import QtQuick
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 import Shipwright.Pilot 1.0
 import "../components"
 
@@ -24,7 +25,7 @@ Page {
     property bool onboardingShown: false
 
     function send(text) {
-        Conversation.send(text);
+        return Conversation.send(text);
     }
     function answer(index, approved) {
         Conversation.answer(index, approved);
@@ -53,7 +54,7 @@ Page {
     }
 
     function listen() {
-        if (Pilot.busy)
+        if (!Conversation.canSend || Pilot.offline)
             return;
         sheet.open = true;
         input.focus = false;
@@ -70,6 +71,10 @@ Page {
     Connections {
         target: Conversation
         function onGrew() {
+            if (list.follow)
+                Qt.callLater(list.positionIfFollowing);
+        }
+        function onTurnStarted() {
             list.toEnd();
         }
     }
@@ -121,8 +126,9 @@ Page {
                 description: Pilot.offline ? qsTr("Offline") : ""
             }
             Label {
+                textFormat: Text.PlainText
                 objectName: "offlineBanner"
-                visible: Pilot.offline || Pilot.error.length > 0
+                visible: !Pilot.connected || Pilot.offline || Pilot.error.length > 0
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * Theme.horizontalPageMargin
                 topPadding: list.count > 0 ? 0 : Theme.paddingLarge
@@ -130,7 +136,7 @@ Page {
                 wrapMode: Text.Wrap
                 font.pixelSize: Theme.fontSizeSmall
                 color: Theme.highlightColor
-                text: Pilot.error.length > 0 ? Pilot.error : qsTr("The privacy switch is on. Timers, alarms, reminders, media and the calendar still work.")
+                text: !Pilot.connected ? qsTr("Pilot is not connected. Your draft will stay here while it reconnects.") : Pilot.error.length > 0 ? Pilot.error : qsTr("The privacy switch is on. Timers, alarms, reminders, media and the calendar still work.")
             }
             NowView {
                 objectName: "nowView"
@@ -175,15 +181,23 @@ Page {
         // shortens the list; both move the end. Scrolling up to read stops
         // the following until the person is back at the end.
         property bool follow: true
+        function positionIfFollowing() {
+            // A queued layout update must respect a scroll that began since it
+            // was scheduled. Otherwise a delayed answer can pull the reader away.
+            if (follow)
+                positionViewAtEnd();
+        }
         function toEnd() {
             follow = true;
-            Qt.callLater(positionViewAtEnd);
+            Qt.callLater(positionIfFollowing);
         }
-        onCountChanged: toEnd()
+        onCountChanged: if (follow)
+            Qt.callLater(positionIfFollowing)
         onContentHeightChanged: if (follow)
-            Qt.callLater(positionViewAtEnd)
+            Qt.callLater(positionIfFollowing)
         onHeightChanged: if (follow)
-            Qt.callLater(positionViewAtEnd)
+            Qt.callLater(positionIfFollowing)
+        onMovementStarted: follow = false
         onMovementEnded: follow = atYEnd
 
         PullDownMenu {
@@ -290,6 +304,7 @@ Page {
                 bottom: parent.bottom
                 bottomMargin: Theme.itemSizeLarge
             }
+            width: parent.width - 2 * Theme.horizontalPageMargin
             spacing: Theme.paddingLarge
             Orb {
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -299,15 +314,21 @@ Page {
                 level: Conversation.level
             }
             Label {
+                textFormat: Text.PlainText
                 objectName: "listeningText"
-                anchors.horizontalCenter: parent.horizontalCenter
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap
                 text: page.transcribing ? qsTr("Got it…") : qsTr("Listening…")
                 font.pixelSize: Theme.fontSizeLarge
                 font.family: Theme.fontFamilyHeading
                 color: Theme.highlightColor
             }
             Label {
-                anchors.horizontalCenter: parent.horizontalCenter
+                textFormat: Text.PlainText
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap
                 text: page.transcribing ? qsTr("Working out what you said, on this phone") : qsTr("Speak now. Pilot stops when you pause.")
                 font.pixelSize: Theme.fontSizeSmall
                 color: Theme.secondaryHighlightColor
@@ -334,6 +355,7 @@ Page {
             Chip {
                 objectName: "onScreenChip"
                 x: Theme.horizontalPageMargin
+                width: Math.min(implicitWidth, parent.width - 2 * x)
                 visible: !!page.now.on_screen
                 iconSource: "image://theme/icon-m-clear"
                 text: qsTr("Using what %1 shows").arg(page.now.on_screen || "")
@@ -344,29 +366,21 @@ Page {
             }
             Row {
                 width: parent.width
-                TextField {
+                PromptField {
                     id: input
                     objectName: "input"
                     width: parent.width - (send.visible ? send.width : 0) - mic.width
                     placeholderText: qsTr("Ask Pilot")
                     label: qsTr("Ask Pilot")
-                    enabled: !Pilot.busy
-                    EnterKey.iconSource: "image://theme/icon-m-enter-accept"
-                    EnterKey.onClicked: {
-                        page.send(text);
-                        text = "";
-                    }
                 }
                 IconButton {
                     id: send
                     objectName: "sendButton"
                     visible: input.text.trim().length > 0
                     icon.source: "image://theme/icon-m-send"
-                    enabled: !Pilot.busy
-                    onClicked: {
-                        page.send(input.text);
-                        input.text = "";
-                    }
+                    enabled: Conversation.canSend
+                    Accessible.name: qsTr("Send question")
+                    onClicked: input.submit()
                 }
                 // Tap to talk.
                 Orb {
@@ -375,7 +389,7 @@ Page {
                     width: Theme.itemSizeMedium
                     height: Theme.itemSizeMedium
                     anchors.verticalCenter: input.verticalCenter
-                    enabled: !Pilot.offline
+                    enabled: Conversation.canSend && !Pilot.offline
                     glyph: true
                     mode: page.listening && !page.transcribing ? "listening" : Pilot.busy ? "thinking" : "idle"
                     level: Conversation.level

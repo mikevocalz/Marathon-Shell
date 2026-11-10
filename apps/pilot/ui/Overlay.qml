@@ -20,6 +20,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQml.Models
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 import Keel 1.0
 import Shipwright.Pilot 1.0
 import "components"
@@ -54,7 +55,6 @@ Item {
 
     function show() {
         Conversation.markGuide("gesture");
-        input.text = "";
         since = Conversation.model.count;
         session.refilter();
         shown = true;
@@ -82,14 +82,15 @@ Item {
     // The keyboard goes down so that the answer has the room; a tap on
     // the field brings it back for the next question.
     function send(text) {
-        if (text.trim().length === 0)
-            return;
+        if (!Conversation.send(text))
+            return false;
         input.focus = false;
-        Conversation.send(text);
-        input.text = "";
+        return true;
     }
 
     function listen() {
+        if (!Conversation.canSend || Pilot.offline)
+            return;
         input.focus = false;
         Conversation.listen();
     }
@@ -233,7 +234,7 @@ Item {
             SilicaFlickable {
                 id: turnsView
                 width: parent.width
-                height: Math.min(turnsColumn.height, content.height * 0.72 - content.keyboard - bar.height - Theme.paddingLarge)
+                height: Math.max(0, Math.min(turnsColumn.height, content.height * 0.72 - content.keyboard - bar.height - Theme.paddingLarge))
                 visible: turns.count > 0
                 clip: true
                 contentHeight: turnsColumn.height
@@ -287,6 +288,7 @@ Item {
                     level: Conversation.level
                 }
                 Label {
+                    textFormat: Text.PlainText
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: Conversation.transcribing ? qsTr("Got it…") : qsTr("Listening…")
                     font.pixelSize: Theme.fontSizeLarge
@@ -307,6 +309,7 @@ Item {
                     delegate: Chip {
                         required property string modelData
                         text: modelData
+                        enabled: Conversation.canSend
                         onClicked: overlay.send(modelData)
                     }
                 }
@@ -350,6 +353,7 @@ Item {
                             mode: Pilot.busy ? "thinking" : "idle"
                         }
                         Label {
+                            textFormat: Text.PlainText
                             objectName: "overlayContext"
                             anchors.verticalCenter: parent.verticalCenter
                             width: parent.width - Theme.iconSizeSmallPlus - 2 * Theme.itemSizeSmall - 3 * Theme.paddingSmall
@@ -360,6 +364,7 @@ Item {
                         }
                         IconButton {
                             objectName: "overlayExpand"
+                            Accessible.name: qsTr("Open Pilot")
                             anchors.verticalCenter: parent.verticalCenter
                             width: Theme.itemSizeSmall
                             height: Theme.itemSizeSmall
@@ -368,6 +373,7 @@ Item {
                         }
                         IconButton {
                             objectName: "overlayClose"
+                            Accessible.name: qsTr("Close Pilot")
                             anchors.verticalCenter: parent.verticalCenter
                             width: Theme.itemSizeSmall
                             height: Theme.itemSizeSmall
@@ -376,24 +382,34 @@ Item {
                         }
                     }
 
+                    Label {
+                        objectName: "overlayUnavailable"
+                        x: Theme.paddingMedium
+                        width: parent.width - 2 * x
+                        visible: !Pilot.connected
+                        text: qsTr("Pilot is not connected. Your draft is kept here.")
+                        textFormat: Text.PlainText
+                        wrapMode: Text.Wrap
+                        font.pixelSize: Theme.fontSizeExtraSmall
+                        color: Theme.secondaryHighlightColor
+                    }
                     Row {
                         width: parent.width
-                        TextField {
+                        PromptField {
                             id: input
                             objectName: "overlayInput"
                             width: parent.width - (sendButton.visible ? sendButton.width : 0) - mic.width - Theme.paddingSmall
                             placeholderText: overlay.onScreen.length > 0 ? qsTr("Ask about this, or anything") : qsTr("Ask Pilot")
                             label: qsTr("Ask Pilot")
-                            enabled: !Pilot.busy
-                            EnterKey.iconSource: "image://theme/icon-m-enter-accept"
-                            EnterKey.onClicked: overlay.send(text)
+                            onSubmitted: focus = false
                         }
                         IconButton {
                             id: sendButton
                             visible: input.text.trim().length > 0
                             icon.source: "image://theme/icon-m-send"
-                            enabled: !Pilot.busy
-                            onClicked: overlay.send(input.text)
+                            enabled: Conversation.canSend
+                            Accessible.name: qsTr("Send question")
+                            onClicked: input.submit()
                         }
                         Orb {
                             id: mic
@@ -401,7 +417,7 @@ Item {
                             width: Theme.itemSizeMedium
                             height: Theme.itemSizeMedium
                             anchors.verticalCenter: input.verticalCenter
-                            enabled: !Pilot.offline
+                            enabled: Conversation.canSend && !Pilot.offline
                             glyph: true
                             mode: Conversation.listening && !Conversation.transcribing ? "listening" : Pilot.busy ? "thinking" : "idle"
                             level: Conversation.level

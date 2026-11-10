@@ -7,6 +7,7 @@
 
 import QtQuick
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 
 Item {
     id: line
@@ -80,11 +81,12 @@ Item {
             }
         }
         Label {
+            textFormat: Text.PlainText
             objectName: "stageText"
             width: parent.width - dots.width - Theme.paddingMedium
             anchors.verticalCenter: parent.verticalCenter
             text: line.words()
-            truncationMode: TruncationMode.Fade
+            wrapMode: Text.Wrap
             font.pixelSize: Theme.fontSizeSmall
             color: Theme.secondaryHighlightColor
         }

@@ -10,6 +10,7 @@
 
 import QtQuick
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 
 Column {
     id: now
@@ -43,6 +44,7 @@ Column {
         topPadding: Theme.itemSizeLarge
         bottomPadding: Theme.paddingMedium
         Label {
+            textFormat: Text.PlainText
             objectName: "nowGreeting"
             width: parent.width
             text: now.snapshot.greeting || ""
@@ -52,6 +54,7 @@ Column {
             color: Theme.highlightColor
         }
         Label {
+            textFormat: Text.PlainText
             width: parent.width
             text: now.snapshot.offline ? qsTr("%1 · Offline").arg(now.snapshot.date || "") : (now.snapshot.date || "")
             font.pixelSize: Theme.fontSizeMedium
@@ -114,6 +117,7 @@ Column {
                 color: Theme.highlightColor
             }
             Label {
+                textFormat: Text.PlainText
                 anchors.verticalCenter: parent.verticalCenter
                 text: qsTr("Needs you")
                 color: Theme.highlightColor
@@ -126,7 +130,8 @@ Column {
                 required property var modelData
                 width: parent ? parent.width : 0
                 text: (attentionRow.modelData.app ? attentionRow.modelData.app + ": " : "") + attentionRow.modelData.title
-                truncationMode: TruncationMode.Fade
+                wrapMode: Text.Wrap
+                textFormat: Text.PlainText
                 color: Theme.highlightColor
             }
         }
@@ -145,6 +150,7 @@ Column {
         spacing: Theme.paddingMedium
         topPadding: Theme.paddingMedium
         Label {
+            textFormat: Text.PlainText
             text: qsTr("Try asking")
             font.pixelSize: Theme.fontSizeSmall
             color: Theme.secondaryHighlightColor
@@ -152,7 +158,7 @@ Column {
         Grid {
             id: tiles
             width: parent.width
-            columns: 2
+            columns: width < 2 * Theme.itemSizeExtraLarge + spacing ? 1 : 2
             spacing: Theme.paddingMedium
             Repeater {
                 model: now.suggestions
@@ -160,9 +166,10 @@ Column {
                     id: suggestion
                     required property var modelData
                     objectName: "suggestion"
-                    width: parent ? (parent.width - Theme.paddingMedium) / 2 : 0
+                    width: (tiles.width - (tiles.columns - 1) * tiles.spacing) / tiles.columns
                     text: suggestion.modelData.text
                     icon: suggestion.modelData.icon
+                    enabled: Conversation.canSend
                     onClicked: now.ask(suggestion.modelData.text)
                 }
             }
