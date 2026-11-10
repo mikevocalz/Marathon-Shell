@@ -205,7 +205,10 @@ TestCase {
             bodyHtml: "<p>Hi</p>",
             bodyPlain: "Hi"
         });
-        verify(findChild(msg, "htmlBody").active);
+        const body = findChild(msg, "htmlBody");
+        verify(body.active);
+        tryCompare(body, "status", Loader.Ready);
+        verify(body.item !== null);
         verify(!findChild(msg, "plainBody").visible);
     }
 
