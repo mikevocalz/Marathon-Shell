@@ -1,5 +1,6 @@
 import QtQuick
 import QtTest
+import Keel 1.0 as Keel
 import Sailfish.Silica 1.0
 import Marathon.Silica 1.0
 import Marathon.Platform 1.0
@@ -24,6 +25,18 @@ TestCase {
     }
 
     readonly property string todayKey: Logic.dateKey(new Date())
+
+    function initTestCase() {
+        Keel.Ambience.applyForwarded("/desktop/sailfish/silica/font_size_multiplier=1");
+    }
+
+    function cleanup() {
+        Keel.Ambience.applyForwarded("/desktop/sailfish/silica/font_size_multiplier=1");
+    }
+
+    function cleanupTestCase() {
+        Keel.Ambience.applyForwarded("");
+    }
 
     function ev(id, extra) {
         return Object.assign({
@@ -71,6 +84,7 @@ TestCase {
         verify(child(detail, "accountCalendarNotice").text.indexOf("series preview") >= 0);
         verify(!child(detail, "editItem").enabled);
         verify(!child(detail, "deleteItem").enabled);
+        verify(!child(detail, "reminderDetail").visible);
         compare(app.editEvent(remote), null);
         verify(!app.saveEvent(remote));
         verify(!app.deleteEvent(remote.id));
@@ -515,6 +529,72 @@ TestCase {
         verify(child(item, "endTimeLabel").visible);
         verify(item.Accessible.name.indexOf("Room 4") !== -1);
         verify(item.Accessible.name.indexOf(app.timeRangeText(Calendar.events[0])) !== -1);
+    }
+
+    function test_largeTextEventKeepsFullAccountIdentityOnNarrowScreen() {
+        Keel.Ambience.applyForwarded("/desktop/sailfish/silica/font_size_multiplier=1.5");
+        const remote = ev("dav:long-event", {
+            title: "<b>Quarterly planning with the entire research team</b>",
+            location: "Conference room on the east side of the building",
+            accountLabel: "<i>Shared family calendar</i>",
+            readOnly: true,
+            endTime: "11:30"
+        });
+        const app = makeApp([remote]);
+        app.width = 320;
+        app.height = 640;
+        const row = child(app.pageStack.currentPage, "eventItem");
+        const layout = child(row, "eventLayout");
+        const title = child(row, "eventTitle");
+        const details = child(row, "eventDetails");
+        tryCompare(layout, "columns", 1);
+        tryVerify(() => title.lineCount > 1);
+        compare(title.text, remote.title);
+        compare(title.textFormat, Text.PlainText);
+        compare(details.textFormat, Text.PlainText);
+        verify(details.text.indexOf(remote.accountLabel) >= 0);
+        verify(details.mapToItem(row, 0, details.height).y <= row.contentHeight);
+        compare(row.menu, null);
+        app.width = 1024;
+        app.height = 768;
+        tryCompare(layout, "columns", 2);
+        row.clicked(null);
+        compare(pushed(app, 2).eventId, remote.id);
+    }
+
+    function test_shortMonthScrollsWithoutShrinkingDayTargets() {
+        const app = makeApp([]);
+        const page = app.pageStack.currentPage;
+        page.showDate(new Date(2026, 2, 14));
+        app.width = 320;
+        app.height = 240;
+        const picker = child(page, "datePicker");
+        const view = child(page, "monthView");
+        tryVerify(() => picker.cellHeight >= Theme.itemSizeSmall);
+        verify(picker.cellHeight >= Theme.fontSizeMedium + 2 * Theme.paddingMedium);
+        tryVerify(() => view.contentHeight > view.height);
+        compare(Logic.dateKey(page.date), "2026-03-14");
+        app.width = 1024;
+        app.height = 768;
+        compare(Logic.dateKey(page.date), "2026-03-14");
+    }
+
+    function test_yearReflowsInsteadOfShrinkingLargeText() {
+        Keel.Ambience.applyForwarded("/desktop/sailfish/silica/font_size_multiplier=1.5");
+        const app = makeApp([]);
+        app.width = 320;
+        app.height = 640;
+        const page = app.pageStack.currentPage.openYear();
+        pushed(app, 2);
+        const grid = child(page, "yearGrid");
+        tryVerify(() => grid.columns < 3);
+        const firstMonth = child(page, "months").itemAt(0);
+        const days = child(firstMonth, "miniDays").children;
+        const day = Array.from(days).find(item => item.text === "28");
+        verify(day !== undefined);
+        compare(day.font.pixelSize, Theme.fontSizeTiny);
+        verify(day.contentWidth <= day.width + 1);
+        compare(child(page, "months").count, 12);
     }
 
     function test_eventItemOpensAndDeletes() {

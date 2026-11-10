@@ -424,7 +424,7 @@ Page {
 
                             objectName: modelData.name
                             width: parent.width / 3
-                            height: Theme.itemSizeLarge
+                            height: Math.max(Theme.itemSizeLarge, actionLabels.height + 2 * Theme.paddingMedium)
                             enabled: !(modelData.primary && root.app.router.routing)
                             Accessible.name: modelData.text
                             onClicked: {
@@ -437,7 +437,10 @@ Page {
                             }
 
                             Column {
+                                id: actionLabels
+
                                 anchors.centerIn: parent
+                                width: parent.width - 2 * Theme.paddingSmall
                                 spacing: Theme.paddingSmall
 
                                 Icon {
@@ -446,8 +449,13 @@ Page {
                                     color: action.modelData.primary || action.highlighted ? Theme.highlightColor : Theme.primaryColor
                                 }
                                 Label {
+                                    objectName: "mapActionLabel"
                                     anchors.horizontalCenter: parent.horizontalCenter
+                                    width: parent.width
                                     text: action.modelData.primary && root.app.router.routing ? qsTr("Finding a route") : action.modelData.text
+                                    textFormat: Text.PlainText
+                                    horizontalAlignment: Text.AlignHCenter
+                                    wrapMode: Text.Wrap
                                     color: action.modelData.primary || action.highlighted ? Theme.highlightColor : Theme.primaryColor
                                     font.pixelSize: Theme.fontSizeExtraSmall
                                 }

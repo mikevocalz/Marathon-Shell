@@ -76,6 +76,48 @@ Page {
                     focus = false;
                 }
             }
+            Item {
+                width: parent.width
+                height: Math.max(searchBusy.height, searchingLabel.height) + 2 * Theme.paddingMedium
+                visible: root.app.searching
+
+                BusyIndicator {
+                    id: searchBusy
+
+                    objectName: "searchBusy"
+                    x: Theme.horizontalPageMargin
+                    anchors.verticalCenter: parent.verticalCenter
+                    size: BusyIndicatorSize.Small
+                    running: parent.visible && root.status === PageStatus.Active
+                }
+                Label {
+                    id: searchingLabel
+
+                    anchors {
+                        left: searchBusy.right
+                        leftMargin: Theme.paddingMedium
+                        right: parent.right
+                        rightMargin: Theme.horizontalPageMargin
+                        verticalCenter: parent.verticalCenter
+                    }
+                    text: view.count > 0 ? qsTr("Searching… Showing the places already loaded.") : qsTr("Searching…")
+                    textFormat: Text.PlainText
+                    wrapMode: Text.Wrap
+                    color: Theme.secondaryHighlightColor
+                    font.pixelSize: Theme.fontSizeSmall
+                }
+            }
+            Label {
+                objectName: "searchFailureNotice"
+                x: Theme.horizontalPageMargin
+                width: parent.width - 2 * x
+                visible: !view.showingRecent && view.count > 0 && root.app.searchError !== ""
+                text: root.app.searchError + "\n" + qsTr("Showing the places already loaded. Pull down to try again.")
+                textFormat: Text.PlainText
+                wrapMode: Text.Wrap
+                color: Theme.secondaryColor
+                font.pixelSize: Theme.fontSizeSmall
+            }
             SectionHeader {
                 objectName: "recentHeader"
                 text: qsTr("Recent")
@@ -106,55 +148,16 @@ Page {
             hintText: root.app.searchError !== "" ? root.app.searchError : root.app.lastQuery !== "" && !view.showingRecent ? qsTr("Check the spelling, or try a street, city or postcode") : qsTr("Type an address, a place or a postcode")
         }
 
-        BusyIndicator {
-            objectName: "searchBusy"
-            anchors.horizontalCenter: parent.horizontalCenter
-            y: view.headerItem ? view.headerItem.height + Theme.paddingLarge * 4 : 0
-            size: BusyIndicatorSize.Large
-            running: root.app.searching
-        }
-
-        delegate: ListItem {
+        delegate: SummaryListItem {
             id: item
 
             required property var modelData
 
-            contentHeight: Theme.itemSizeMedium
-            Accessible.name: modelData.name + ", " + modelData.address
+            objectName: "placeResult"
+            text: modelData.name
+            description: modelData.address || ""
+            iconSource: view.showingRecent ? "image://theme/icon-m-history" : "image://theme/icon-m-location"
             onClicked: root.choose(item.modelData)
-
-            Icon {
-                id: pin
-
-                x: Theme.horizontalPageMargin
-                anchors.verticalCenter: parent.verticalCenter
-                source: view.showingRecent ? "image://theme/icon-m-history" : "image://theme/icon-m-location"
-                color: item.highlighted ? Theme.highlightColor : Theme.primaryColor
-            }
-            Column {
-                anchors {
-                    left: pin.right
-                    leftMargin: Theme.paddingMedium
-                    right: parent.right
-                    rightMargin: Theme.horizontalPageMargin
-                    verticalCenter: parent.verticalCenter
-                }
-
-                Label {
-                    width: parent.width
-                    text: Theme.highlightText(item.modelData.name, root.query.trim(), Theme.highlightColor)
-                    textFormat: Text.StyledText
-                    color: item.highlighted ? Theme.highlightColor : Theme.primaryColor
-                    truncationMode: TruncationMode.Fade
-                }
-                Label {
-                    width: parent.width
-                    text: item.modelData.address
-                    color: item.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
-                    font.pixelSize: Theme.fontSizeExtraSmall
-                    truncationMode: TruncationMode.Fade
-                }
-            }
         }
 
         VerticalScrollDecorator {}

@@ -38,9 +38,14 @@ BackgroundItem {
 
     Label {
         anchors.centerIn: parent
+        width: parent.width - 2 * Theme.paddingSmall
         visible: root.key !== "⌫"
         text: root.key === "." ? Qt.locale().decimalPoint : root.key
+        textFormat: Text.PlainText
+        horizontalAlignment: Text.AlignHCenter
         font.pixelSize: root.kind === "function" ? Theme.fontSizeMedium : Theme.fontSizeExtraLarge
+        fontSizeMode: Text.HorizontalFit
+        minimumPixelSize: root.kind === "function" ? Theme.fontSizeSmall : Theme.fontSizeMedium
         color: root.highlighted || root.kind === "op" || root.kind === "equals" ? Theme.highlightColor : root.kind === "soft" || root.kind === "function" ? Theme.secondaryColor : Theme.primaryColor
     }
 

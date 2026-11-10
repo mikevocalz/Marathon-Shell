@@ -1,5 +1,6 @@
 import QtQuick
 import QtTest
+import Keel 1.0 as Keel
 import Sailfish.Silica 1.0
 import Marathon.Silica 1.0
 import ".."
@@ -30,6 +31,18 @@ TestCase {
         QtObject {
             property var value
         }
+    }
+
+    function initTestCase() {
+        Keel.Ambience.applyForwarded("/desktop/sailfish/silica/font_size_multiplier=1");
+    }
+
+    function cleanup() {
+        Keel.Ambience.applyForwarded("/desktop/sailfish/silica/font_size_multiplier=1");
+    }
+
+    function cleanupTestCase() {
+        Keel.Ambience.applyForwarded("");
     }
 
     function make(component) {
@@ -87,6 +100,74 @@ TestCase {
         verify(t.page.scientific);
         const display = findChild(t.page, "display");
         verify(display.mapToItem(t.page, 0, 0).y >= 0, "display above the top of the page");
+    }
+
+    function test_largeTextUsesReadableKeysAndPreservesCalculationOnResize() {
+        Keel.Ambience.applyForwarded("/desktop/sailfish/silica/font_size_multiplier=1.5");
+        const t = make();
+        t.app.width = 320;
+        t.app.height = 480;
+        const view = findChild(t.page, "calculatorView");
+        const functions = findChild(t.page, "functionKeys");
+        tryVerify(() => view.contentHeight > view.height);
+        verify(functions.columns < 6);
+        verify(key(t.page, "8").height >= Theme.itemSizeSmall);
+        verify(key(t.page, "8").height >= Theme.fontSizeExtraLarge + 2 * Theme.paddingSmall);
+        verify(key(t.page, "mod").height >= Theme.itemSizeSmall);
+        verify(findChild(t.page, "display").mapToItem(t.page, 0, 0).y >= 0);
+        keyClick(Qt.Key_4);
+        keyClick(Qt.Key_Plus);
+        t.app.width = 1024;
+        t.app.height = 768;
+        compare(t.calc.currentOperator, "+");
+        keyClick(Qt.Key_2);
+        keyClick(Qt.Key_Return);
+        compare(t.calc.displayText, "6");
+        t.app.width = 320;
+        t.app.height = 640;
+        compare(t.calc.displayText, "6");
+        compare(t.calc.history.length, 1);
+    }
+
+    function test_errorWrapsAtTheRequestedTextSize() {
+        Keel.Ambience.applyForwarded("/desktop/sailfish/silica/font_size_multiplier=1.5");
+        const t = make();
+        t.app.width = 320;
+        t.app.height = 640;
+        for (const k of ["8", "÷", "0", "="])
+            t.calc.press(k);
+        const display = findChild(t.page, "display");
+        compare(display.text, "Can't divide by 0");
+        compare(display.fontSizeMode, Text.FixedSize);
+        tryVerify(() => display.lineCount > 1);
+        verify(display.height >= display.contentHeight);
+        keyClick(Qt.Key_Escape);
+        compare(t.calc.errorText, "");
+        compare(t.calc.displayText, "0");
+    }
+
+    function test_savedHistoryIsPlainTextAndGrowsForLongExpressions() {
+        const t = make();
+        t.app.width = 320;
+        const expression = "<b>A saved expression with a long literal label</b>";
+        t.calc.history = [
+            {
+                expression: expression,
+                result: "<i>42</i>",
+                value: 42
+            }
+        ];
+        let row = null;
+        tryVerify(() => (row = findChild(t.page, "historyItem")) !== null);
+        const title = findChild(row, "historyExpression");
+        const result = findChild(row, "historyResult");
+        compare(title.text, expression);
+        compare(title.textFormat, Text.PlainText);
+        compare(result.textFormat, Text.PlainText);
+        tryVerify(() => title.lineCount > 1);
+        verify(result.mapToItem(row, 0, result.height).y <= row.height);
+        row.clicked(null);
+        compare(t.calc.displayText, "42");
     }
 
     function test_keysAreAccessibleButtons() {

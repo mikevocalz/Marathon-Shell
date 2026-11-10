@@ -11,8 +11,19 @@ Page {
 
     property Calculator calc
     property bool scientific: true
-    // Keys shrink on short screens so the display always fits above them.
-    readonly property real keyScale: Math.min(1, (height - 2 * Theme.paddingMedium - Theme.itemSizeLarge - 2.8 * Theme.fontSizeMedium - Theme.paddingLarge) / (5 * Theme.itemSizeLarge + (scientific ? 2 * Theme.itemSizeSmall : 0)))
+    readonly property real functionKeyHeight: Math.max(Theme.itemSizeSmall, Theme.fontSizeMedium + 2 * Theme.paddingSmall)
+    readonly property real minimumKeyHeight: Math.max(Theme.itemSizeSmall, Theme.fontSizeExtraLarge + 2 * Theme.paddingSmall)
+    readonly property real minimumHistoryHeight: Math.max(Theme.itemSizeMedium, historyPlaceholder.visible ? historyPlaceholder.implicitHeight + 2 * Theme.paddingMedium : Theme.fontSizeSmall + Theme.fontSizeMedium + 2 * Theme.paddingMedium)
+    readonly property real keyHeight: Math.max(minimumKeyHeight, Math.min(Theme.itemSizeLarge, (height - 2 * Theme.paddingMedium - displayArea.contentHeight - (scientific ? functionKeys.height : 0) - minimumHistoryHeight) / 5))
+    readonly property real minimumContentHeight: minimumHistoryHeight + displayArea.contentHeight + (scientific ? functionKeys.height : 0) + 5 * keyHeight + 2 * Theme.paddingMedium
+
+    TextMetrics {
+        id: functionText
+
+        text: "mod"
+        font.pixelSize: Theme.fontSizeMedium
+        font.family: Theme.fontFamily
+    }
 
     function tap(k) {
         feedback.play();
@@ -72,9 +83,13 @@ Page {
     }
 
     SilicaFlickable {
-        anchors.fill: parent
+        objectName: "calculatorView"
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: Math.min(parent.width, 6 * Theme.itemSizeExtraLarge)
+        height: parent.height
         // An open display menu pushes the keys down, not the number up.
-        contentHeight: height + displayArea.height - displayArea.contentHeight
+        // Short windows scroll instead of compressing keys below readable sizes.
+        contentHeight: Math.max(height, page.minimumContentHeight) + displayArea.height - displayArea.contentHeight
 
         PullDownMenu {
             MenuItem {
@@ -131,18 +146,22 @@ Page {
                     anchors.verticalCenter: parent.verticalCenter
 
                     Label {
+                        objectName: "historyExpression"
                         width: parent.width
                         horizontalAlignment: Text.AlignRight
-                        truncationMode: TruncationMode.Fade
+                        wrapMode: Text.Wrap
                         text: entry.modelData.expression
+                        textFormat: Text.PlainText
                         font.pixelSize: Theme.fontSizeSmall
                         color: entry.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
                     }
                     Label {
+                        objectName: "historyResult"
                         width: parent.width
                         horizontalAlignment: Text.AlignRight
-                        truncationMode: TruncationMode.Fade
+                        wrapMode: Text.Wrap
                         text: entry.modelData.result
+                        textFormat: Text.PlainText
                         color: entry.highlighted ? Theme.highlightColor : Theme.secondaryHighlightColor
                     }
                 }
@@ -152,6 +171,8 @@ Page {
         }
 
         InfoLabel {
+            id: historyPlaceholder
+
             objectName: "historyPlaceholder"
             anchors.centerIn: history
             width: history.width - 2 * Theme.horizontalPageMargin
@@ -193,7 +214,7 @@ Page {
                     objectName: "expression"
                     width: parent.width
                     horizontalAlignment: Text.AlignRight
-                    truncationMode: TruncationMode.Fade
+                    wrapMode: Text.Wrap
                     visible: text !== ""
                     text: page.calc.expressionText
                     color: Theme.secondaryColor
@@ -202,7 +223,7 @@ Page {
                     objectName: "result"
                     width: parent.width
                     horizontalAlignment: Text.AlignRight
-                    truncationMode: TruncationMode.Fade
+                    wrapMode: Text.Wrap
                     visible: text !== "" && page.calc.currentOperator === ""
                     text: page.calc.lastResult
                     color: Theme.highlightColor
@@ -210,10 +231,11 @@ Page {
                 Label {
                     objectName: "display"
                     width: parent.width
-                    height: Theme.itemSizeLarge
+                    height: Math.max(Theme.itemSizeLarge, implicitHeight)
                     horizontalAlignment: Text.AlignRight
                     verticalAlignment: Text.AlignVCenter
-                    fontSizeMode: Text.HorizontalFit
+                    fontSizeMode: page.calc.errorText !== "" ? Text.FixedSize : Text.HorizontalFit
+                    wrapMode: page.calc.errorText !== "" ? Text.Wrap : Text.NoWrap
                     minimumPixelSize: Theme.fontSizeLarge
                     text: page.calc.displayText
                     font.pixelSize: page.calc.errorText !== "" ? Theme.fontSizeExtraLarge : Theme.fontSizeHuge
@@ -237,7 +259,7 @@ Page {
                 leftMargin: Theme.paddingMedium
                 rightMargin: Theme.paddingMedium
             }
-            columns: 6
+            columns: width >= 6 * (functionText.width + 2 * Theme.paddingMedium) ? 6 : width >= 4 * (functionText.width + 2 * Theme.paddingMedium) ? 4 : 3
 
             Repeater {
                 model: ["sin", "cos", "tan", "ln", "log", "!", "π", "e", "√", "x²", "mod", "ans"]
@@ -246,7 +268,7 @@ Page {
                     required property string modelData
 
                     width: functionKeys.width / functionKeys.columns
-                    height: Theme.itemSizeSmall * page.keyScale
+                    height: page.functionKeyHeight
                     key: modelData
                     kind: "function"
                     onClicked: page.tap(key)
@@ -353,12 +375,14 @@ Page {
                     required property var modelData
 
                     width: keypad.width / keypad.columns
-                    height: Theme.itemSizeLarge * page.keyScale
+                    height: page.keyHeight
                     key: modelData.key
                     kind: modelData.kind
                     onClicked: page.tap(key)
                 }
             }
         }
+
+        VerticalScrollDecorator {}
     }
 }

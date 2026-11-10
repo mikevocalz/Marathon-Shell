@@ -123,7 +123,7 @@ Page {
             }
             DetailItem {
                 objectName: "reminderDetail"
-                visible: !page.accountEventUnavailable
+                visible: !page.accountEventUnavailable && !page.shown.readOnly
                 label: qsTr("Reminder")
                 value: page.app.reminderText(page.shown.reminder === undefined ? 0 : page.shown.reminder)
             }

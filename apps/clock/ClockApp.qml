@@ -12,6 +12,8 @@ import "cover"
 ApplicationWindow {
     id: root
 
+    _defaultLabelFormat: Text.PlainText
+
     readonly property var alarms: Alarms.alarms
     property var cities: Logic.parseCities(Settings.get("clock/worldCities", ""), Logic.defaultCities)
     readonly property string localZone: WorldClock.localZone()

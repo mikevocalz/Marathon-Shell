@@ -10,6 +10,7 @@ import "cover"
 ApplicationWindow {
     id: app
     appId: "calculator"
+    _defaultLabelFormat: Text.PlainText
 
     property var modeStore: ConfigurationValue {
         key: "/apps/calculator/scientific"

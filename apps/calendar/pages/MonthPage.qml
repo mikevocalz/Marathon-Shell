@@ -78,9 +78,12 @@ Page {
                 objectName: "monthHeader"
                 title: Qt.locale().standaloneMonthName(page.date.getMonth())
                 description: page.date.getFullYear()
+                wrapMode: Text.Wrap
             }
 
             Label {
+                id: loadNotice
+
                 objectName: "calendarLoadNotice"
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * Theme.horizontalPageMargin
@@ -91,11 +94,12 @@ Page {
                 font.pixelSize: Theme.fontSizeSmall
             }
 
-            // A square or landscape screen shows the day's events beside the month.
+            // Use two panes only when both retain readable day and event widths.
             Grid {
                 id: body
 
-                readonly property bool sideBySide: page.width > page.height
+                readonly property real minimumPaneWidth: Math.max(7 * Theme.itemSizeSmall, 14 * Theme.fontSizeMedium + 2 * Theme.horizontalPageMargin)
+                readonly property bool sideBySide: page.width > page.height && width >= 2 * minimumPaneWidth
 
                 width: parent.width
                 columns: sideBySide ? 2 : 1
@@ -103,15 +107,15 @@ Page {
                 DatePicker {
                     id: picker
 
-                    readonly property int fillHeight: Math.floor((page.height - header.height - dayRowHeight) / 6)
+                    readonly property int fillHeight: Math.floor((page.height - header.height - (loadNotice.visible ? loadNotice.height : 0) - dayRowHeight - Theme.paddingLarge) / 6)
 
                     objectName: "datePicker"
                     width: body.sideBySide ? body.width / 2 : body.width
                     // Without the week column the margins let the next month peek in.
                     leftMargin: 0
                     rightMargin: 0
-                    // Six weeks fit on a short screen.
-                    cellHeight: body.sideBySide ? fillHeight : Math.min(cellWidth, fillHeight)
+                    // A short screen scrolls instead of shrinking day targets or text.
+                    cellHeight: Math.max(Theme.itemSizeSmall, Theme.fontSizeMedium + 2 * Theme.paddingMedium, body.sideBySide ? fillHeight : Math.min(cellWidth, fillHeight))
                     daysVisible: true
                     weeksVisible: false
                     monthYearVisible: false

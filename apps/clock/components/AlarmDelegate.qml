@@ -14,7 +14,7 @@ ListItem {
     readonly property string repeatText: Logic.repeatSummary(modelData.repeat || [], d => Qt.locale().dayName(d, Locale.ShortFormat))
 
     objectName: "alarmItem"
-    contentHeight: Theme.itemSizeLarge
+    contentHeight: Math.max(Theme.itemSizeLarge, labels.height + 2 * Theme.paddingMedium)
     Accessible.name: [timeText, modelData.label || qsTr("Alarm"), repeatText].filter(s => s).join(", ")
     menu: ContextMenu {
         MenuItem {
@@ -47,6 +47,8 @@ ListItem {
     }
 
     Column {
+        id: labels
+
         anchors {
             left: toggle.right
             right: parent.right
@@ -55,15 +57,21 @@ ListItem {
         }
 
         Label {
+            width: parent.width
             text: root.timeText
+            textFormat: Text.PlainText
+            fontSizeMode: Text.HorizontalFit
+            minimumPixelSize: Theme.fontSizeLarge
             font.pixelSize: Theme.fontSizeExtraLarge
             color: root.highlighted || root.modelData.enabled ? Theme.highlightColor : Theme.primaryColor
         }
         Label {
+            objectName: "alarmSummary"
             width: parent.width
             text: [root.modelData.label || qsTr("Alarm"), root.repeatText].filter(s => s).join(" · ")
+            textFormat: Text.PlainText
             font.pixelSize: Theme.fontSizeSmall
-            truncationMode: TruncationMode.Fade
+            wrapMode: Text.Wrap
             color: root.highlighted || root.modelData.enabled ? Theme.secondaryHighlightColor : Theme.secondaryColor
         }
     }

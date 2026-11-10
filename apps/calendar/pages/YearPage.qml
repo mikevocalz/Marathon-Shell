@@ -56,9 +56,10 @@ Page {
             Grid {
                 id: grid
 
+                objectName: "yearGrid"
                 x: Theme.horizontalPageMargin - Theme.paddingSmall
                 width: parent.width - 2 * x
-                columns: 3
+                columns: Math.max(1, Math.min(3, Math.floor(width / (7 * widestDay.width + 5 * Theme.paddingSmall))))
                 rowSpacing: Theme.paddingLarge
 
                 Repeater {
@@ -73,7 +74,7 @@ Page {
                         readonly property int days: new Date(page.year, index + 1, 0).getDate()
                         readonly property bool current: page.today.getFullYear() === page.year && page.today.getMonth() === index
 
-                        width: grid.width / 3
+                        width: grid.width / grid.columns
                         height: monthTitle.height + miniDays.height + 2 * Theme.paddingSmall
                         Accessible.name: Qt.locale().standaloneMonthName(index) + " " + page.year
                         onClicked: page.monthChosen(page.year, index)
@@ -83,7 +84,9 @@ Page {
 
                             x: Theme.paddingSmall
                             y: Theme.paddingSmall
+                            width: parent.width - 2 * x
                             text: Qt.locale().standaloneMonthName(monthCell.index, Locale.ShortFormat)
+                            wrapMode: Text.Wrap
                             color: monthCell.current || monthCell.highlighted ? Theme.highlightColor : Theme.primaryColor
                             font.pixelSize: Theme.fontSizeMedium
                         }
@@ -91,6 +94,7 @@ Page {
                         Grid {
                             id: miniDays
 
+                            objectName: "miniDays"
                             anchors {
                                 top: monthTitle.bottom
                                 left: parent.left
@@ -111,7 +115,7 @@ Page {
                                     width: (miniDays.width - 6 * miniDays.columnSpacing) / 7
                                     horizontalAlignment: Text.AlignHCenter
                                     text: day >= 1 && day <= monthCell.days ? day : ""
-                                    font.pixelSize: Math.min(Theme.fontSizeTiny, Math.floor(Theme.fontSizeTiny * width / widestDay.width))
+                                    font.pixelSize: Theme.fontSizeTiny
                                     color: isToday ? Theme.highlightColor : Theme.secondaryColor
                                 }
                             }

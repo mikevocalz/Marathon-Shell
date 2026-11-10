@@ -32,6 +32,8 @@ Page {
             PageHeader {
                 title: root.active ? qsTr("Directions") : qsTr("Route")
                 description: root.app.router.routing ? qsTr("Finding a route…") : root.app.selectedPlace ? root.app.selectedPlace.name : ""
+                wrapMode: Text.Wrap
+                descriptionWrapMode: Text.Wrap
 
                 BusyIndicator {
                     parent: parent.extraContent
@@ -130,6 +132,8 @@ Page {
                 id: icon
 
                 x: Theme.horizontalPageMargin
+                width: Theme.iconSizeMedium
+                height: width
                 anchors.verticalCenter: parent.verticalCenter
                 source: Logic.maneuverIcon(item.modelData.type)
                 color: item.current || item.highlighted ? Theme.highlightColor : Theme.primaryColor
@@ -146,14 +150,18 @@ Page {
                 }
 
                 Label {
+                    objectName: "maneuverInstruction"
                     width: parent.width
                     text: item.modelData.instruction
+                    textFormat: Text.PlainText
                     wrapMode: Text.Wrap
                     color: item.current || item.highlighted ? Theme.highlightColor : Theme.primaryColor
                 }
                 Label {
+                    width: parent.width
                     visible: item.modelData.length > 0
                     text: Logic.formatDistance(item.modelData.length * 1000)
+                    wrapMode: Text.Wrap
                     color: item.current || item.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
                     font.pixelSize: Theme.fontSizeExtraSmall
                 }

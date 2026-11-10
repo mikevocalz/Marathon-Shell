@@ -36,8 +36,12 @@ TabItem {
             Label {
                 objectName: "alarmsClock"
                 anchors.horizontalCenter: parent.horizontalCenter
+                width: parent.width - 2 * Theme.horizontalPageMargin
                 text: Format.formatDate(root.now, Formatter.TimeValue)
                 font.pixelSize: Theme.fontSizeHuge
+                fontSizeMode: Text.HorizontalFit
+                minimumPixelSize: Theme.fontSizeLarge
+                horizontalAlignment: Text.AlignHCenter
                 font.features: ({
                         "tnum": 1
                     })
@@ -45,7 +49,10 @@ TabItem {
             }
             Label {
                 anchors.horizontalCenter: parent.horizontalCenter
+                width: parent.width - 2 * Theme.horizontalPageMargin
                 text: Format.formatDate(root.now, Formatter.DateLong)
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap
                 color: Theme.secondaryHighlightColor
             }
         }

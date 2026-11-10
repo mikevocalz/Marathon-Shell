@@ -13,6 +13,8 @@ import "cover"
 ApplicationWindow {
     id: root
 
+    _defaultLabelFormat: Text.PlainText
+
     // Swapped for a placeholder in tests, where WebEngine can't render.
     property url mapSource: Qt.resolvedUrl("MapView.qml")
     property Item map: null

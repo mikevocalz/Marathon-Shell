@@ -33,7 +33,7 @@ Dialog {
             Grid {
                 id: body
 
-                readonly property bool sideBySide: root.width > root.height
+                readonly property bool sideBySide: root.width > root.height && width >= picker.width + 12 * Theme.fontSizeMedium + 3 * Theme.horizontalPageMargin
 
                 width: parent.width
                 columns: sideBySide ? 2 : 1
