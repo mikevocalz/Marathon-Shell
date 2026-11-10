@@ -1,0 +1,667 @@
+{
+  "schema": 1,
+  "source_revision": "094ed581d93e2ca0f8bca61c3a30c011ee601727",
+  "meaning": "Existing source findings awaiting native design review, not certified visual defects or approved new style literals. Remove an allowance when its source is fixed.",
+  "findings": [
+    {
+      "path": "apps/camera/CameraApp.qml",
+      "rule": "color",
+      "expression": "color:\"black\"",
+      "count": 1
+    },
+    {
+      "path": "apps/camera/CameraPage.qml",
+      "rule": "color",
+      "expression": "color:\"black\"",
+      "count": 1
+    },
+    {
+      "path": "apps/camera/CameraPage.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/camera/capture/CaptureView.qml",
+      "rule": "color",
+      "expression": "color:\"#00000000\"",
+      "count": 1
+    },
+    {
+      "path": "apps/camera/capture/CaptureView.qml",
+      "rule": "color",
+      "expression": "color:\"white\"",
+      "count": 1
+    },
+    {
+      "path": "apps/camera/cover/CameraCover.qml",
+      "rule": "color",
+      "expression": "border.color:\"white\"",
+      "count": 1
+    },
+    {
+      "path": "apps/camera/gallery/GalleryView.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/camera/gallery/RollOverlay.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/camera/settings/ExposureSlider.qml",
+      "rule": "color",
+      "expression": "color:\"black\"",
+      "count": 1
+    },
+    {
+      "path": "apps/camera/settings/IsoItem.qml",
+      "rule": "color",
+      "expression": "color:\"white\"",
+      "count": 1
+    },
+    {
+      "path": "apps/camera/settings/SettingsOverlay.qml",
+      "rule": "color",
+      "expression": "color:\"black\"",
+      "count": 2
+    },
+    {
+      "path": "apps/camera/settings/SettingsOverlay.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/pilot/ui/Overlay.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/pilot/ui/components/AnswerCard.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/pilot/ui/components/Chip.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/pilot/ui/components/GuideCard.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/pilot/ui/components/PlanCard.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/pilot/ui/components/SuggestionTile.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/pilot/ui/components/TurnCard.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/pilot/ui/pages/CameraPage.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/pilot/ui/pages/CapabilitiesPage.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/pilot/ui/pages/EgressLogPage.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/pilot/ui/pages/GuidePage.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/pilot/ui/pages/MainPage.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/pilot/ui/pages/OnboardingDialog.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/pilot/ui/pages/SettingsPage.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/pilot/ui/pages/TriagePage.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/pilot/ui/shoal-pilot.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/reef/ui/components/CategoryTile.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/reef/ui/components/CollectionRow.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/reef/ui/components/FeaturedDelegate.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/reef/ui/components/HeroCard.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/reef/ui/components/PackageDelegate.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/reef/ui/components/SeeAllTile.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/reef/ui/pages/AddLicenceDialog.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/reef/ui/pages/BrowsePage.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/reef/ui/pages/CataloguePage.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/reef/ui/pages/InstalledPage.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/reef/ui/pages/LicencesPage.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/reef/ui/pages/PackagePage.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/reef/ui/pages/ScreenshotPage.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/reef/ui/pages/SearchPage.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/reef/ui/pages/SettingsPage.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/reef/ui/shipwright-reef.qml",
+      "rule": "silica-import",
+      "expression": "native-control-import-order",
+      "count": 1
+    },
+    {
+      "path": "apps/settings/pages/AmbiencePage.qml",
+      "rule": "color",
+      "expression": "color:Qt.rgba(0,0,0,0.6)",
+      "count": 1
+    },
+    {
+      "path": "apps/terminal/cover/TerminalCover.qml",
+      "rule": "font",
+      "expression": "font.family:\"JetBrains Mono\"",
+      "count": 1
+    },
+    {
+      "path": "apps/terminal/pages/SettingsPage.qml",
+      "rule": "font",
+      "expression": "font.family:\"monospace\"",
+      "count": 1
+    },
+    {
+      "path": "apps/terminal/pages/SettingsPage.qml",
+      "rule": "font",
+      "expression": "font.pixelSize:100",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/Main.qml",
+      "rule": "color",
+      "expression": "color:\"#000000\"",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/MarathonShell.qml",
+      "rule": "color",
+      "expression": "color:\"#000000\"",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/MarathonShell.qml",
+      "rule": "color",
+      "expression": "color:\"#cc000000\"",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/MarathonShell.qml",
+      "rule": "color",
+      "expression": "color:\"black\"",
+      "count": 2
+    },
+    {
+      "path": "shell/qml/MarathonShell.qml",
+      "rule": "color",
+      "expression": "color:\"white\"",
+      "count": 2
+    },
+    {
+      "path": "shell/qml/MarathonShell.qml",
+      "rule": "font",
+      "expression": "font.family:\"Sora\"",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/MarathonShell.qml",
+      "rule": "font",
+      "expression": "font.family:\"monospace\"",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/MarathonShell.qml",
+      "rule": "font",
+      "expression": "font.pixelSize:15",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/MarathonShell.qml",
+      "rule": "font",
+      "expression": "font.pixelSize:19",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/MarathonShell.qml",
+      "rule": "radius",
+      "expression": "radius:5",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/MarathonShell.qml",
+      "rule": "spacing",
+      "expression": "anchors.rightMargin:6",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/components/AppBackdropBlur.qml",
+      "rule": "color",
+      "expression": "tint:Qt.rgba(0,0,0,0.2)",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/components/MarathonAppGrid.qml",
+      "rule": "color",
+      "expression": "color:\"black\"",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/components/MarathonAppGrid.qml",
+      "rule": "spacing",
+      "expression": "anchors.topMargin:10",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/components/MarathonAppWindow.qml",
+      "rule": "color",
+      "expression": "color:\"black\"",
+      "count": 2
+    },
+    {
+      "path": "shell/qml/components/MarathonBottomBar.qml",
+      "rule": "color",
+      "expression": "color:Qt.rgba(0,0,0,0.6)",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/components/MarathonLockScreen.qml",
+      "rule": "color",
+      "expression": "color:\"black\"",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/components/MarathonPeek.qml",
+      "rule": "color",
+      "expression": "color:\"black\"",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/components/MarathonPinScreen.qml",
+      "rule": "color",
+      "expression": "color:Qt.rgba(0,0,0,0.45)",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/components/MarathonQuickSettings.qml",
+      "rule": "color",
+      "expression": "color:Qt.rgba(0,0,0,0.45)",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/components/MarathonQuickSettings.qml",
+      "rule": "spacing",
+      "expression": "anchors.bottomMargin:1",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/components/ScreenshotPreview.qml",
+      "rule": "color",
+      "expression": "color:\"#FFFFFF\"",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/components/ScreenshotPreview.qml",
+      "rule": "color",
+      "expression": "color:\"black\"",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/components/ShareSheet.qml",
+      "rule": "color",
+      "expression": "color:\"black\"",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/components/TaskCard.qml",
+      "rule": "color",
+      "expression": "color:\"black\"",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/components/TaskCard.qml",
+      "rule": "color",
+      "expression": "color:Qt.rgba(0,0,0,0.55)",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/components/TaskCard.qml",
+      "rule": "spacing",
+      "expression": "anchors.margins:1",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/components/TaskPageIndicator.qml",
+      "rule": "color",
+      "expression": "inactiveColor:Qt.rgba(1,1,1,0.4)",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/components/TaskPageIndicator.qml",
+      "rule": "radius",
+      "expression": "radius:3",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/components/WeatherSheet.qml",
+      "rule": "color",
+      "expression": "color:\"#7fd3a0\"",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/components/WeatherSheet.qml",
+      "rule": "color",
+      "expression": "color:\"#b48cff\"",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/components/WeatherSheet.qml",
+      "rule": "color",
+      "expression": "color:\"#ff5e57\"",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/components/WeatherSheet.qml",
+      "rule": "color",
+      "expression": "color:\"#ff9b53\"",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/components/WeatherSheet.qml",
+      "rule": "color",
+      "expression": "color:\"#ffd36b\"",
+      "count": 2
+    },
+    {
+      "path": "shell/qml/components/oobe/OobeGridPreview.qml",
+      "rule": "color",
+      "expression": "color:\"black\"",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/keyboard/Core/MarathonKeyboard.qml",
+      "rule": "color",
+      "expression": "color:Qt.rgba(0.04,0.04,0.05,0.97)",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/keyboard/Layouts/DynamicLayout.qml",
+      "rule": "color",
+      "expression": "color:\"#666666\"",
+      "count": 2
+    },
+    {
+      "path": "shell/qml/keyboard/Layouts/EmailLayout.qml",
+      "rule": "color",
+      "expression": "color:\"#666666\"",
+      "count": 3
+    },
+    {
+      "path": "shell/qml/keyboard/Layouts/EmojiLayout.qml",
+      "rule": "color",
+      "expression": "color:\"#333333\"",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/keyboard/Layouts/EmojiLayout.qml",
+      "rule": "color",
+      "expression": "color:\"#888888\"",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/keyboard/Layouts/EmojiLayout.qml",
+      "rule": "color",
+      "expression": "color:\"white\"",
+      "count": 3
+    },
+    {
+      "path": "shell/qml/keyboard/Layouts/EmojiLayout.qml",
+      "rule": "font",
+      "expression": "font.family:\"Noto Color Emoji\"",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/keyboard/Layouts/EmojiLayout.qml",
+      "rule": "font",
+      "expression": "font.pixelSize:16",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/keyboard/Layouts/EmojiLayout.qml",
+      "rule": "font",
+      "expression": "font.pixelSize:28",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/keyboard/Layouts/EmojiLayout.qml",
+      "rule": "radius",
+      "expression": "radius:8",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/keyboard/Layouts/EmojiLayout.qml",
+      "rule": "spacing",
+      "expression": "anchors.leftMargin:12",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/keyboard/Layouts/EmojiLayout.qml",
+      "rule": "spacing",
+      "expression": "anchors.leftMargin:8",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/keyboard/Layouts/EmojiLayout.qml",
+      "rule": "spacing",
+      "expression": "anchors.rightMargin:12",
+      "count": 2
+    },
+    {
+      "path": "shell/qml/keyboard/Layouts/NumberLayout.qml",
+      "rule": "color",
+      "expression": "color:\"#666666\"",
+      "count": 3
+    },
+    {
+      "path": "shell/qml/keyboard/Layouts/PhoneLayout.qml",
+      "rule": "color",
+      "expression": "color:\"#666666\"",
+      "count": 3
+    },
+    {
+      "path": "shell/qml/keyboard/Layouts/QwertyLayout.qml",
+      "rule": "color",
+      "expression": "color:\"#666666\"",
+      "count": 4
+    },
+    {
+      "path": "shell/qml/keyboard/Layouts/SymbolLayout.qml",
+      "rule": "color",
+      "expression": "color:\"#666666\"",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/keyboard/Layouts/TerminalLayout.qml",
+      "rule": "color",
+      "expression": "color:\"#666666\"",
+      "count": 4
+    },
+    {
+      "path": "shell/qml/keyboard/Layouts/UrlLayout.qml",
+      "rule": "color",
+      "expression": "color:\"#666666\"",
+      "count": 3
+    },
+    {
+      "path": "shell/qml/keyboard/UI/Key.qml",
+      "rule": "color",
+      "expression": "color:Qt.rgba(0,0,0,0.9)",
+      "count": 2
+    },
+    {
+      "path": "shell/qml/ui/MGlass.qml",
+      "rule": "color",
+      "expression": "borderColor:Qt.rgba(1,1,1,0.06)",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/ui/MGlass.qml",
+      "rule": "color",
+      "expression": "color:Qt.rgba(1,1,1,0.04)",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/ui/MGlass.qml",
+      "rule": "color",
+      "expression": "tint:Qt.rgba(0.05,0.05,0.055,0.78)",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/ui/MMarathonMark.qml",
+      "rule": "color",
+      "expression": "border.color:Qt.rgba(1,1,1,0.15)",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/ui/MMarathonMark.qml",
+      "rule": "color",
+      "expression": "color:\"#1de9b6\"",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/ui/MTopHairline.qml",
+      "rule": "color",
+      "expression": "color:Qt.rgba(1,1,1,0.15)",
+      "count": 1
+    },
+    {
+      "path": "shell/qml/ui/MTopHairline.qml",
+      "rule": "radius",
+      "expression": "radius:14",
+      "count": 1
+    }
+  ]
+}

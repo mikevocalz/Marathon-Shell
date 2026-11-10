@@ -1,0 +1,110 @@
+{
+  "schema": 1,
+  "source_revision": "094ed581d93e2ca0f8bca61c3a30c011ee601727",
+  "token_owners": {
+    "shell/qml/theme/MColors.qml": [
+      "color"
+    ],
+    "shell/qml/theme/MTypography.qml": [
+      "font"
+    ],
+    "shell/qml/theme/MRadius.qml": [
+      "radius"
+    ],
+    "shell/qml/theme/MSpacing.qml": [
+      "spacing"
+    ]
+  },
+  "apps": [
+    {
+      "directory": "browser",
+      "journey": "Browse, return to the same tab, and recover from a failed load.",
+      "stage": "native-review-needed"
+    },
+    {
+      "directory": "calculator",
+      "journey": "Enter a long expression, correct it with the keyboard, and inspect the result.",
+      "stage": "native-review-needed"
+    },
+    {
+      "directory": "calendar",
+      "journey": "Select an event, return to the same date, and distinguish local from synchronized data.",
+      "stage": "native-review-needed"
+    },
+    {
+      "directory": "camera",
+      "journey": "Grant or deny camera access, capture, then open the captured item.",
+      "stage": "native-review-needed"
+    },
+    {
+      "directory": "clock",
+      "journey": "Create an alarm, edit it, and keep a running timer understandable.",
+      "stage": "native-review-needed"
+    },
+    {
+      "directory": "email",
+      "journey": "Open an exact message from Hub, reply from the correct account, and retain a failed draft.",
+      "stage": "native-review-needed"
+    },
+    {
+      "directory": "gallery",
+      "journey": "Open an image from a grid, zoom, share, and return to the same grid position.",
+      "stage": "native-review-needed"
+    },
+    {
+      "directory": "maps",
+      "journey": "Search, deny location access, recover, and keep the selected destination on resize.",
+      "stage": "native-review-needed"
+    },
+    {
+      "directory": "messages",
+      "journey": "Open a conversation, retain a draft, send, and expose pending or failed delivery.",
+      "stage": "native-review-needed"
+    },
+    {
+      "directory": "music",
+      "journey": "Select a track, change output route, and return to the same library position.",
+      "stage": "native-review-needed"
+    },
+    {
+      "directory": "notes",
+      "journey": "Capture from Hub, edit a note or task, undo deletion, and return to the same selection.",
+      "stage": "native-review-needed"
+    },
+    {
+      "directory": "phone",
+      "journey": "Find two people with the same name, open the right contact, and handle an incoming call.",
+      "stage": "native-review-needed"
+    },
+    {
+      "directory": "settings",
+      "journey": "Search for a setting, change its live value, return, and retain search and focus.",
+      "stage": "native-review-needed"
+    },
+    {
+      "directory": "terminal",
+      "journey": "Read long output, select text, resize, and preserve the live session.",
+      "stage": "native-review-needed"
+    },
+    {
+      "directory": "pilot",
+      "journey": "Invoke the assistant, inspect the requested action, cancel, and return to the caller.",
+      "stage": "native-review-needed"
+    },
+    {
+      "directory": "reef",
+      "journey": "Search the app catalogue, inspect a package, follow install progress or failure, and return to the same selection.",
+      "stage": "native-review-needed"
+    },
+    {
+      "directory": "template",
+      "journey": "Start a new native app with the shared controls and explicit state handling.",
+      "stage": "support-only"
+    },
+    {
+      "directory": "test",
+      "journey": "Exercise diagnostics without treating test-only controls as product design.",
+      "stage": "support-only"
+    }
+  ]
+}

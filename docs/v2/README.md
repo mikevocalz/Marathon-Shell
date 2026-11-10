@@ -12,6 +12,8 @@ The product should make it unusually easy to read, reply, capture, search and re
 
 - [Modernization programme](MODERNIZATION_PLAN.md): features, architecture, dependencies, delivery phases and release gates.
 - [UI and interaction specification](UI_SPEC.md): visual language, screen inventory, adaptive rules and motion.
+- [Native UI consistency](NATIVE_UI_CONSISTENCY.md): shared controls/tokens, complete app review journeys and a source regression check.
+- [Web Designer Pro native brief](WEB_DESIGNER_PRO_NATIVE_BRIEF.md): the local design pack tailored to Qt/Keel, with a copy-ready prompt and native review record.
 - [Visual refresh research](VISUAL_REFRESH_RESEARCH_2026-11-09.md): inspected Mobbin references, existing theme ownership and a restrained native visual lift.
 - [Design influence roster](DESIGN_INFLUENCES.md): TAT/The Astonishing Tribe, named UX work and the existing BlackBerry/Sailfish references.
 - [Implementation backlog](BACKLOG.md): ordered work packages and acceptance evidence.

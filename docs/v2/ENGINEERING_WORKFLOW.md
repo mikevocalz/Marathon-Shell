@@ -66,6 +66,13 @@ The author self-reviews every line before requesting independent review. Reviewe
 
 ## Validation and evidence
 
+For native UI work, apply [the consistency contract](NATIVE_UI_CONSISTENCY.md)
+and the [Web Designer Pro native adaptation](WEB_DESIGNER_PRO_NATIVE_BRIEF.md).
+Run the source consistency CTest project alongside the affected native tests.
+Use [the review record](DESIGN_REVIEW_TEMPLATE.md) for actual captures, input,
+state and service evidence. The private design pack is a local reference;
+its browser scripts and assets are not shell dependencies or native evidence.
+
 Select meaningful checks for the changed behavior. Register code tests in upstream CTest as described by `CONTRIBUTING.md`; an unreachable test does not count. For relevant native code, use `scripts/ci/build-and-test.sh`, `python3 tests/lint/check-test-reachability.py`, QML/import/icon checks and the applicable crate, bus, QtTest or app suites. Do not add tests that only repeat implementation details or run broad unrelated suites without a concrete risk.
 
 Keep these states separate: **planned**, **implemented**, **CI-verified**, **native-runtime verified**, **device/provider qualified**. Record skipped/unavailable checks and exact blockers. Host geometry/logic tests do not prove touch, screen-reader, modem, camera, encryption or frame pacing on a phone. UI changes require native interaction evidence in addition to still images. No false pass from a stub service or disabled security boundary.

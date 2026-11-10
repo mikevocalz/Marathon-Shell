@@ -46,6 +46,7 @@ endif()
 # QML suites that need Keel's Silica: set KEEL_QML to a Keel build's qml dir,
 # or install keel-silica.
 add_subdirectory(native-ui)
+add_subdirectory(../tools/native-ui-consistency native-ui-consistency)
 set(KEEL_QML "$ENV{KEEL_QML}" CACHE PATH "Keel build qml directory for the Silica QML tests")
 find_path(_SILICA_QMLDIR Sailfish/Silica/qmldir PATHS ${KEEL_QML} /usr/lib/qt6/qml /usr/lib64/qt6/qml NO_DEFAULT_PATH)
 if(_SILICA_QMLDIR)
