@@ -312,3 +312,9 @@ store-graphics palette
 store-security shield-check
 store-developer code
 store-utilities wrench
+
+# Native Silica busy indicators use whole graphic names.
+graphic-busyindicator-extra-small spinner-gap 24
+graphic-busyindicator-small spinner-gap 32
+graphic-busyindicator-medium spinner-gap 64
+graphic-busyindicator-large spinner-gap 96
