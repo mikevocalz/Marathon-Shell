@@ -1,7 +1,6 @@
 .pragma library
 
-// Mirrors CalendarManagerCpp::getEventsForDate so the views can bind to the
-// event list instead of calling into the service per day.
+// Local recurrence and the read-only account feed share the native views.
 
 const repeatModes = ["none", "daily", "weekly", "monthly"];
 // Minutes before the start; -1 is no reminder.
@@ -54,6 +53,10 @@ function dayNumber(d) {
 
 function occursOn(event, date) {
     const key = dateKey(date);
+    if (event.source === "caldav" && event.endDate) {
+        const beforeEnd = event.allDay || event.endTime === "00:00" ? key < event.endDate : key <= event.endDate;
+        return key >= event.date && (beforeEnd || key === event.date);
+    }
     if (event.date === key)
         return true;
     const base = parseDate(event.date);
@@ -101,5 +104,10 @@ function search(events, query) {
 // Today's events that have not finished yet, all-day ones first.
 function upcoming(events, now) {
     const t = timeString(now.getHours(), now.getMinutes());
-    return eventsOn(events, now).filter(e => e.allDay || String(e.time) >= t || endsNextDay(e) || (!!e.endTime && String(e.endTime) > t));
+    const key = dateKey(now);
+    return eventsOn(events, now).filter(e => {
+        if (e.source === "caldav" && e.endDate)
+            return e.allDay || e.endDate > key || (e.endDate === key && String(e.endTime) >= t);
+        return e.allDay || String(e.time) >= t || endsNextDay(e) || (!!e.endTime && String(e.endTime) > t);
+    });
 }

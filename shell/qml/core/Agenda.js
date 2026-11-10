@@ -11,7 +11,12 @@ function isoDate(d) {
 }
 
 function occursOn(event, day) {
-    if (event.date === isoDate(day))
+    const key = isoDate(day);
+    if (event.source === "caldav" && event.endDate) {
+        const beforeEnd = event.allDay || event.endTime === "00:00" ? key < event.endDate : key <= event.endDate;
+        return key >= event.date && (beforeEnd || key === event.date);
+    }
+    if (event.date === key)
         return true;
     const recurring = event.recurring || "none";
     if (recurring === "none" || !event.date)

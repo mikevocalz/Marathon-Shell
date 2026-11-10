@@ -73,7 +73,7 @@ Rectangle {
                 events = [];
             }
         }
-        hub.agenda = Agenda.forDay(events, new Date());
+        hub.agenda = Agenda.forDay(events.concat(CalendarEventsClient.events), new Date());
     }
 
     onVisibleChanged: {
@@ -82,6 +82,7 @@ Rectangle {
             list.atTop = true;
             refreshAgenda();
             WeatherClient.refresh();
+            CalendarEventsClient.refresh();
         } else {
             dismissOverlay();
         }
@@ -89,7 +90,15 @@ Rectangle {
     Component.onCompleted: {
         refreshAgenda();
         WeatherClient.refresh();
+        CalendarEventsClient.refresh();
         refreshSources();
+    }
+
+    Connections {
+        target: CalendarEventsClient
+        function onEventsChanged() {
+            hub.refreshAgenda();
+        }
     }
 
     Connections {
@@ -332,7 +341,8 @@ Rectangle {
                             objectName: "hubAgendaTitle"
                             Layout.minimumWidth: 0
                             Layout.fillWidth: true
-                            text: entry.modelData.title
+                            text: entry.modelData.title + (entry.modelData.recurrenceIncomplete ? qsTr(" · Series preview") : "")
+                            textFormat: Text.PlainText
                             wrapMode: Text.Wrap
                         }
                     }

@@ -8,7 +8,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 else()
     set(_native_required_default OFF)
 endif()
-option(MARATHON_REQUIRE_NATIVE_UI_TESTS "Require real Notes, Settings, Hub and overview UI" ${_native_required_default})
+option(MARATHON_REQUIRE_NATIVE_UI_TESTS "Require real Notes, Calendar, Settings, Hub and overview UI" ${_native_required_default})
 set(MARATHON_SOURCE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 find_package(Python3 COMPONENTS Interpreter QUIET)
 set(KEEL_QML "$ENV{KEEL_QML}" CACHE PATH "Real Keel build/install QML directory")
@@ -79,6 +79,13 @@ else()
         --report "${CMAKE_CURRENT_BINARY_DIR}/reports/notes.xml" --
         sh "${MARATHON_SOURCE_ROOT}/apps/notes/tests/run.sh")
     set_tests_properties(Qml_apps_notes_tests PROPERTIES LABELS "native-ui-required"
+        FIXTURES_REQUIRED NativeKeel TIMEOUT 180
+        ENVIRONMENT "KEEL_QML=${KEEL_QML};QMLTESTRUNNER=${QMLTESTRUNNER}")
+    add_test(NAME Qml_apps_calendar_tests COMMAND "${Python3_EXECUTABLE}"
+        "${MARATHON_SOURCE_ROOT}/scripts/ci/run-qml-suite.py"
+        --report "${CMAKE_CURRENT_BINARY_DIR}/reports/calendar.xml" --
+        sh "${MARATHON_SOURCE_ROOT}/apps/calendar/tests/run.sh")
+    set_tests_properties(Qml_apps_calendar_tests PROPERTIES LABELS "native-ui-required"
         FIXTURES_REQUIRED NativeKeel TIMEOUT 180
         ENVIRONMENT "KEEL_QML=${KEEL_QML};QMLTESTRUNNER=${QMLTESTRUNNER}")
     # Production Rust transport, actual Notes app/schema/actions/store/editor.
@@ -154,7 +161,7 @@ else()
         -input "${MARATHON_SOURCE_ROOT}/tests/ui/tst_taskswitcher.qml")
     set_tests_properties(Qml_shell_TaskSwitcher PROPERTIES LABELS "native-ui-required"
         FIXTURES_REQUIRED NativeKeel TIMEOUT 180)
-    message(STATUS "Required native UI scope: toolkit + complete Notes + real Hub/Notes wire + Settings AppPages/PermissionPages + PageViewHub + Hub + overview geometry/task switcher; broader suites remain separate")
+    message(STATUS "Required native UI scope: toolkit + complete Notes and Calendar + real Hub/Notes wire + Settings AppPages/PermissionPages + PageViewHub + Hub + overview geometry/task switcher; broader suites remain separate")
 endif()
 
 if(Python3_Interpreter_FOUND)

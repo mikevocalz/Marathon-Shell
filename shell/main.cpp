@@ -65,6 +65,7 @@
 #include "src/services/wakeonkeyfilter.h"
 #include "marathon-shell-native/src/pilot.cxxqt.h"
 #include "marathon-shell-native/src/weather.cxxqt.h"
+#include "marathon-shell-native/src/calendar_events.cxxqt.h"
 #include "src/services/inputboost.h"
 #include "src/services/touchresampler.h"
 #include "marathon-shell-native/src/audio.cxxqt.h"
@@ -1253,6 +1254,10 @@ int main(int argc, char *argv[]) {
     pilot->setParent(&app);
     qmlRegisterSingletonInstance<marathon::PilotClient>("MarathonOS.Shell", 1, 0, "PilotClient",
                                                         pilot);
+    auto *calendarEvents = new marathon::CalendarEventsClient(&app);
+    qmlRegisterSingletonInstance<marathon::CalendarEventsClient>(
+        "MarathonOS.Shell", 1, 0, "CalendarEventsClient", calendarEvents);
+
     auto *weather = new marathon::WeatherClient();
     weather->setParent(&app);
     qmlRegisterSingletonInstance<marathon::WeatherClient>("MarathonOS.Shell", 1, 0, "WeatherClient",

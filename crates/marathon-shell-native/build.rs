@@ -10,6 +10,7 @@ fn main() {
         .file("src/backdrop.rs")
         .file("src/bluetooth.rs")
         .file("src/boost.rs")
+        .file("src/calendar_events.rs")
         .file("src/clipboard.rs")
         .file("src/contacts.rs")
         .file("src/desktop.rs")

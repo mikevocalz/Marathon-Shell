@@ -65,6 +65,7 @@ TestCase {
         hubWindow.width = 540;
         SettingsManagerCpp.timeFormat = "12h";
         SettingsManagerCpp.store = {};
+        CalendarEventsClient.events = [];
         hub.refreshAgenda();
         Keel.Ambience.applyForwarded("/desktop/sailfish/silica/font_size_multiplier=1");
         NotificationService.clear();
@@ -120,6 +121,30 @@ TestCase {
         const d = new Date();
         d.setDate(d.getDate() - daysAgo);
         return Qt.formatDate(d, "yyyy-MM-dd");
+    }
+
+    function test_syncedCalendarUpdatesJoinLocalAgendaWithoutChangingLocalStorage() {
+        const today = isoDay(0);
+        const local = {
+            id: 1,
+            title: "Local",
+            date: today,
+            time: "10:00"
+        };
+        SettingsManagerCpp.set("calendar/events", [local]);
+        CalendarEventsClient.events = [
+            {
+                id: "dav:remote",
+                title: "Remote",
+                date: today,
+                time: "11:00",
+                readOnly: true
+            }
+        ];
+        tryCompare(hub, "agenda", [local, CalendarEventsClient.events[0]]);
+        compare(SettingsManagerCpp.get("calendar/events", []).length, 1);
+        CalendarEventsClient.events = [];
+        tryCompare(hub, "agenda", [local]);
     }
 
     function test_dayLabels() {

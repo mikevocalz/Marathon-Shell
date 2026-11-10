@@ -3,12 +3,19 @@ import QtQml
 
 QtObject {
     property var events: []
+    property string syncedState: "ready"
+    property int refreshCount: 0
+    function refreshSynced() {
+        refreshCount += 1;
+    }
     property bool fail: false
     property int nextId: 1
 
     function reset(list) {
         events = list || [];
         fail = false;
+        syncedState = "ready";
+        refreshCount = 0;
         nextId = 100;
     }
 
