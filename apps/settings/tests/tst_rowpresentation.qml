@@ -51,7 +51,8 @@ TestCase {
         const detail = findChild(row, "summaryDescription");
         tryVerify(() => detail.lineCount > 1);
         verify(!detail.truncated);
-        verify(detail.mapToItem(row, 0, detail.height).y <= row.contentHeight);
+        // Text metrics settle before the Column's polish pass grows its row.
+        tryVerify(() => detail.mapToItem(row, 0, detail.height).y <= row.contentHeight);
         compare(detail.textFormat, Text.PlainText);
         compare(row.Accessible.name, "Wi-Fi, " + Network.wifiSsid);
         Network.wifiSsid = "Home";

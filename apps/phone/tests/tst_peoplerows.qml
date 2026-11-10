@@ -31,9 +31,27 @@ TestCase {
         Permissions.reset();
         Navigation.reset();
         Contacts.contacts = [
-            { id: 1, name: "Ada Lovelace", phone: "+44 20 7946 0001", email: "", favorite: true },
-            { id: 2, name: "Ada Lovelace", phone: "+44 20 7946 0002", email: "", favorite: false },
-            { id: 3, name: "Grace Hopper", phone: "", email: "grace@example.com", favorite: false }
+            {
+                id: 1,
+                name: "Ada Lovelace",
+                phone: "+44 20 7946 0001",
+                email: "",
+                favorite: true
+            },
+            {
+                id: 2,
+                name: "Ada Lovelace",
+                phone: "+44 20 7946 0002",
+                email: "",
+                favorite: false
+            },
+            {
+                id: 3,
+                name: "Grace Hopper",
+                phone: "",
+                email: "grace@example.com",
+                favorite: false
+            }
         ];
     }
 
@@ -81,7 +99,13 @@ TestCase {
 
     function test_largeNameFitsAndStillOpensExactContact() {
         Contacts.contacts = [
-            { id: 41, name: "Admiral Grace Murray Hopper", phone: "+1 555 123 4567", email: "", favorite: false }
+            {
+                id: 41,
+                name: "Admiral Grace Murray Hopper",
+                phone: "+1 555 123 4567",
+                email: "",
+                favorite: false
+            }
         ];
         const app = makeApp();
         app.width = 320;
@@ -93,7 +117,7 @@ TestCase {
         tryVerify(() => title.lineCount > 1);
         verify(!title.truncated);
         verify(!detail.truncated);
-        verify(detail.mapToItem(row, 0, detail.height).y <= row.contentHeight);
+        tryVerify(() => detail.mapToItem(row, 0, detail.height).y <= row.contentHeight);
         row.forceActiveFocus();
         keyClick(Qt.Key_Return);
         tryVerify(() => app.pageStack.depth === 2);

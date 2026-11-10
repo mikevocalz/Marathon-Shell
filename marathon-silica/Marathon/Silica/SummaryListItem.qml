@@ -10,9 +10,7 @@ ListItem {
     property alias font: title.font
     property alias descriptionFont: detail.font
 
-    contentHeight: Math.max(description !== "" ? S.Theme.itemSizeMedium : S.Theme.itemSizeSmall,
-                            labels.height + S.Theme.paddingMedium * 2,
-                            leadingIcon.visible ? leadingIcon.height + S.Theme.paddingMedium * 2 : 0)
+    contentHeight: Math.max(description !== "" ? S.Theme.itemSizeMedium : S.Theme.itemSizeSmall, labels.height + S.Theme.paddingMedium * 2, leadingIcon.visible ? leadingIcon.height + S.Theme.paddingMedium * 2 : 0)
     Accessible.name: description !== "" ? text + ", " + description : text
 
     S.Icon {

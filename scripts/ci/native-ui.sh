@@ -44,7 +44,7 @@ cmake -S build-keel-source/keel -B build-keel -G Ninja \
 cmake --build build-keel --parallel 2 --target \
     keelplugin silicacoreplugin silicaprivateplugin silicaplugin \
     silicascreenplugin silicabackgroundplugin silicashareplugin \
-    nemoconfiguration keelactionsplugin
+    nemoconfiguration nemongf keelactionsplugin
 
 # Alpine keeps Qt's tools outside PATH. Use its Qt 6 installation explicitly.
 qtpaths=/usr/lib/qt6/bin/qtpaths6
