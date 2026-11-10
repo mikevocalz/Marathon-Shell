@@ -61,3 +61,11 @@ tests/screenshots/
 hwparam.json
 uuu.inputlog
 *.inputlog
+
+# Local reference-app research; original APKs and decoded output stay local.
+/.local-apk-research/
+*.apk
+*.apks
+*.apkm
+*.xapk
+*.aab
