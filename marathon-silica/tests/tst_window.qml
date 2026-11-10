@@ -109,6 +109,15 @@ TestCase {
         log = [];
     }
 
+    function test_providerLabelsUsePlainTextByDefault() {
+        const a = createTemporaryObject(app, testCase);
+        tryVerify(() => a.pageStack.currentPage !== null);
+        compare(a._defaultLabelFormat, Text.PlainText);
+        const label = Qt.createQmlObject('import QtQuick; import Sailfish.Silica 1.0; Label { text: "<b>Account name</b>" }', a.pageStack.currentPage);
+        compare(label.textFormat, Text.PlainText);
+        label.destroy();
+    }
+
     function test_backPopsPage() {
         const a = createTemporaryObject(app, testCase);
         a.pageStack.push(page, {}, PageStackAction.Immediate);
