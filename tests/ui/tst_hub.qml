@@ -133,7 +133,21 @@ TestCase {
         compare(hub.dayLabel(isoDay(10)), Qt.formatDate(ten, "d MMMM"));
     }
 
-    function test_reopenPreservesTriagePosition() {
+    function test_reopenPreservesTriagePosition_data() {
+        return [
+            {
+                tag: "pointer",
+                keyboard: false
+            },
+            {
+                tag: "keyboard",
+                keyboard: true
+            }
+        ];
+    }
+
+    function test_reopenPreservesTriagePosition(data) {
+        hub.dismissOverlay();
         for (let i = 0; i < 30; ++i)
             addNotification(i + 1, "email");
         hub.filterApp = "email";
@@ -144,20 +158,47 @@ TestCase {
         tryVerify(() => !list.atYBeginning);
         list.movementEnded();
         verify(!list.atTop);
+        waitForPolish(list);
+        waitForRendering(hub);
         const position = list.contentY;
 
         hub.visible = false;
         hub.visible = true;
+        waitForPolish(list);
+        waitForRendering(hub);
 
         compare(hub.filterApp, "email");
         verify(hub.unreadOnly);
         compare(list.contentY, position);
         verify(!list.atTop);
         const newest = findChild(hub, "newestNotifications");
-        verify(newest.visible);
-        newest.clicked();
+        tryVerify(() => newest.visible);
+        const positionInHub = newest.mapToItem(hub, 0, 0);
+        verify(positionInHub.y >= Constants.statusBarHeight);
+        verify(positionInHub.y + newest.height <= hub.height - Silica.Theme.itemSizeMedium);
+        compare(newest.Accessible.name, "Newest notifications");
+        list.positionViewAtEnd();
+        tryVerify(() => list.atYEnd);
+        let last = null;
+        tryVerify(() => (last = list.itemAtIndex(list.count - 1)) !== null);
+        waitForPolish(list);
+        tryVerify(() => last.mapToItem(hub, 0, last.height).y <= positionInHub.y);
+        if (data.keyboard) {
+            hubWindow.requestActivate();
+            newest.forceActiveFocus(Qt.TabFocusReason);
+            tryVerify(() => newest.activeFocus);
+            verify(findChild(newest, "focusFrame").visible);
+            keyClick(Qt.Key_Return);
+        } else {
+            mouseClick(newest);
+        }
         tryVerify(() => list.atYBeginning);
         verify(list.atTop);
+        verify(!newest.visible);
+        compare(list.currentIndex, 0);
+        tryVerify(() => list.currentItem && list.currentItem.activeFocus);
+        compare(hub.filterApp, "email");
+        verify(hub.unreadOnly);
     }
 
     function test_agendaTextRemainsReadable_data() {
