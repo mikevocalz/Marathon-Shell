@@ -11,6 +11,87 @@ use zbus::Variant as Value;
 
 pub type Row = HashMap<&'static str, Value<'static>>;
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum MessageId {
+    Local(i64),
+    Reference(String),
+}
+
+impl MessageId {
+    pub fn parse(value: &str) -> Option<Self> {
+        if let Some(reference) = value.strip_prefix("message:") {
+            return (reference.len() == 32
+                && reference
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
+            .then(|| Self::Reference(reference.to_owned()));
+        }
+        value
+            .parse::<i64>()
+            .ok()
+            .filter(|id| *id > 0)
+            .map(Self::Local)
+    }
+}
+
+pub struct Message {
+    pub account: i64,
+    pub folder: String,
+    pub uid: u32,
+    pub validity: u32,
+    pub reference: String,
+    pub raw: Vec<u8>,
+    pub body_complete: Option<bool>,
+}
+
+impl Message {
+    pub fn id(&self) -> String {
+        format!("message:{}", self.reference)
+    }
+
+    pub fn has_cached_body(&self) -> bool {
+        self.body_complete.unwrap_or_else(|| {
+            // Older stores did not distinguish headers from a complete empty
+            // message. An existing payload is usable; ambiguous empty entries
+            // need one successful fetch before they can be read offline.
+            [b"\r\n\r\n".as_slice(), b"\n\n".as_slice()]
+                .iter()
+                .any(|separator| {
+                    self.raw
+                        .windows(separator.len())
+                        .position(|part| part == *separator)
+                        .is_some_and(|start| start + separator.len() < self.raw.len())
+                })
+        })
+    }
+}
+
+fn migrate_messages(db: &Connection) -> rusqlite::Result<()> {
+    let exists: bool = db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM pragma_table_info('messages') WHERE name = 'reference')",
+        [],
+        |row| row.get(0),
+    )?;
+    if !exists {
+        db.execute_batch(
+            "BEGIN IMMEDIATE;
+             ALTER TABLE messages ADD COLUMN reference TEXT;
+             UPDATE messages SET reference = lower(hex(randomblob(16)));
+             CREATE UNIQUE INDEX messages_reference ON messages (reference);
+             COMMIT;",
+        )?;
+    }
+    let has_body_flag: bool = db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM pragma_table_info('messages') WHERE name = 'body_complete')",
+        [],
+        |row| row.get(0),
+    )?;
+    if !has_body_flag {
+        db.execute("ALTER TABLE messages ADD COLUMN body_complete INTEGER", [])?;
+    }
+    Ok(())
+}
+
 /// How a server is reached: 0 plain, 1 TLS, 2 STARTTLS.
 #[derive(Clone, Debug, Default)]
 pub struct Server {
@@ -134,6 +215,7 @@ impl Store {
              CREATE TABLE IF NOT EXISTS outbox (id INTEGER PRIMARY KEY, account INTEGER, raw BLOB, recipients TEXT);
              CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);",
         )?;
+        migrate_messages(&db)?;
         Ok(Self { db })
     }
 
@@ -332,46 +414,74 @@ impl Store {
         uid: u32,
         seen: bool,
         raw: &[u8],
+        body_complete: bool,
     ) -> rusqlite::Result<Option<i64>> {
         let s = summarise(raw);
         let added = self.db.execute(
-            "INSERT OR IGNORE INTO messages (account, folder, uid, seen, subject, sender, address, date, snippet, attachment, raw)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
-            params![account, folder, uid, seen, s.subject, s.sender, s.address, s.date, s.snippet, s.attachment, raw],
+            "INSERT OR IGNORE INTO messages (account, folder, uid, seen, subject, sender, address, date, snippet, attachment, raw, reference, body_complete)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, lower(hex(randomblob(16))), ?12)",
+            params![account, folder, uid, seen, s.subject, s.sender, s.address, s.date, s.snippet, s.attachment, raw, body_complete],
         )?;
         Ok((added > 0).then(|| self.db.last_insert_rowid()))
     }
 
-    pub fn set_seen(&self, id: i64, seen: bool) -> rusqlite::Result<()> {
-        self.db
-            .execute(
-                "UPDATE messages SET seen = ?2 WHERE id = ?1",
-                params![id, seen],
-            )
-            .map(drop)
-    }
-
-    pub fn delete(&self, id: i64) -> rusqlite::Result<()> {
-        self.db
-            .execute("DELETE FROM messages WHERE id = ?1", [id])
-            .map(drop)
-    }
-
-    /// Where a message is: its account, folder and UID.
-    pub fn locate(&self, id: i64) -> rusqlite::Result<Option<(i64, String, u32)>> {
+    pub fn message(&self, id: &MessageId) -> rusqlite::Result<Option<Message>> {
+        let (reference, local) = match id {
+            MessageId::Local(id) => ("", *id),
+            MessageId::Reference(reference) => (reference.as_str(), 0),
+        };
         self.db
             .query_row(
-                "SELECT account, folder, uid FROM messages WHERE id = ?1",
-                [id],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                "SELECT m.account, m.folder, m.uid, COALESCE(f.validity, 0), m.reference, m.raw, m.body_complete
+                 FROM messages m LEFT JOIN folders f ON f.account = m.account AND f.path = m.folder
+                 WHERE m.reference = ?1 OR (?1 = '' AND m.id = ?2)",
+                params![reference, local],
+                |row| {
+                    Ok(Message {
+                        account: row.get(0)?,
+                        folder: row.get(1)?,
+                        uid: row.get(2)?,
+                        validity: row.get(3)?,
+                        reference: row.get(4)?,
+                        raw: row.get(5)?,
+                        body_complete: row.get(6)?,
+                    })
+                },
             )
             .optional()
     }
 
-    pub fn raw(&self, id: i64) -> rusqlite::Result<Option<Vec<u8>>> {
+    pub fn cache_body(&self, reference: &str, raw: &[u8]) -> rusqlite::Result<bool> {
+        let summary = summarise(raw);
         self.db
-            .query_row("SELECT raw FROM messages WHERE id = ?1", [id], |r| r.get(0))
-            .optional()
+            .execute(
+                "UPDATE messages SET raw = ?2, body_complete = 1, snippet = ?3, attachment = ?4 WHERE reference = ?1",
+                params![reference, raw, summary.snippet, summary.attachment],
+            )
+            .map(|changed| changed > 0)
+    }
+
+    pub fn set_seen_reference(&self, reference: &str, seen: bool) -> rusqlite::Result<bool> {
+        self.db
+            .execute(
+                "UPDATE messages SET seen = ?2 WHERE reference = ?1",
+                params![reference, seen],
+            )
+            .map(|changed| changed > 0)
+    }
+
+    pub fn delete_reference(&self, reference: &str) -> rusqlite::Result<bool> {
+        self.db
+            .execute("DELETE FROM messages WHERE reference = ?1", [reference])
+            .map(|changed| changed > 0)
+    }
+
+    pub fn has_message_reference(&self, reference: &str) -> rusqlite::Result<bool> {
+        self.db.query_row(
+            "SELECT EXISTS(SELECT 1 FROM messages WHERE reference = ?1)",
+            [reference],
+            |row| row.get(0),
+        )
     }
 
     pub fn messages(&self, account: i64, folder: &str) -> rusqlite::Result<Vec<Row>> {
@@ -400,7 +510,7 @@ impl Store {
                 .collect();
         }
         let mut q = self.db.prepare(
-            "SELECT id, subject, sender, address, snippet, date, seen, attachment FROM messages
+            "SELECT id, subject, sender, address, snippet, date, seen, attachment, reference FROM messages
              WHERE account = ?1 AND folder = ?2 ORDER BY date DESC",
         )?;
         let rows = q.query_map(params![account, folder], |r| {
@@ -413,6 +523,7 @@ impl Store {
                 ("date", Value::from(r.get::<_, i64>(5)?)),
                 ("unread", Value::from(!r.get::<_, bool>(6)?)),
                 ("hasAttachment", Value::from(r.get::<_, bool>(7)?)),
+                ("reference", text(r.get::<_, String>(8)?)),
             ]))
         })?;
         rows.collect()
@@ -590,6 +701,159 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_deleted_notification_cannot_open_or_mutate_a_reused_row() {
+        let store = Store::open(Path::new(":memory:")).unwrap();
+        let original = store
+            .insert(
+                7,
+                "INBOX",
+                11,
+                false,
+                b"Subject: Original\r\n\r\nFirst",
+                true,
+            )
+            .unwrap()
+            .unwrap();
+        let message = store.message(&MessageId::Local(original)).unwrap().unwrap();
+        let key = MessageId::parse(&message.id()).unwrap();
+        assert!(store.delete_reference(&message.reference).unwrap());
+
+        let decoy = store
+            .insert(7, "INBOX", 12, false, b"Subject: Decoy\r\n\r\nSecond", true)
+            .unwrap()
+            .unwrap();
+        assert_eq!(original, decoy, "SQLite reuses this numeric row id");
+        assert!(store.message(&key).unwrap().is_none());
+        assert!(!store.set_seen_reference(&message.reference, true).unwrap());
+        assert!(!store.delete_reference(&message.reference).unwrap());
+        assert!(!store
+            .cache_body(&message.reference, b"Subject: Old\r\n\r\nOld")
+            .unwrap());
+        let replacement = store.message(&MessageId::Local(decoy)).unwrap().unwrap();
+        assert_ne!(replacement.reference, message.reference);
+        assert_eq!(replacement.raw, b"Subject: Decoy\r\n\r\nSecond");
+        assert_eq!(store.uids(7, "INBOX").unwrap().get(&12), Some(&false));
+    }
+
+    #[test]
+    fn migration_preserves_existing_mail_and_reference_on_reopen() {
+        let store = Store::open(Path::new(":memory:")).unwrap();
+        let id = store
+            .insert(3, "Archive", 5, true, b"Subject: Kept\r\n\r\nBody", true)
+            .unwrap()
+            .unwrap();
+        store
+            .db
+            .execute_batch(
+                "DROP INDEX messages_reference;
+                 ALTER TABLE messages DROP COLUMN reference;
+                 ALTER TABLE messages DROP COLUMN body_complete;",
+            )
+            .unwrap();
+        migrate_messages(&store.db).unwrap();
+        let first = store.message(&MessageId::Local(id)).unwrap().unwrap();
+        assert_eq!(first.account, 3);
+        assert_eq!(first.folder, "Archive");
+        assert_eq!(first.uid, 5);
+        assert_eq!(first.raw, b"Subject: Kept\r\n\r\nBody");
+        assert_eq!(first.body_complete, None);
+        assert!(first.has_cached_body());
+        assert_eq!(store.uids(3, "Archive").unwrap().get(&5), Some(&true));
+        migrate_messages(&store.db).unwrap();
+        let second = store.message(&MessageId::Local(id)).unwrap().unwrap();
+        assert_eq!(first.reference, second.reference);
+        assert!(matches!(
+            MessageId::parse(&second.id()),
+            Some(MessageId::Reference(_))
+        ));
+    }
+
+    #[test]
+    fn cached_empty_body_is_distinct_from_headers_and_legacy_unknown_body() {
+        let store = Store::open(Path::new(":memory:")).unwrap();
+        let empty = b"Subject: Empty\r\n\r\n";
+        let complete = store
+            .insert(1, "INBOX", 1, false, empty, true)
+            .unwrap()
+            .unwrap();
+        let headers = store
+            .insert(1, "INBOX", 2, false, empty, false)
+            .unwrap()
+            .unwrap();
+        assert!(store
+            .message(&MessageId::Local(complete))
+            .unwrap()
+            .unwrap()
+            .has_cached_body());
+        let partial = store.message(&MessageId::Local(headers)).unwrap().unwrap();
+        assert!(!partial.has_cached_body());
+        assert!(store.cache_body(&partial.reference, empty).unwrap());
+        let fetched = store.message(&MessageId::Local(headers)).unwrap().unwrap();
+        assert!(fetched.has_cached_body());
+        assert_eq!(fetched.reference, partial.reference);
+        assert_eq!(store.uids(1, "INBOX").unwrap().get(&2), Some(&false));
+
+        store
+            .db
+            .execute("UPDATE messages SET body_complete = NULL", [])
+            .unwrap();
+        assert!(!store
+            .message(&MessageId::Local(complete))
+            .unwrap()
+            .unwrap()
+            .has_cached_body());
+        assert!(store
+            .cache_body(&partial.reference, b"Subject: Large\r\n\r\nFetched body")
+            .unwrap());
+        let fetched = store.message(&MessageId::Local(headers)).unwrap().unwrap();
+        assert!(fetched.has_cached_body());
+        assert_eq!(fetched.raw, b"Subject: Large\r\n\r\nFetched body");
+    }
+
+    #[test]
+    fn changed_uid_validity_invalidates_the_original_reference() {
+        let mut store = Store::open(Path::new(":memory:")).unwrap();
+        store.set_folders(2, &[("INBOX".into(), "inbox")]).unwrap();
+        store.validate(2, "INBOX", 9).unwrap();
+        let id = store
+            .insert(2, "INBOX", 1, false, b"Subject: Old\r\n\r\nOld", true)
+            .unwrap()
+            .unwrap();
+        let old = store.message(&MessageId::Local(id)).unwrap().unwrap();
+        assert_eq!(old.validity, 9);
+        store.validate(2, "INBOX", 10).unwrap();
+        store
+            .insert(2, "INBOX", 1, false, b"Subject: New\r\n\r\nNew", true)
+            .unwrap();
+        assert!(store
+            .message(&MessageId::parse(&old.id()).unwrap())
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
+    fn message_ids_reject_malformed_and_unsupported_references() {
+        assert_eq!(MessageId::parse("42"), Some(MessageId::Local(42)));
+        assert_eq!(
+            MessageId::parse("message:0123456789abcdef0123456789abcdef"),
+            Some(MessageId::Reference(
+                "0123456789abcdef0123456789abcdef".into()
+            ))
+        );
+        for value in [
+            "",
+            "0",
+            "-1",
+            "message:",
+            "message:../mail.db",
+            "message:0123456789ABCDEF0123456789ABCDEF",
+            "outbox:1",
+        ] {
+            assert_eq!(MessageId::parse(value), None);
+        }
+    }
+
+    #[test]
     fn mime_views_preserve_addresses_html_and_decoded_attachments() {
         let raw = b"From: Alice <alice@example.com>\r\n\
 To: team: Bob <bob@example.com>, Carol <carol@example.com>;\r\n\
@@ -627,15 +891,13 @@ Content-Transfer-Encoding: base64\r\n\r\nAAEC/w==\r\n--root--\r\n";
         let store = Store::open(Path::new(":memory:")).unwrap();
         assert!(store.account(1).unwrap().is_none());
         assert!(store.folder_of_kind(1, "inbox").unwrap().is_none());
-        assert!(store.locate(1).unwrap().is_none());
-        assert!(store.raw(1).unwrap().is_none());
+        assert!(store.message(&MessageId::Local(1)).unwrap().is_none());
         assert!(store.setting("account").unwrap().is_none());
 
         store.db.execute_batch("DROP TABLE accounts; DROP TABLE folders; DROP TABLE messages; DROP TABLE settings;").unwrap();
         assert!(store.account(1).is_err());
         assert!(store.folder_of_kind(1, "inbox").is_err());
-        assert!(store.locate(1).is_err());
-        assert!(store.raw(1).is_err());
+        assert!(store.message(&MessageId::Local(1)).is_err());
         assert!(store.setting("account").is_err());
     }
 }

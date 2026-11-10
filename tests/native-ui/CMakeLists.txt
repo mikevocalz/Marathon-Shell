@@ -81,6 +81,19 @@ else()
     set_tests_properties(Qml_apps_notes_tests PROPERTIES LABELS "native-ui-required"
         FIXTURES_REQUIRED NativeKeel TIMEOUT 180
         ENVIRONMENT "KEEL_QML=${KEEL_QML};QMLTESTRUNNER=${QMLTESTRUNNER}")
+    # The routing/inbox suites use real native pages with the mail-service
+    # fixture. HTML body rendering still belongs to the WebEngine app suite.
+    foreach(_mail_case mailrouting emailapp)
+        add_test(NAME NativeUI_Mail_${_mail_case} COMMAND "${Python3_EXECUTABLE}"
+            "${MARATHON_SOURCE_ROOT}/scripts/ci/run-qml-suite.py"
+            --report "${CMAKE_CURRENT_BINARY_DIR}/reports/${_mail_case}.xml" --
+            "${QMLTESTRUNNER}" -import "${KEEL_QML}"
+            -import "${MARATHON_SOURCE_ROOT}/marathon-silica"
+            -import "${MARATHON_SOURCE_ROOT}/apps/email/tests/stubs"
+            -input "${MARATHON_SOURCE_ROOT}/apps/email/tests/tst_${_mail_case}.qml")
+        set_tests_properties(NativeUI_Mail_${_mail_case} PROPERTIES LABELS "native-ui-required"
+            FIXTURES_REQUIRED NativeKeel TIMEOUT 180 ENVIRONMENT "QML_XHR_ALLOW_FILE_READ=1")
+    endforeach()
     # Production Rust transport, actual Notes app/schema/actions/store/editor.
     # The conductor owns a private bus and isolated Configuration state; a
     # small Navigation1 admission fixture cannot claim real cgroup thaw.
@@ -154,7 +167,7 @@ else()
         -input "${MARATHON_SOURCE_ROOT}/tests/ui/tst_taskswitcher.qml")
     set_tests_properties(Qml_shell_TaskSwitcher PROPERTIES LABELS "native-ui-required"
         FIXTURES_REQUIRED NativeKeel TIMEOUT 180)
-    message(STATUS "Required native UI scope: toolkit + complete Notes + real Hub/Notes wire + Settings AppPages/PermissionPages + PageViewHub + Hub + overview geometry/task switcher; broader suites remain separate")
+    message(STATUS "Required native UI scope: toolkit + complete Notes + real Hub/Notes wire + Mail routing/inbox + Settings AppPages/PermissionPages + PageViewHub + Hub + overview geometry/task switcher; broader suites remain separate")
 endif()
 
 if(Python3_Interpreter_FOUND)

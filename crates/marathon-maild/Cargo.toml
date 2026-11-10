@@ -26,5 +26,9 @@ ureq = "3.5.0"
 webpki-roots = "1.0.11"
 zbus = { version = "=6.1.0", default-features = false, features = ["default-rt", "service"] }
 
+[dev-dependencies]
+marathon-rt = { path = "../marathon-rt", features = ["testing"] }
+tempfile = "3.27.0"
+
 [lints]
 workspace = true

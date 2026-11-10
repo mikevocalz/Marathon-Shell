@@ -3401,6 +3401,7 @@ dependencies = [
  "rusqlite",
  "secret-service",
  "serde_json",
+ "tempfile",
  "tiny_http",
  "tokio-util",
  "ureq",

@@ -67,7 +67,9 @@ TestCase {
             "7": body
         };
         app.openMessage("7");
-        return pushed(app, 2);
+        const page = pushed(app, 2);
+        tryCompare(page, "loadState", "ready");
+        return page;
     }
 
     // Message page

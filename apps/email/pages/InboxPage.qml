@@ -127,7 +127,7 @@ Page {
             id: item
 
             required property var model
-            readonly property string messageId: String(model.messageId)
+            readonly property string messageId: model.reference ? "message:" + model.reference : String(model.messageId)
             readonly property bool unread: model.unread === true
             readonly property bool attachment: model.hasAttachment == true
 
@@ -277,13 +277,13 @@ Page {
             MenuItem {
                 objectName: "syncItem"
                 visible: page.app.hasAccount
-                text: page.syncing ? qsTr("Stop") : qsTr("Sync")
+                text: page.syncing ? qsTr("Syncing…") : qsTr("Sync")
+                enabled: !page.syncing
                 onClicked: {
-                    page.timedOut = false;
                     if (page.syncing)
-                        page.mail.cancelSync();
-                    else
-                        page.mail.refresh();
+                        return;
+                    page.timedOut = false;
+                    page.mail.refresh();
                 }
             }
             MenuItem {

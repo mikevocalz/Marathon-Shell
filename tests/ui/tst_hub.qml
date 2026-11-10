@@ -133,6 +133,33 @@ TestCase {
         compare(hub.dayLabel(isoDay(10)), Qt.formatDate(ten, "d MMMM"));
     }
 
+    function test_reopenPreservesTriagePosition() {
+        for (let i = 0; i < 30; ++i)
+            addNotification(i + 1, "email");
+        hub.filterApp = "email";
+        hub.unreadOnly = true;
+        const list = findChild(hub, "hubList");
+        tryCompare(list, "count", 30);
+        list.positionViewAtIndex(15, ListView.Beginning);
+        tryVerify(() => !list.atYBeginning);
+        list.movementEnded();
+        verify(!list.atTop);
+        const position = list.contentY;
+
+        hub.visible = false;
+        hub.visible = true;
+
+        compare(hub.filterApp, "email");
+        verify(hub.unreadOnly);
+        compare(list.contentY, position);
+        verify(!list.atTop);
+        const newest = findChild(hub, "newestNotifications");
+        verify(newest.visible);
+        newest.clicked();
+        tryVerify(() => list.atYBeginning);
+        verify(list.atTop);
+    }
+
     function test_agendaTextRemainsReadable_data() {
         return [
             {

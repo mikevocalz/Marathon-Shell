@@ -296,7 +296,7 @@ pub async fn sync(
             .with(move |st| {
                 let mut ids = Vec::new();
                 for (uid, seen, raw) in got {
-                    if let Some(id) = st.insert(account, &path, uid, seen, &raw)? {
+                    if let Some(id) = st.insert(account, &path, uid, seen, &raw, whole)? {
                         if !seen {
                             ids.push(id);
                         }
@@ -319,8 +319,13 @@ pub async fn sync(
 }
 
 /// The whole message, for one kept only by its headers.
-pub async fn whole(s: &mut Imap, folder: &str, uid: u32) -> Result<Vec<u8>, Failure> {
-    s.select(folder).await?;
+pub async fn whole(
+    s: &mut Imap,
+    folder: &str,
+    uid: u32,
+    validity: u32,
+) -> Result<Vec<u8>, Failure> {
+    select_message_folder(s, folder, validity).await?;
     let mut fetches = s.uid_fetch(uid.to_string(), "(UID BODY.PEEK[])").await?;
     let mut raw = Vec::new();
     while let Some(f) = fetches.next().await {
@@ -329,8 +334,24 @@ pub async fn whole(s: &mut Imap, folder: &str, uid: u32) -> Result<Vec<u8>, Fail
     Ok(raw)
 }
 
-pub async fn set_seen(s: &mut Imap, folder: &str, uid: u32, seen: bool) -> Result<(), Failure> {
-    s.select(folder).await?;
+async fn select_message_folder(s: &mut Imap, folder: &str, validity: u32) -> Result<(), Failure> {
+    let mailbox = s.select(folder).await?;
+    if mailbox.uid_validity.unwrap_or(0) != validity {
+        return Err(Failure::Server(
+            "This folder changed on the server. Sync your mail and try again.".into(),
+        ));
+    }
+    Ok(())
+}
+
+pub async fn set_seen(
+    s: &mut Imap,
+    folder: &str,
+    uid: u32,
+    validity: u32,
+    seen: bool,
+) -> Result<(), Failure> {
+    select_message_folder(s, folder, validity).await?;
     let change = if seen {
         "+FLAGS (\\Seen)"
     } else {
@@ -344,8 +365,14 @@ pub async fn set_seen(s: &mut Imap, folder: &str, uid: u32, seen: bool) -> Resul
 }
 
 /// MOVE where the server has it, else COPY then expunge.
-pub async fn move_to(s: &mut Imap, folder: &str, uid: u32, to: &str) -> Result<(), Failure> {
-    s.select(folder).await?;
+pub async fn move_to(
+    s: &mut Imap,
+    folder: &str,
+    uid: u32,
+    validity: u32,
+    to: &str,
+) -> Result<(), Failure> {
+    select_message_folder(s, folder, validity).await?;
     let caps = s.capabilities().await?;
     if caps.has_str("MOVE") {
         s.uid_mv(uid.to_string(), to).await?;

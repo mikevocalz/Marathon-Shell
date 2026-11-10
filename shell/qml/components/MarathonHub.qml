@@ -78,8 +78,6 @@ Rectangle {
 
     onVisibleChanged: {
         if (visible) {
-            list.contentY = list.originY;
-            list.atTop = true;
             refreshAgenda();
             WeatherClient.refresh();
         } else {
@@ -202,9 +200,13 @@ Rectangle {
         // appearing once a second app posts, grow the list above its first
         // row and would push the date out of view.
         property bool atTop: true
+        onMovementStarted: atTop = false
         onMovementEnded: atTop = atYBeginning
         onOriginYChanged: if (atTop)
-            Qt.callLater(() => list.contentY = list.originY)
+            Qt.callLater(() => {
+                if (list.atTop)
+                    list.contentY = list.originY;
+            })
 
         add: Transition {
             NumberAnimation {
@@ -241,6 +243,16 @@ Rectangle {
 
         Silica.PullDownMenu {
             visible: list.count > 0
+
+            Silica.MenuItem {
+                objectName: "newestNotifications"
+                text: qsTr("Newest notifications")
+                visible: !list.atYBeginning
+                onClicked: {
+                    list.atTop = true;
+                    list.positionViewAtBeginning();
+                }
+            }
 
             Silica.MenuItem {
                 objectName: "clearNotifications"

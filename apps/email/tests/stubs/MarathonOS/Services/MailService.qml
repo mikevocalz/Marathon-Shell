@@ -22,6 +22,9 @@ QtObject {
     property bool fail: false
     property var bodies: ({})
     property var calls: []
+    property int nextRequest: 0
+    property bool holdMessages: false
+    property var sentAccounts: []
 
     signal oauthAuthUrlReady(string url)
     signal oauthLoginSucceeded(string accountId)
@@ -32,6 +35,8 @@ QtObject {
     signal accountSetupFailed(string reason)
     signal attachmentSaved(string messageId, string location, string path)
     signal attachmentFailed(string messageId, string location)
+    signal messageLoaded(string request, var message)
+    signal messageLoadFailed(string request, string reason)
 
     function log(name, args) {
         calls = calls.concat([
@@ -64,12 +69,23 @@ QtObject {
         fail = false;
         bodies = {};
         calls = [];
+        nextRequest = 0;
+        holdMessages = false;
+        sentAccounts = [];
     }
 
     function setAccount(name) {
         accountModel.append({
             display: name
         });
+        accountList = [
+            {
+                id: "1",
+                name: name,
+                address: "me@example.com",
+                folders: []
+            }
+        ];
         currentAccountName = name;
         currentFolderId = "10";
         currentFolderName = "Inbox";
@@ -138,16 +154,13 @@ QtObject {
         return move("moveToArchive", id);
     }
 
-    function cancelSync() {
-        log("cancelSync", []);
-    }
-
     function refreshFolders(id) {
         log("refreshFolders", [id]);
     }
 
     function send(to, cc, bcc, subject, body, attachments) {
         log("send", [to, cc, bcc, subject, body, attachments]);
+        sentAccounts = sentAccounts.concat([currentAccountId]);
         return !fail;
     }
 
@@ -158,6 +171,28 @@ QtObject {
 
     function openMessage(id) {
         return bodies[id] || {};
+    }
+
+    function requestMessage(id, accountId) {
+        const request = String(++nextRequest);
+        log("requestMessage", [request, id, accountId]);
+        if (!holdMessages)
+            Qt.callLater(completeMessage, request, id, accountId);
+        return request;
+    }
+
+    function completeMessage(request, id, accountId) {
+        const body = bodies[id];
+        if (!body || (body.accountId && body.accountId !== accountId)) {
+            messageLoadFailed(request, "not-found");
+            return;
+        }
+        messageLoaded(request, Object.assign({
+            messageId: id,
+            accountId: accountId,
+            accountName: currentAccountName,
+            accountAddress: "me@example.com"
+        }, body));
     }
 
     function addImapAccount(name, email, imapHost, imapPort, imapEnc, smtpHost, smtpPort, smtpEnc, username, password) {
