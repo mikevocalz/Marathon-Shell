@@ -112,6 +112,18 @@ TestCase {
         compare(log, ["button"]);
     }
 
+    function test_destroyClosingMenuDoesNotInvokeDeletedContext() {
+        failOnWarning(/ReferenceError|TypeError/);
+        const c = controlAboveMenu.createObject(testCase);
+        verify(c);
+        c.item.openMenu();
+        tryVerify(() => c.item.menuOpen);
+        c.item.closeMenu();
+        c.destroy();
+        wait(50);
+        compare(log, []);
+    }
+
     function pulley(flick) {
         return flick.pullDownMenu;
     }
