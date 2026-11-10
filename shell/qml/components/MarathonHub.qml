@@ -408,11 +408,12 @@ Rectangle {
             }
         }
 
-        // The last row can scroll clear of the page bar and viewport action.
-        // This must not depend on effective visibility, which changes on hide.
+        // Reserve clearance for the viewport action while items exist. Both
+        // atYBeginning and effective visibility depend on this content's
+        // geometry; using either here creates a scroll/height feedback loop.
         footer: Item {
             width: list.width
-            height: (hub.isInPeekMode ? Silica.Theme.paddingLarge : Silica.Theme.itemSizeMedium) + (list.atYBeginning ? 0 : newestNotifications.height + 2 * Silica.Theme.paddingLarge)
+            height: (hub.isInPeekMode ? Silica.Theme.paddingLarge : Silica.Theme.itemSizeMedium) + (list.count > 0 ? newestNotifications.height + 2 * Silica.Theme.paddingLarge : 0)
         }
 
         delegate: MHubRow {

@@ -172,6 +172,7 @@ TestCase {
     }
 
     function test_reopenPreservesTriagePosition(data) {
+        failOnWarning(/Binding loop detected/);
         hub.dismissOverlay();
         for (let i = 0; i < 30; ++i)
             addNotification(i + 1, "email");
@@ -179,8 +180,11 @@ TestCase {
         hub.unreadOnly = true;
         const list = findChild(hub, "hubList");
         tryCompare(list, "count", 30);
+        waitForPolish(list);
+        const clearance = list.footerItem.height;
         list.positionViewAtIndex(15, ListView.Beginning);
         tryVerify(() => !list.atYBeginning);
+        compare(list.footerItem.height, clearance);
         list.movementEnded();
         verify(!list.atTop);
         waitForPolish(list);
@@ -218,6 +222,7 @@ TestCase {
             mouseClick(newest);
         }
         tryVerify(() => list.atYBeginning);
+        compare(list.footerItem.height, clearance);
         verify(list.atTop);
         verify(!newest.visible);
         compare(list.currentIndex, 0);
