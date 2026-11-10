@@ -145,6 +145,67 @@ TestCase {
         verify(findChild(view, "conversation-a"));
     }
 
+    function test_longNamesKeepDistinctNumbersAndKeyboardDestination() {
+        const app = makeApp();
+        app.width = 320;
+        const name = "<b>Alice Alexandra, international operations coordinator</b>";
+        Sms.conversations = sample().map(c => Object.assign({}, c, {
+                contactName: name,
+                lastMessage: "A longer message preview that still leaves room for the unread count"
+            }));
+        const list = findChild(page(app), "conversationList");
+        let first = null;
+        let other = null;
+        tryVerify(() => (first = findChild(list, "conversation-a")) !== null && (other = findChild(list, "conversation-b")) !== null);
+        const title = findChild(first, "conversationName");
+        title.font.pixelSize = Theme.fontSizeHuge;
+        tryVerify(() => title.lineCount > 1);
+        compare(title.text, name);
+        compare(title.textFormat, Text.PlainText);
+        verify(!title.truncated);
+        compare(findChild(first, "conversationNumber").text, Sms.formatNumber("+15551234567"));
+        compare(findChild(other, "conversationNumber").text, Sms.formatNumber("+447700900123"));
+        verify(first.Accessible.name !== other.Accessible.name);
+        const preview = findChild(first, "preview");
+        tryVerify(() => preview.mapToItem(first, 0, preview.height).y <= first.contentHeight);
+        first.forceActiveFocus();
+        keyClick(Qt.Key_Return);
+        const opened = waitForPage(app, "conversation");
+        compare(opened.conversation.id, "a");
+        compare(opened.recipientNumber, "+15551234567");
+    }
+
+    function test_longRecipientRowOpensItsExactNumber() {
+        const app = makeApp();
+        app.width = 320;
+        const name = "<b>Alexandria Alexandra, international operations</b>";
+        Contacts.contacts = [
+            {
+                name: name,
+                phone: "+15559876543"
+            },
+            {
+                name: name,
+                phone: "+447700900123"
+            }
+        ];
+        app.newMessage();
+        const recipient = waitForPage(app, "matches");
+        let row = null;
+        tryVerify(() => (row = findChild(recipient, "contact-+15559876543")) !== null);
+        row.font.pixelSize = Theme.fontSizeHuge;
+        const title = findChild(row, "summaryText");
+        tryVerify(() => title.lineCount > 1);
+        verify(!title.truncated);
+        compare(title.textFormat, Text.PlainText);
+        compare(row.description, Sms.formatNumber("+15559876543"));
+        const number = findChild(row, "summaryDescription");
+        tryVerify(() => number.mapToItem(row, 0, number.height).y <= row.contentHeight);
+        row.forceActiveFocus();
+        keyClick(Qt.Key_Return);
+        compare(waitForPage(app, "conversation").recipientNumber, "+15559876543");
+    }
+
     function test_pinnedFirstAndArchivedHidden() {
         const app = makeApp(JSON.stringify({
             pinned: ["b"],

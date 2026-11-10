@@ -48,6 +48,7 @@ CoverBackground {
                 width: parent.width
 
                 Label {
+                    textFormat: Text.PlainText
                     objectName: "coverSender"
                     width: parent.width
                     text: Logic.displayName(conversation.modelData)
@@ -55,6 +56,7 @@ CoverBackground {
                     font.pixelSize: Theme.fontSizeSmall
                 }
                 Label {
+                    textFormat: Text.PlainText
                     width: parent.width
                     text: conversation.modelData.lastMessage
                     wrapMode: Text.WordWrap

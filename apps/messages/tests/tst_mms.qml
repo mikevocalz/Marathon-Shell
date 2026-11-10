@@ -133,6 +133,61 @@ TestCase {
         compare(Sms.deletedMessages, [9]);
     }
 
+    function test_failedSmsRetriesFromKeyboardOnceAndFitsLargeText() {
+        const page = conversationWith([
+            {
+                id: 19,
+                text: "<b>Keep these words literal</b>",
+                timestamp: now - 1000,
+                isOutgoing: true,
+                sender: "me",
+                status: "failed",
+                attachments: []
+            }
+        ]);
+        page.app.width = 320;
+        const list = findChild(page, "messageList");
+        let row = null;
+        tryVerify(() => (row = list.itemAtIndex(0)) !== null);
+        const status = findChild(row, "bubbleStatus");
+        status.font.pixelSize = Theme.fontSizeHuge;
+        tryVerify(() => status.lineCount > 1);
+        tryVerify(() => status.mapToItem(row, 0, status.height).y <= row.contentHeight);
+        compare(row.Accessible.description, "Not sent. Activate to try again.");
+        compare(findChild(row, "messageText").textFormat, Text.PlainText);
+        row.forceActiveFocus();
+        keyClick(Qt.Key_Return);
+        compare(Sms.sent, [
+            {
+                recipient: "+15551234567",
+                text: "<b>Keep these words literal</b>"
+            }
+        ]);
+        compare(Sms.deletedMessages, [19]);
+    }
+
+    function test_sendingMessageKeyboardDoesNotRetry() {
+        const page = conversationWith([
+            {
+                id: 20,
+                text: "Still sending",
+                timestamp: now - 1000,
+                isOutgoing: true,
+                sender: "me",
+                status: "sending",
+                attachments: []
+            }
+        ]);
+        const list = findChild(page, "messageList");
+        let row = null;
+        tryVerify(() => (row = list.itemAtIndex(0)) !== null);
+        compare(row.Accessible.description, "Sending");
+        row.forceActiveFocus();
+        keyClick(Qt.Key_Return);
+        compare(Sms.sent.length, 0);
+        compare(Sms.deletedMessages.length, 0);
+    }
+
     function test_aSendingMessageSaysSo() {
         const page = conversationWith([
             {

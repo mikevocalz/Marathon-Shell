@@ -55,21 +55,11 @@ Page {
                 root.submitted = false;
             }
         }
-        ListItem {
+        SummaryListItem {
             objectName: "typedNumberItem"
             visible: root.isNumber
-            contentHeight: Theme.itemSizeSmall
-            Accessible.name: qsTr("Send to %1").arg(Sms.formatNumber(root.typed))
+            text: qsTr("Send to %1").arg(Sms.formatNumber(Logic.normaliseNumber(root.typed)))
             onClicked: root.startWithTyped()
-
-            Label {
-                x: Theme.horizontalPageMargin
-                width: parent.width - 2 * Theme.horizontalPageMargin
-                anchors.verticalCenter: parent.verticalCenter
-                text: qsTr("Send to %1").arg(Sms.formatNumber(Logic.normaliseNumber(root.typed)))
-                truncationMode: TruncationMode.Fade
-                color: parent.highlighted ? Theme.highlightColor : Theme.primaryColor
-            }
         }
     }
 
@@ -96,34 +86,13 @@ Page {
             hintText: qsTr("Enter a phone number above")
         }
 
-        delegate: ListItem {
-            id: item
-
+        delegate: SummaryListItem {
             required property var modelData
 
             objectName: "contact-" + modelData.phone
-            contentHeight: Theme.itemSizeMedium
-            Accessible.name: modelData.name + ", " + Sms.formatNumber(modelData.phone)
+            text: modelData.name || Sms.formatNumber(modelData.phone)
+            description: modelData.name ? Sms.formatNumber(modelData.phone) : ""
             onClicked: root.app.startConversation(modelData.phone, modelData.name, root.sharedText, root.sharedAttachments)
-
-            Column {
-                x: Theme.horizontalPageMargin
-                width: parent.width - 2 * Theme.horizontalPageMargin
-                anchors.verticalCenter: parent.verticalCenter
-
-                Label {
-                    width: parent.width
-                    text: item.modelData.name
-                    truncationMode: TruncationMode.Fade
-                    color: item.highlighted ? Theme.highlightColor : Theme.primaryColor
-                }
-                Label {
-                    width: parent.width
-                    text: Sms.formatNumber(item.modelData.phone)
-                    font.pixelSize: Theme.fontSizeExtraSmall
-                    color: item.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
-                }
-            }
         }
 
         VerticalScrollDecorator {}

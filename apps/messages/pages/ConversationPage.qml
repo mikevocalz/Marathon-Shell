@@ -215,6 +215,7 @@ Page {
         }
 
         Label {
+            textFormat: Text.PlainText
             objectName: "noModem"
             x: Theme.horizontalPageMargin
             width: parent.width - 2 * Theme.horizontalPageMargin
@@ -226,6 +227,7 @@ Page {
         }
 
         Label {
+            textFormat: Text.PlainText
             objectName: "sendStatus"
             x: Theme.horizontalPageMargin
             width: parent.width - 2 * Theme.horizontalPageMargin
