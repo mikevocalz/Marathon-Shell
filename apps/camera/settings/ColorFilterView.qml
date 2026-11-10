@@ -6,6 +6,7 @@
 
 import QtQuick 2.6
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 import MarathonApp.Camera 1.0
 
 ListView {
@@ -87,7 +88,7 @@ ListView {
             truncationMode: TruncationMode.Fade
             highlighted: parent.highlighted
             style: Text.Raised
-            styleColor: "black"
+            styleColor: ContentStyle.mediaBackground
         }
     }
 

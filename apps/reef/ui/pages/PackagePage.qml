@@ -14,6 +14,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 import Shipwright.Reef 1.0
 import "../components"
 import "../components/Texts.js" as Texts

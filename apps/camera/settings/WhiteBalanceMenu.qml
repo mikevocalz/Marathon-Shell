@@ -6,6 +6,7 @@
 
 import QtQuick 2.2
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 import MarathonApp.Camera 1.0
 
 ExpandingMenu {

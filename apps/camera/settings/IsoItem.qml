@@ -6,6 +6,7 @@
 
 import QtQuick 2.6
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 
 Column {
     id: root
@@ -23,7 +24,7 @@ Column {
     Text {
         id: textItem
 
-        color: "white"
+        color: ContentStyle.mediaForeground
         text: root.value == 0 ? qsTr("Auto") : root.value
         font.pixelSize: Theme.fontSizeExtraSmallBase
     }

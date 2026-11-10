@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 import MarathonApp.Camera 1.0
 
 TestCase {
@@ -95,6 +96,30 @@ TestCase {
         const r = rect(app, findChild(app, "shutter"));
         mouseClick(app, r.x + r.width / 2, r.y + r.height / 2);
         compare(app.camera.controller.photos.length, 1);
+    }
+
+    function test_keyboardShutterTakesOnePhoto() {
+        const app = makeApp(windows()[1]);
+        const shutter = findChild(app, "shutter");
+        compare(shutter.Accessible.name, "Take photo");
+        shutter.forceActiveFocus();
+        verify(findChild(shutter, "focusFrame").showing);
+        keyClick(Qt.Key_Return);
+        tryVerify(() => app.camera.controller.photos.length === 1);
+        tryVerify(() => shutter.enabled);
+        shutter.Accessible.pressAction();
+        tryVerify(() => app.camera.controller.photos.length === 2);
+    }
+
+    function test_missingCameraIsDifferentFromUndiscoveredCamera() {
+        const app = makeApp(windows()[1]);
+        const placeholder = findChild(app, "cameraUnavailable");
+        app.camera.controller.discovered = false;
+        verify(!placeholder.enabled);
+        app.camera.controller.hasCameras = false;
+        app.camera.controller.discovered = true;
+        verify(placeholder.enabled);
+        compare(placeholder.text, "No camera available");
     }
 
     function test_videoSwitchRecords_data() {

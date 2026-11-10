@@ -9,8 +9,10 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 import Shipwright.Reef 1.0
 import "../components"
+import "../components/Texts.js" as Texts
 
 Page {
     id: page
@@ -54,10 +56,25 @@ Page {
             })
         }
 
+        PullDownMenu {
+            MenuItem {
+                objectName: "refreshSearch"
+                text: Reef.busy ? qsTr("Refreshing…") : qsTr("Refresh")
+                enabled: !Reef.busy
+                onClicked: Reef.refresh()
+            }
+        }
+
+        BusyLabel {
+            running: Reef.busy && list.count === 0
+            text: qsTr("Loading apps")
+        }
+
         ViewPlaceholder {
+            objectName: "searchPlaceholder"
             enabled: Reef.searchText.length > 0 && list.count === 0 && !Reef.busy
-            text: qsTr("No apps match")
-            hintText: qsTr("Try another word, or fewer words.")
+            text: Reef.lastError.length > 0 ? qsTr("Couldn't load apps") : qsTr("No apps match")
+            hintText: Reef.lastError.length > 0 ? Texts.message(Reef.lastError) + "\n" + qsTr("Pull down to try again") : qsTr("Try another word, or fewer words.")
         }
 
         VerticalScrollDecorator {}

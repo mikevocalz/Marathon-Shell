@@ -54,9 +54,8 @@ Page {
                     text: page.track ? page.track.title : qsTr("Nothing playing")
                     font.pixelSize: artwork.visible ? Theme.fontSizeLarge : Theme.fontSizeHuge
                     wrapMode: Text.Wrap
-                    maximumLineCount: 3
                     color: Theme.highlightColor
-                    truncationMode: TruncationMode.Elide
+                    textFormat: Text.PlainText
                     horizontalAlignment: Text.AlignHCenter
                 }
                 Label {
@@ -64,7 +63,8 @@ Page {
                     text: page.track ? page.track.artist : ""
                     font.pixelSize: artwork.visible ? Theme.fontSizeMedium : Theme.fontSizeLarge
                     color: Theme.secondaryHighlightColor
-                    truncationMode: TruncationMode.Fade
+                    textFormat: Text.PlainText
+                    wrapMode: Text.Wrap
                     horizontalAlignment: Text.AlignHCenter
                 }
             }
@@ -79,16 +79,6 @@ Page {
                 anchors.horizontalCenter: parent.horizontalCenter
                 spacing: Theme.paddingMedium
 
-                IconButton {
-                    objectName: "shuffleButton"
-                    anchors.verticalCenter: parent.verticalCenter
-                    icon.source: "image://theme/icon-m-shuffle"
-                    highlighted: page.player.shuffle
-                    Accessible.name: qsTr("Shuffle")
-                    Accessible.checkable: true
-                    Accessible.checked: page.player.shuffle
-                    onClicked: page.player.shuffle = !page.player.shuffle
-                }
                 IconButton {
                     objectName: "previousButton"
                     anchors.verticalCenter: parent.verticalCenter
@@ -114,6 +104,21 @@ Page {
                     enabled: page.track !== null
                     Accessible.name: qsTr("Next")
                     onClicked: page.player.next()
+                }
+            }
+            Row {
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: Theme.paddingLarge
+
+                IconButton {
+                    objectName: "shuffleButton"
+                    anchors.verticalCenter: parent.verticalCenter
+                    icon.source: "image://theme/icon-m-shuffle"
+                    highlighted: page.player.shuffle
+                    Accessible.name: qsTr("Shuffle")
+                    Accessible.checkable: true
+                    Accessible.checked: page.player.shuffle
+                    onClicked: page.player.shuffle = !page.player.shuffle
                 }
                 IconButton {
                     objectName: "repeatButton"

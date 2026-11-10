@@ -6,6 +6,7 @@
 
 // Silica first: on Keel (Qt 6) the first import providing `Screen` wins.
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 import QtQuick 2.0
 
 Item {

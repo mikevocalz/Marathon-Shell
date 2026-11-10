@@ -3,6 +3,7 @@
 
 import QtQuick
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 import Sailfish.Share 1.0
 import Marathon.Platform 1.0
 

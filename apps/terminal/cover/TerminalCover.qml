@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 
 CoverBackground {
     id: cover
@@ -49,7 +50,8 @@ CoverBackground {
 
                 width: parent.width
                 text: modelData
-                font.family: "JetBrains Mono"
+                textFormat: Text.PlainText
+                font.family: ContentStyle.monospaceFamily
                 font.pixelSize: Theme.fontSizeExtraSmall
                 truncationMode: TruncationMode.Fade
             }

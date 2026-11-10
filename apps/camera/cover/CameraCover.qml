@@ -6,6 +6,7 @@
 
 import QtQuick 2.4
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 import MarathonApp.Camera 1.0
 import Nemo.Thumbnailer 1.0
 
@@ -74,7 +75,7 @@ CoverBackground {
         gradient: Gradient {
             GradientStop {
                 position: 0.0
-                color: Theme.rgba("black", Theme.opacityOverlay)
+                color: Theme.rgba(ContentStyle.mediaBackground, Theme.opacityOverlay)
             }
             GradientStop {
                 position: 1.0
@@ -138,7 +139,7 @@ CoverBackground {
             radius: width / 2
             border {
                 width: Math.round(Theme.pixelRatio * 2)
-                color: "white"
+                color: ContentStyle.mediaForeground
             }
             color: "transparent"
         }

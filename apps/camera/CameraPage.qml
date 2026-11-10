@@ -9,6 +9,7 @@ import QtQuick 2.0
 import QtQml.Models 2.1
 import Nemo.KeepAlive 1.2
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 import MarathonApp.Camera 1.0
 
 Page {
@@ -54,7 +55,7 @@ Page {
             y: galleryItem.y
             width: galleryItem.width
             height: galleryItem.height
-            color: "black"
+            color: ContentStyle.mediaBackground
             visible: switcherView.moving || galleryItem.PagedView.isCurrentItem
         }
     }

@@ -6,6 +6,7 @@
 
 import QtQuick 2.0
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 import MarathonApp.Camera 1.0
 
 Item {
@@ -47,7 +48,7 @@ Item {
     Rectangle {
         id: handle
 
-        color: "black"
+        color: ContentStyle.mediaBackground
         width: icon.width * 0.8
         height: icon.height * 0.8
         radius: Theme.paddingSmall / 2

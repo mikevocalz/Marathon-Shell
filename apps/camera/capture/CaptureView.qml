@@ -9,6 +9,7 @@
 // `Screen` names depends on the Qt version (the first up to Qt 6.8, the
 // last from 6.10).
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 import Sailfish.Silica 1.0 as S
 import QtQuick 2.4
 import Nemo.Ngf 1.0
@@ -712,7 +713,7 @@ FocusScope {
         id: flashRectangle
 
         anchors.fill: parent
-        color: "white"
+        color: ContentStyle.mediaForeground
         opacity: 0
     }
 
@@ -949,9 +950,9 @@ FocusScope {
                     radius: width / 2
                     border {
                         width: Math.round(Theme.pixelRatio * 2)
-                        color: status == Camera.FocusAreaFocused ? (Theme.colorScheme == Theme.LightOnDark ? Theme.highlightColor : Theme.highlightFromColor(Theme.highlightColor, Theme.LightOnDark)) : "white"
+                        color: status == Camera.FocusAreaFocused ? (Theme.colorScheme == Theme.LightOnDark ? Theme.highlightColor : Theme.highlightFromColor(Theme.highlightColor, Theme.LightOnDark)) : ContentStyle.mediaForeground
                     }
-                    color: "#00000000"
+                    color: "transparent"
                 }
             }
         }

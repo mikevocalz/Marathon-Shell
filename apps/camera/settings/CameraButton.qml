@@ -5,8 +5,11 @@
 
 import QtQuick 2.0
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 
 MouseArea {
+    id: root
+
     property alias icon: image
     property alias background: backgroundCircle
     property real size: Theme.itemSizeSmall
@@ -14,6 +17,20 @@ MouseArea {
 
     width: Theme.itemSizeExtraLarge
     height: Theme.itemSizeExtraLarge
+    activeFocusOnTab: enabled && visible
+    Accessible.role: Accessible.Button
+    Accessible.onPressAction: if (enabled)
+        clicked(null)
+    Keys.onPressed: function (event) {
+        if (enabled && !event.isAutoRepeat && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space)) {
+            event.accepted = true;
+            clicked(null);
+        }
+    }
+
+    FocusFrame {
+        parent: root
+    }
 
     Rectangle {
         id: backgroundCircle

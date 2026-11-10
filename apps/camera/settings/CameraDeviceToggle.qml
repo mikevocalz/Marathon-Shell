@@ -6,6 +6,7 @@
 
 import QtQuick 2.6
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 
 // The lens switch redrawn so the lens in use is plain at a
 // glance. The Jolla Camera drew two equal outlined circles and only tinted

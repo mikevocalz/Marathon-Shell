@@ -21,39 +21,19 @@ Page {
         }
         model: Library.albums(page.music.tracks, page.artist)
 
-        delegate: ListItem {
+        delegate: SummaryListItem {
             id: item
 
             required property var modelData
 
             width: view.width
-            contentHeight: Theme.itemSizeMedium
-            Accessible.name: item.modelData.name
+            text: modelData.name
+            description: (modelData.artist !== "" ? modelData.artist : qsTr("Various artists")) + " · " + (modelData.trackCount === 1 ? qsTr("1 song") : qsTr("%1 songs").arg(modelData.trackCount))
             onClicked: pageStack.push(Qt.resolvedUrl("SongsPage.qml"), {
                 music: page.music,
                 title: item.modelData.name,
                 tracks: Library.albumTracks(page.music.tracks, item.modelData.name, page.artist)
             })
-
-            Column {
-                x: Theme.horizontalPageMargin
-                width: parent.width - 2 * Theme.horizontalPageMargin
-                anchors.verticalCenter: parent.verticalCenter
-
-                Label {
-                    width: parent.width
-                    text: item.modelData.name
-                    truncationMode: TruncationMode.Fade
-                    color: item.highlighted ? Theme.highlightColor : Theme.primaryColor
-                }
-                Label {
-                    width: parent.width
-                    text: (item.modelData.artist !== "" ? item.modelData.artist : qsTr("Various artists")) + " · " + (item.modelData.trackCount === 1 ? qsTr("1 song") : qsTr("%1 songs").arg(item.modelData.trackCount))
-                    truncationMode: TruncationMode.Fade
-                    font.pixelSize: Theme.fontSizeSmall
-                    color: item.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
-                }
-            }
         }
 
         ViewPlaceholder {

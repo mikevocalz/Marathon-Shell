@@ -8,6 +8,7 @@
 // `Screen` names depends on the Qt version (the first up to Qt 6.8, the
 // last from 6.10).
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 import Sailfish.Silica 1.0 as S
 import QtQuick 2.6
 import MarathonApp.Camera 1.0
@@ -327,6 +328,7 @@ PinchArea {
 
     ToggleButton {
         objectName: "cameraSwitch"
+        Accessible.name: Settings.global.position === Camera.BackFace ? qsTr("Use front camera") : qsTr("Use back camera")
         parent: _overlayPosition.cameraPosition
         anchors.centerIn: parent
         icon: "image://theme/icon-camera-switch"
@@ -604,7 +606,7 @@ PinchArea {
         Rectangle {
             anchors.fill: parent
             visible: overlay._exposed
-            color: "black"
+            color: ContentStyle.mediaBackground
             opacity: Theme.opacityHigh * (1 - container.opacity)
         }
 
@@ -848,6 +850,7 @@ PinchArea {
         anchors.rightMargin: page.orientation == Orientation.LandscapeInverted ? S.Screen.topCutout.height : 0
 
         CameraButton {
+            Accessible.name: qsTr("Reset camera settings")
             background.visible: false
             enabled: !Settings.defaultSettings && parent.opacity > 0.0
             opacity: !Settings.defaultSettings ? 1.0 : 0.0
@@ -969,6 +972,7 @@ PinchArea {
         }
 
         CameraButton {
+            Accessible.name: qsTr("Scan QR code")
             icon.source: "image://theme/icon-camera-qr"
             background.visible: false
             anchors.centerIn: parent
@@ -1052,7 +1056,7 @@ PinchArea {
         Rectangle {
             anchors.fill: parent
             opacity: Theme.opacityOverlay
-            color: "black"
+            color: ContentStyle.mediaBackground
         }
 
         Label {

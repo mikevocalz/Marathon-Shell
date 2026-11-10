@@ -5,6 +5,7 @@
 
 import QtQuick 2.0
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 
 MouseArea {
     id: menuItem
@@ -14,6 +15,20 @@ MouseArea {
 
     width: Theme.itemSizeExtraSmall
     height: Theme.itemSizeExtraSmall
+    activeFocusOnTab: enabled && visible
+    Accessible.role: Accessible.Button
+    Accessible.onPressAction: if (enabled)
+        clicked(null)
+    Keys.onPressed: function (event) {
+        if (enabled && !event.isAutoRepeat && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space)) {
+            event.accepted = true;
+            clicked(null);
+        }
+    }
+
+    FocusFrame {
+        parent: menuItem
+    }
 
     Rectangle {
         anchors.centerIn: parent

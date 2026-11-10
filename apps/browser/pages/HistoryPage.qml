@@ -70,6 +70,7 @@ Page {
                 width: parent.width
                 placeholderText: qsTr("Search history")
                 visible: root.browser.history.length > 0
+                text: root.searchText
                 onTextChanged: root.searchText = text
                 EnterKey.iconSource: "image://theme/icon-m-enter-close"
                 EnterKey.onClicked: focus = false
@@ -95,15 +96,15 @@ Page {
             hintText: root.browser.history.length === 0 ? (root.browser.isPrivateMode ? qsTr("Private browsing doesn't keep history") : qsTr("Pages you visit show up here")) : qsTr("Try a different word")
         }
 
-        delegate: ListItem {
+        delegate: SummaryListItem {
             id: item
 
             required property string url
             required property string title
             required property int visits
 
-            contentHeight: Theme.itemSizeMedium
-            Accessible.name: title
+            text: title
+            description: url + (visits > 1 ? " · " + qsTr("%1 visits").arg(visits) : "")
             menu: ContextMenu {
                 MenuItem {
                     objectName: "deleteItem"
@@ -114,44 +115,6 @@ Page {
                 }
             }
             onClicked: root.open(url)
-
-            Column {
-                anchors {
-                    left: parent.left
-                    leftMargin: Theme.horizontalPageMargin
-                    right: visitsLabel.left
-                    rightMargin: Theme.paddingMedium
-                    verticalCenter: parent.verticalCenter
-                }
-
-                Label {
-                    width: parent.width
-                    text: item.title
-                    truncationMode: TruncationMode.Fade
-                    color: item.highlighted ? Theme.highlightColor : Theme.primaryColor
-                }
-                Label {
-                    width: parent.width
-                    text: Logic.displayHost(item.url)
-                    font.pixelSize: Theme.fontSizeExtraSmall
-                    truncationMode: TruncationMode.Fade
-                    color: item.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
-                }
-            }
-            Label {
-                id: visitsLabel
-
-                anchors {
-                    right: parent.right
-                    rightMargin: Theme.horizontalPageMargin
-                    verticalCenter: parent.verticalCenter
-                }
-                visible: item.visits > 1
-                width: visible ? implicitWidth : 0
-                text: qsTr("%1 visits").arg(item.visits)
-                font.pixelSize: Theme.fontSizeExtraSmall
-                color: item.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
-            }
         }
 
         VerticalScrollDecorator {}

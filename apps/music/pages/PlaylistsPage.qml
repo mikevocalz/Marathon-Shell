@@ -29,14 +29,14 @@ Page {
             }
         }
 
-        delegate: ListItem {
+        delegate: SummaryListItem {
             id: item
 
             required property var modelData
 
             width: view.width
-            contentHeight: Theme.itemSizeMedium
-            Accessible.name: item.modelData.name
+            text: modelData.name
+            description: modelData.paths.length === 1 ? qsTr("1 song") : qsTr("%1 songs").arg(modelData.paths.length)
             onClicked: pageStack.push(Qt.resolvedUrl("SongsPage.qml"), {
                 music: page.music,
                 title: item.modelData.name,
@@ -48,25 +48,6 @@ Page {
                     onClicked: item.remorseDelete(function () {
                         page.music.savePlaylists(Playlists.remove(page.music.playlists, item.modelData.id));
                     })
-                }
-            }
-
-            Column {
-                x: Theme.horizontalPageMargin
-                width: parent.width - 2 * Theme.horizontalPageMargin
-                anchors.verticalCenter: parent.verticalCenter
-
-                Label {
-                    width: parent.width
-                    text: item.modelData.name
-                    truncationMode: TruncationMode.Fade
-                    color: item.highlighted ? Theme.highlightColor : Theme.primaryColor
-                }
-                Label {
-                    width: parent.width
-                    text: (item.modelData.paths.length === 1 ? qsTr("1 song") : qsTr("%1 songs").arg(item.modelData.paths.length))
-                    font.pixelSize: Theme.fontSizeSmall
-                    color: item.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
                 }
             }
         }

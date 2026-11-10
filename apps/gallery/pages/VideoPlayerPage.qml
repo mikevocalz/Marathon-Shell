@@ -32,7 +32,7 @@ FullscreenContentPage {
 
     Rectangle {
         anchors.fill: parent
-        color: Theme.darkPrimaryColor
+        color: ContentStyle.mediaBackground
     }
 
     SilicaFlickable {
@@ -88,7 +88,8 @@ FullscreenContentPage {
         width: parent.width - 2 * Theme.horizontalPageMargin
         visible: root.controlsShown && !menu.active
         text: root.video && root.video.timestamp ? Format.formatDate(new Date(root.video.timestamp), Formatter.DateLong) : Model.fileName(root.video)
-        truncationMode: TruncationMode.Fade
+        textFormat: Text.PlainText
+        wrapMode: Text.Wrap
     }
 
     IconButton {

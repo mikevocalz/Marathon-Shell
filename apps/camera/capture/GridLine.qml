@@ -6,6 +6,7 @@
 
 import QtQuick 2.12
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 
 // A grid line that fades out at both ends, drawn
 // with a public gradient instead of Sailfish.Silica.private's Underline,

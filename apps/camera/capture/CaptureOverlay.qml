@@ -8,6 +8,7 @@
 // `Screen` names depends on the Qt version (the first up to Qt 6.8, the
 // last from 6.10).
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 import Sailfish.Silica 1.0 as S
 import QtQuick 2.0
 import Nemo.Configuration 1.0
@@ -175,6 +176,7 @@ SettingsOverlay {
 
         objectName: "shutter"
         property bool canStopVideo: startRecordTimer.running || camera.videoRecorder.recorderState == CameraRecorder.RecordingState
+        Accessible.name: canStopVideo ? qsTr("Stop recording") : camera.captureMode === Camera.CaptureVideo ? qsTr("Record video") : qsTr("Take photo")
 
         z: settingsOverlay.inButtonLayout ? 1 : 0
         size: Theme.iconSizeMedium
@@ -197,11 +199,12 @@ SettingsOverlay {
             camera.lockAutoFocus();
         }
         onReleased: {
-            if (containsMouse) {
-                captureView._triggerCapture();
-            } else {
+            if (!containsMouse)
                 camera.unlockAutoFocus();
-            }
+        }
+        onClicked: {
+            camera.lockAutoFocus();
+            captureView._triggerCapture();
         }
         onCanceled: camera.unlockAutoFocus()
 
@@ -279,7 +282,7 @@ SettingsOverlay {
                 color: Theme.errorColor
 
                 SequentialAnimation on opacity {
-                    running: captureView.recording
+                    running: captureView.recording && settingsOverlay.visible && settingsOverlay._applicationActive
                     loops: Animation.Infinite
                     alwaysRunToEnd: true
                     NumberAnimation {
@@ -340,7 +343,7 @@ SettingsOverlay {
         font.pixelSize: Theme.fontSizeExtraSmall
         color: Theme.lightPrimaryColor
         style: Text.Outline
-        styleColor: "#20000000"
+        styleColor: Theme.rgba(ContentStyle.mediaBackground, 0.125)
     }
 
     // Nemo.Time's WallClock is not on Keel; a one-second timer does here.

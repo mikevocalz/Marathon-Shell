@@ -7,9 +7,12 @@
 
 import QtQuick
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 
 ListItem {
     id: tile
+
+    Accessible.name: label.text
 
     width: Theme.iconSizeLauncher + 2 * Theme.paddingLarge + Theme.paddingMedium
     contentHeight: Theme.iconSizeLauncher + Theme.paddingSmall + label.height * 2 + 2 * Theme.paddingMedium

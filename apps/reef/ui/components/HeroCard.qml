@@ -10,6 +10,7 @@
 
 import QtQuick
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 import "Texts.js" as Texts
 
 BackgroundItem {
@@ -23,6 +24,8 @@ BackgroundItem {
     required property string licenceModel
     required property bool licensed
     required property string installState
+
+    Accessible.name: card.title + ", " + card.summary
 
     clip: true
 

@@ -8,6 +8,7 @@
 // `Screen` names depends on the Qt version (the first up to Qt 6.8, the
 // last from 6.10).
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 import Sailfish.Silica 1.0 as S
 import QtQuick 2.0
 
