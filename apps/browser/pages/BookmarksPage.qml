@@ -40,6 +40,7 @@ Page {
                 width: parent.width
                 placeholderText: qsTr("Search bookmarks")
                 visible: root.browser.bookmarks.length > 0
+                text: root.searchText
                 onTextChanged: root.searchText = text
                 EnterKey.iconSource: "image://theme/icon-m-enter-close"
                 EnterKey.onClicked: focus = false
@@ -64,13 +65,13 @@ Page {
             hintText: root.browser.bookmarks.length > 0 ? qsTr("Try a different word") : root.browser.isPrivateMode ? qsTr("Bookmarks are off in private browsing") : qsTr("Pull down to bookmark the page you're on")
         }
 
-        delegate: ListItem {
+        delegate: SummaryListItem {
             id: item
 
             required property var modelData
 
-            contentHeight: Theme.itemSizeMedium
-            Accessible.name: modelData.title || modelData.url
+            text: modelData.title || modelData.url
+            description: modelData.url
             menu: ContextMenu {
                 MenuItem {
                     objectName: "deleteItem"
@@ -81,30 +82,6 @@ Page {
                 }
             }
             onClicked: root.open(modelData.url)
-
-            Column {
-                anchors {
-                    left: parent.left
-                    leftMargin: Theme.horizontalPageMargin
-                    right: parent.right
-                    rightMargin: Theme.horizontalPageMargin
-                    verticalCenter: parent.verticalCenter
-                }
-
-                Label {
-                    width: parent.width
-                    text: item.modelData.title || item.modelData.url
-                    truncationMode: TruncationMode.Fade
-                    color: item.highlighted ? Theme.highlightColor : Theme.primaryColor
-                }
-                Label {
-                    width: parent.width
-                    text: Logic.displayHost(item.modelData.url)
-                    font.pixelSize: Theme.fontSizeExtraSmall
-                    truncationMode: TruncationMode.Fade
-                    color: item.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
-                }
-            }
         }
 
         VerticalScrollDecorator {}

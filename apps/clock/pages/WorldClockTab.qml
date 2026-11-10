@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Sailfish.Silica 1.0
 import Marathon.Silica 1.0
+import "../ClockLogic.js" as Logic
 
 TabItem {
     id: root
@@ -14,7 +15,7 @@ TabItem {
     flickable: list
 
     Timer {
-        interval: 1000
+        interval: 60000 - root.now.getSeconds() * 1000 - root.now.getMilliseconds()
         repeat: true
         triggeredOnStart: true
         running: root.isCurrentItem && Application.state === Qt.ApplicationActive
@@ -44,8 +45,12 @@ TabItem {
 
             Label {
                 anchors.horizontalCenter: parent.horizontalCenter
+                width: parent.width - 2 * Theme.horizontalPageMargin
                 text: Format.formatDate(root.now, Formatter.TimeValue)
                 font.pixelSize: Theme.fontSizeHuge
+                fontSizeMode: Text.HorizontalFit
+                minimumPixelSize: Theme.fontSizeLarge
+                horizontalAlignment: Text.AlignHCenter
                 font.features: ({
                         "tnum": 1
                     })
@@ -53,7 +58,21 @@ TabItem {
             }
             Label {
                 anchors.horizontalCenter: parent.horizontalCenter
+                width: parent.width - 2 * Theme.horizontalPageMargin
                 text: Format.formatDate(root.now, Formatter.DateLong)
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap
+                color: Theme.secondaryHighlightColor
+            }
+            Label {
+                objectName: "localCity"
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: parent.width - 2 * Theme.horizontalPageMargin
+                visible: root.app.localZone !== ""
+                text: Logic.zoneCity(root.app.localZone)
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap
+                font.pixelSize: Theme.fontSizeSmall
                 color: Theme.secondaryHighlightColor
             }
         }
@@ -72,8 +91,8 @@ TabItem {
             readonly property var info: root.app.cityTime(modelData, root.now)
 
             objectName: "cityItem"
-            contentHeight: Theme.itemSizeMedium
-            Accessible.name: modelData.name + ", " + info.time
+            contentHeight: Math.max(Theme.itemSizeMedium, cityLayout.height + 2 * Theme.paddingMedium)
+            Accessible.name: [modelData.name, info.time, info.weekday, info.diff].filter(s => s).join(", ")
             menu: ContextMenu {
                 MenuItem {
                     visible: item.index > 0
@@ -95,50 +114,82 @@ TabItem {
                 }
             }
 
-            Column {
-                anchors {
-                    left: parent.left
-                    leftMargin: Theme.horizontalPageMargin
-                    right: times.left
-                    rightMargin: Theme.paddingMedium
-                    verticalCenter: parent.verticalCenter
-                }
+            TextMetrics {
+                id: timeWidth
 
-                Label {
-                    width: parent.width
-                    text: item.modelData.name
-                    truncationMode: TruncationMode.Fade
-                    color: item.highlighted ? Theme.highlightColor : Theme.primaryColor
-                }
-                Label {
-                    text: item.info.diff
-                    font.pixelSize: Theme.fontSizeSmall
-                    color: item.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
-                }
+                text: item.info.time
+                font.pixelSize: Theme.fontSizeLarge
+                font.family: Theme.fontFamily
+                font.features: ({
+                        "tnum": 1
+                    })
             }
-            Column {
-                id: times
+            TextMetrics {
+                id: weekdayWidth
 
-                anchors {
-                    right: parent.right
-                    rightMargin: Theme.horizontalPageMargin
-                    verticalCenter: parent.verticalCenter
-                }
+                text: item.info.weekday
+                font.pixelSize: Theme.fontSizeSmall
+                font.family: Theme.fontFamily
+            }
 
-                Label {
-                    anchors.right: parent.right
-                    text: item.info.time
-                    font.pixelSize: Theme.fontSizeLarge
-                    font.features: ({
-                            "tnum": 1
-                        })
-                    color: item.highlighted ? Theme.highlightColor : Theme.primaryColor
+            Grid {
+                id: cityLayout
+
+                readonly property real timeColumnWidth: Math.ceil(Math.max(timeWidth.advanceWidth, weekdayWidth.advanceWidth))
+
+                objectName: "cityLayout"
+                x: Theme.horizontalPageMargin
+                width: item.width - 2 * x
+                anchors.verticalCenter: parent.verticalCenter
+                columns: width >= timeColumnWidth + Theme.paddingMedium + 10 * Theme.fontSizeMedium ? 2 : 1
+                columnSpacing: Theme.paddingMedium
+                rowSpacing: Theme.paddingSmall
+
+                Column {
+                    width: cityLayout.columns === 1 ? cityLayout.width : cityLayout.width - cityLayout.timeColumnWidth - cityLayout.columnSpacing
+
+                    Label {
+                        objectName: "cityName"
+                        width: parent.width
+                        text: item.modelData.name
+                        textFormat: Text.PlainText
+                        wrapMode: Text.Wrap
+                        color: item.highlighted ? Theme.highlightColor : Theme.primaryColor
+                    }
+                    Label {
+                        width: parent.width
+                        text: item.info.diff
+                        textFormat: Text.PlainText
+                        wrapMode: Text.Wrap
+                        font.pixelSize: Theme.fontSizeSmall
+                        color: item.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
+                    }
                 }
-                Label {
-                    anchors.right: parent.right
-                    text: item.info.weekday
-                    font.pixelSize: Theme.fontSizeSmall
-                    color: item.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
+                Column {
+                    width: cityLayout.columns === 1 ? cityLayout.width : cityLayout.timeColumnWidth
+
+                    Label {
+                        objectName: "cityTime"
+                        width: parent.width
+                        text: item.info.time
+                        textFormat: Text.PlainText
+                        wrapMode: Text.Wrap
+                        horizontalAlignment: cityLayout.columns === 1 ? Text.AlignLeft : Text.AlignRight
+                        font.pixelSize: Theme.fontSizeLarge
+                        font.features: ({
+                                "tnum": 1
+                            })
+                        color: item.highlighted ? Theme.highlightColor : Theme.primaryColor
+                    }
+                    Label {
+                        width: parent.width
+                        text: item.info.weekday
+                        textFormat: Text.PlainText
+                        wrapMode: Text.Wrap
+                        horizontalAlignment: cityLayout.columns === 1 ? Text.AlignLeft : Text.AlignRight
+                        font.pixelSize: Theme.fontSizeSmall
+                        color: item.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
+                    }
                 }
             }
         }

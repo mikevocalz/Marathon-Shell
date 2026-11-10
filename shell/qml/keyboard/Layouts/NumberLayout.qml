@@ -46,7 +46,7 @@ Item {
         Rectangle {
             width: parent.width
             height: Math.round(1 * Constants.scaleFactor)
-            color: "#666666"
+            color: MColors.textSecondary
         }
 
         Row {
@@ -73,7 +73,7 @@ Item {
         Rectangle {
             width: parent.width
             height: Math.round(1 * Constants.scaleFactor)
-            color: "#666666"
+            color: MColors.textSecondary
         }
 
         Row {
@@ -105,7 +105,7 @@ Item {
         Rectangle {
             width: parent.width
             height: Math.round(1 * Constants.scaleFactor)
-            color: "#666666"
+            color: MColors.textSecondary
         }
 
         Row {

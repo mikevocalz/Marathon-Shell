@@ -133,17 +133,17 @@ Item {
                 anchors.centerIn: parent
                 width: parent.width - 24
                 height: parent.height - 16
-                color: "#333333"
-                radius: 8
+                color: MColors.elev4
+                radius: MRadius.xl
 
                 GlyphIcon {
                     id: searchIcon
 
                     name: "search"
                     size: 16
-                    color: "white"
+                    color: MColors.textPrimary
                     anchors.left: parent.left
-                    anchors.leftMargin: 12
+                    anchors.leftMargin: MSpacing.sm + MSpacing.xs
                     anchors.verticalCenter: parent.verticalCenter
                     opacity: 0.5
                 }
@@ -152,12 +152,12 @@ Item {
                     id: searchInput
 
                     anchors.left: searchIcon.right
-                    anchors.leftMargin: 8
+                    anchors.leftMargin: MSpacing.sm
                     anchors.right: parent.right
-                    anchors.rightMargin: 12
+                    anchors.rightMargin: MSpacing.sm + MSpacing.xs
                     anchors.verticalCenter: parent.verticalCenter
-                    color: "white"
-                    font.pixelSize: 16
+                    color: MColors.textPrimary
+                    font.pixelSize: MTypography.sizeBody
                     text: layout.searchText
                     onTextChanged: layout.searchText = text
                     onActiveFocusChanged: {
@@ -166,7 +166,7 @@ Item {
 
                     Text {
                         text: qsTr("Search emojis...")
-                        color: "#888888"
+                        color: MColors.textSecondary
                         visible: parent.text.length === 0
                         anchors.fill: parent
                         verticalAlignment: Text.AlignVCenter
@@ -176,9 +176,9 @@ Item {
                 GlyphIcon {
                     name: "x"
                     size: 16
-                    color: "white"
+                    color: MColors.textPrimary
                     anchors.right: parent.right
-                    anchors.rightMargin: 12
+                    anchors.rightMargin: MSpacing.sm + MSpacing.xs
                     anchors.verticalCenter: parent.verticalCenter
                     visible: layout.searchText.length > 0
 
@@ -214,8 +214,8 @@ Item {
                 Text {
                     anchors.centerIn: parent
                     text: emojiCell.modelData
-                    font.family: "Noto Color Emoji"
-                    font.pixelSize: 28
+                    font.family: MTypography.emojiFamily
+                    font.pixelSize: MTypography.emojiSize
                     renderType: Text.NativeRendering
                 }
 
@@ -223,7 +223,8 @@ Item {
                     anchors.fill: parent
                     onClicked: {
                         layout.keyClicked(emojiCell.modelData);
-                        HapticManager.light();
+                        if (SettingsManagerCpp.keyboardHapticStrength !== "off")
+                            HapticManager.light();
                         if (layout.searchText.length > 0) {}
                     }
                 }

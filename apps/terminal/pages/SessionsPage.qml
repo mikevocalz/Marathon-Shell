@@ -28,7 +28,7 @@ Page {
             }
         }
 
-        delegate: ListItem {
+        delegate: SummaryListItem {
             id: item
 
             required property var modelData
@@ -36,7 +36,8 @@ Page {
 
             highlighted: down || index === page.app.currentIndex
             menu: page.app.sessions.length > 1 ? closeMenu : null
-            Accessible.name: label.text
+            text: modelData.title !== "Terminal" ? modelData.title : qsTr("Session %1").arg(index + 1)
+            description: modelData.failed ? qsTr("Couldn’t start — open to retry") : modelData.running ? (index === page.app.currentIndex ? qsTr("Current session") : qsTr("Running")) : qsTr("Process exited")
 
             onClicked: {
                 page.app.currentIndex = index;
@@ -57,17 +58,6 @@ Page {
                         }
                     }
                 }
-            }
-
-            Label {
-                id: label
-
-                x: Theme.horizontalPageMargin
-                width: parent.width - 2 * Theme.horizontalPageMargin
-                anchors.verticalCenter: parent.verticalCenter
-                text: item.modelData.title !== "Terminal" ? item.modelData.title : qsTr("Session %1").arg(item.index + 1)
-                truncationMode: TruncationMode.Fade
-                color: item.highlighted ? Theme.highlightColor : Theme.primaryColor
             }
         }
 

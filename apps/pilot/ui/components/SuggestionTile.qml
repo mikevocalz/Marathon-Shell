@@ -6,6 +6,7 @@
 
 import QtQuick
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 
 BackgroundItem {
     id: tile
@@ -40,7 +41,9 @@ BackgroundItem {
     // wraps never runs into its icon, and as much room below the question
     // as above the icon (lines measured with their leading, as drawn).
     readonly property real _textTop: Theme.paddingLarge + Theme.iconSizeMedium + Theme.paddingSmall
-    height: Math.max(Theme.itemSizeExtraLarge, _textTop + 2 * questionMetrics.lineSpacing + Theme.paddingLarge)
+    height: Math.max(Theme.itemSizeExtraLarge, _textTop + Math.max(2 * questionMetrics.lineSpacing, question.implicitHeight) + Theme.paddingLarge)
+    Accessible.role: Accessible.Button
+    Accessible.name: text
     FontMetrics {
         id: questionMetrics
         font.pixelSize: Theme.fontSizeSmall
@@ -50,7 +53,7 @@ BackgroundItem {
 
     Rectangle {
         anchors.fill: parent
-        radius: Theme.paddingLarge
+        radius: Theme.paddingSmall
         color: tile.down ? Theme.rgba(Theme.highlightBackgroundColor, 0.30) : Theme.rgba(Theme.primaryColor, 0.06)
         border.width: 1
         border.color: Theme.rgba(Theme.primaryColor, 0.10)
@@ -77,14 +80,14 @@ BackgroundItem {
     }
 
     Label {
+        id: question
+        textFormat: Text.PlainText
         objectName: "question"
         x: Theme.paddingLarge
         y: tile._textTop
         width: parent.width - 2 * Theme.paddingLarge
         text: tile.text
         wrapMode: Text.Wrap
-        maximumLineCount: 2
-        truncationMode: TruncationMode.Fade
         font.pixelSize: Theme.fontSizeSmall
         color: tile.down ? Theme.highlightColor : Theme.primaryColor
     }

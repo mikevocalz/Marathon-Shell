@@ -9,7 +9,9 @@
 
 import QtQuick
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 import Shipwright.Pilot 1.0
+import "../components"
 
 CoverBackground {
     id: cover
@@ -80,6 +82,7 @@ CoverBackground {
         Column {
             anchors.centerIn: parent
             Label {
+                textFormat: Text.PlainText
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: cover.hms(cover.remaining)
                 font.pixelSize: Theme.fontSizeLarge
@@ -87,6 +90,7 @@ CoverBackground {
                 color: Theme.highlightColor
             }
             Label {
+                textFormat: Text.PlainText
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: Math.min(implicitWidth, cover.width * 0.5)
                 text: cover.timer && cover.timer.title.indexOf(" timer") < 0 && cover.timer.title.length > 0 ? cover.timer.title : qsTr("Timer")
@@ -109,12 +113,13 @@ CoverBackground {
         spacing: Theme.paddingSmall
 
         Label {
+            textFormat: Text.PlainText
             objectName: "coverState"
             width: parent.width
             truncationMode: TruncationMode.Fade
             font.pixelSize: Theme.fontSizeMedium
             color: Theme.secondaryColor
-            text: Pilot.offline ? qsTr("Pilot · offline") : Pilot.busy ? qsTr("Pilot · thinking") : qsTr("Pilot")
+            text: !Pilot.connected ? qsTr("Pilot · unavailable") : Pilot.offline ? qsTr("Pilot · offline") : Pilot.busy ? qsTr("Pilot · thinking") : qsTr("Pilot")
         }
         // The next alarm or reminder.
         Row {
@@ -126,6 +131,7 @@ CoverBackground {
                 color: Theme.highlightColor
             }
             Label {
+                textFormat: Text.PlainText
                 anchors.verticalCenter: parent.verticalCenter
                 text: cover.next ? Format.formatDate(new Date(cover.next.at * 1000), Formatter.TimeValue) : ""
                 font.pixelSize: Theme.fontSizeLarge
@@ -133,6 +139,7 @@ CoverBackground {
             }
         }
         Label {
+            textFormat: Text.PlainText
             objectName: "coverText"
             width: parent.width
             // An answer wraps anywhere a long word (an address) needs to,
@@ -144,14 +151,14 @@ CoverBackground {
             font.pixelSize: Theme.fontSizeMedium
             color: Theme.primaryColor
             // Offline is said above; here what still works.
-            text: Pilot.offline ? qsTr("Timers, alarms and reminders still work") : Pilot.lastResponse.length > 0 ? Pilot.lastResponse : qsTr("Ask anything")
+            text: !Pilot.connected ? qsTr("Waiting for Pilot to reconnect") : Pilot.offline ? qsTr("Timers, alarms and reminders still work") : Pilot.lastResponse.length > 0 ? Pilot.lastResponse : qsTr("Ask anything")
         }
     }
 
     CoverActionList {
         id: onlineActions
         objectName: "onlineActions"
-        enabled: !Pilot.offline
+        enabled: !Pilot.offline && Conversation.canSend
         CoverAction {
             iconSource: "image://theme/icon-cover-message"
             // The main window's showSheet(): activate, sheet up, keyboard.
@@ -164,7 +171,7 @@ CoverBackground {
             // pilot-voice; the answer is spoken and shown here, and the app
             // is brought up so the turn is visible.
             onTriggered: {
-                Pilot.listen();
+                Conversation.listen();
                 cover.bringUp();
             }
         }
@@ -173,7 +180,7 @@ CoverBackground {
     CoverActionList {
         id: offlineActions
         objectName: "offlineActions"
-        enabled: Pilot.offline
+        enabled: !onlineActions.enabled
         CoverAction {
             iconSource: "image://theme/icon-cover-message"
             // The main window's showSheet(): activate, sheet up, keyboard.

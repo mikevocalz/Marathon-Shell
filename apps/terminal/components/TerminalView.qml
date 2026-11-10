@@ -127,8 +127,8 @@ Item {
         terminal: root.session
         scrollOffset: root.scrollOffset
         font.pixelSize: root.fontSize
-        textColor: root.colorScheme === "light" ? "black" : root.colorScheme === "dark" ? "white" : Theme.primaryColor
-        backgroundColor: root.colorScheme === "light" ? "white" : root.colorScheme === "dark" ? "black" : "transparent"
+        textColor: root.colorScheme === "light" ? ContentStyle.mediaBackground : root.colorScheme === "dark" ? ContentStyle.mediaForeground : Theme.primaryColor
+        backgroundColor: root.colorScheme === "light" ? ContentStyle.mediaForeground : root.colorScheme === "dark" ? ContentStyle.mediaBackground : "transparent"
         selectionColor: Theme.rgba(Theme.highlightBackgroundColor, Theme.highlightBackgroundOpacity)
         activeFocusOnTab: true
         Accessible.role: Accessible.Terminal

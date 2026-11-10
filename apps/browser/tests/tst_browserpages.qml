@@ -283,6 +283,37 @@ TestCase {
         compare(app.currentTab.url, "https://qt.io");
     }
 
+    function test_longBookmarkKeepsItsFullIdentityAndKeyboardTarget() {
+        const title = "<b>A very long saved page title with many words</b>";
+        const target = "https://example.test/first/source";
+        const app = makeApp([
+            {
+                url: target,
+                title: title
+            },
+            {
+                url: "https://example.test/second/source",
+                title: title
+            }
+        ]);
+        app.width = 320;
+        const page = push(app, "BookmarksPage.qml");
+        const view = findChild(page, "bookmarksView");
+        tryVerify(() => view.itemAtIndex(0) !== null);
+        const row = view.itemAtIndex(0);
+        const label = findChild(row, "summaryText");
+        row.font.pixelSize = Theme.fontSizeLarge;
+        tryVerify(() => label.lineCount > 1);
+        compare(label.text, title);
+        compare(label.textFormat, Text.PlainText);
+        verify(!label.truncated);
+        verify(row.Accessible.name.indexOf(target) >= 0);
+        row.forceActiveFocus();
+        keyClick(Qt.Key_Return);
+        settle(app, 1);
+        compare(app.currentTab.url, target);
+    }
+
     function test_bookmarksPlaceholder() {
         const app = makeApp();
         const page = push(app, "BookmarksPage.qml");

@@ -148,6 +148,7 @@ Dialog {
                 title: page.provider === "" || page.provider === "other" ? qsTr("Other (IMAP)") : providerBox.value
             }
             Label {
+                textFormat: Text.PlainText
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * Theme.horizontalPageMargin
                 bottomPadding: Theme.paddingLarge
@@ -324,6 +325,7 @@ Dialog {
             }
 
             Label {
+                textFormat: Text.PlainText
                 objectName: "error"
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * Theme.horizontalPageMargin

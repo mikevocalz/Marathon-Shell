@@ -8,6 +8,7 @@
 
 import QtQuick
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 import Shipwright.Pilot 1.0
 
 Page {
@@ -49,43 +50,39 @@ Page {
             id: row
             required property var modelData
             readonly property bool failed: modelData.result !== "ok"
-            contentHeight: Theme.itemSizeMedium
+            contentHeight: Math.max(Theme.itemSizeMedium, details.height + 2 * Theme.paddingMedium)
 
-            Label {
-                id: purpose
-                anchors {
-                    left: parent.left
-                    leftMargin: Theme.horizontalPageMargin
-                    right: time.left
-                    rightMargin: Theme.paddingMedium
-                    bottom: parent.verticalCenter
+            Column {
+                id: details
+
+                x: Theme.horizontalPageMargin
+                width: parent.width - 2 * x
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Theme.paddingSmall
+
+                Label {
+                    width: parent.width
+                    text: page.purposeText(row.modelData.purpose)
+                    textFormat: Text.PlainText
+                    wrapMode: Text.Wrap
+                    color: row.highlighted ? Theme.highlightColor : Theme.primaryColor
                 }
-                truncationMode: TruncationMode.Fade
-                color: row.highlighted ? Theme.highlightColor : Theme.primaryColor
-                text: page.purposeText(row.modelData.purpose)
-            }
-            Label {
-                id: time
-                anchors {
-                    right: parent.right
-                    rightMargin: Theme.horizontalPageMargin
-                    baseline: purpose.baseline
+                Label {
+                    width: parent.width
+                    text: row.modelData.provider + " · " + qsTr("%1 out, %2 in").arg(page.sizeText(row.modelData.bytes_out)).arg(page.sizeText(row.modelData.bytes_in)) + " · " + qsTr("%1 ms").arg(row.modelData.latency_ms) + (row.failed ? " · " + row.modelData.result : "")
+                    textFormat: Text.PlainText
+                    wrapMode: Text.Wrap
+                    font.pixelSize: Theme.fontSizeExtraSmall
+                    color: row.failed ? Theme.errorColor : row.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
                 }
-                font.pixelSize: Theme.fontSizeExtraSmall
-                color: row.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
-                text: Format.formatDate(new Date(row.modelData.ts_ms), Formatter.TimepointRelative)
-            }
-            Label {
-                anchors {
-                    left: purpose.left
-                    right: parent.right
-                    rightMargin: Theme.horizontalPageMargin
-                    top: parent.verticalCenter
+                Label {
+                    width: parent.width
+                    text: Format.formatDate(new Date(row.modelData.ts_ms), Formatter.TimepointRelative)
+                    textFormat: Text.PlainText
+                    wrapMode: Text.Wrap
+                    font.pixelSize: Theme.fontSizeExtraSmall
+                    color: row.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
                 }
-                truncationMode: TruncationMode.Fade
-                font.pixelSize: Theme.fontSizeExtraSmall
-                color: row.failed ? Theme.errorColor : row.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
-                text: row.modelData.provider + " · " + qsTr("%1 out, %2 in").arg(page.sizeText(row.modelData.bytes_out)).arg(page.sizeText(row.modelData.bytes_in)) + " · " + qsTr("%1 ms").arg(row.modelData.latency_ms) + (row.failed ? " · " + row.modelData.result : "")
             }
         }
 

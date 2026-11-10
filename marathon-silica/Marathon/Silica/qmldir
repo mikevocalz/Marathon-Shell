@@ -1,4 +1,5 @@
 module Marathon.Silica
+singleton ContentStyle 1.0 ContentStyle.qml
 ApplicationWindow 1.0 ApplicationWindow.qml
 BackgroundItem 1.0 BackgroundItem.qml
 Button 1.0 Button.qml
@@ -12,7 +13,9 @@ DetailItem 1.0 DetailItem.qml
 FocusFrame 1.0 FocusFrame.qml
 IconButton 1.0 IconButton.qml
 IconTextSwitch 1.0 IconTextSwitch.qml
+Keypad 1.0 Keypad.qml
 ListItem 1.0 ListItem.qml
+SummaryListItem 1.0 SummaryListItem.qml
 MenuItem 1.0 MenuItem.qml
 Page 1.0 Page.qml
 PageHeader 1.0 PageHeader.qml

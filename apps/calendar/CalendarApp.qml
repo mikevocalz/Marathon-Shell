@@ -11,7 +11,15 @@ import "cover"
 ApplicationWindow {
     id: root
 
+    // Calendar titles, descriptions and account names are provider text.
+    _defaultLabelFormat: Text.PlainText
+
     readonly property var events: Calendar.events || []
+    readonly property string syncedState: Calendar.syncedState
+
+    function refreshSynced() {
+        Calendar.refreshSynced();
+    }
 
     function eventsOn(date) {
         return Logic.eventsOn(events, date);
@@ -58,15 +66,27 @@ ApplicationWindow {
             return timeText(event);
         const t = Logic.parseTime(event.endTime);
         const end = Format.formatDate(new Date(2000, 0, 1, t.hour, t.minute), Formatter.TimeValue);
+        if (event.source === "caldav" && event.endDate > event.date)
+            return qsTr("%1 – %2, %3").arg(timeText(event)).arg(end).arg(Format.formatDate(Logic.parseDate(event.endDate), Formatter.DateLong));
         return Logic.endsNextDay(event) ? qsTr("%1 – %2 next day").arg(timeText(event)).arg(end) : qsTr("%1 – %2").arg(timeText(event)).arg(end);
     }
 
     function dateText(event) {
-        return Format.formatDate(Logic.parseDate(event.date), Formatter.DateLong);
+        const start = Format.formatDate(Logic.parseDate(event.date), Formatter.DateLong);
+        if (event.source === "caldav" && event.endDate > event.date) {
+            const end = Logic.parseDate(event.endDate);
+            if (event.allDay || event.endTime === "00:00")
+                end.setDate(end.getDate() - 1);
+            if (Logic.dateKey(end) > event.date)
+                return qsTr("%1 – %2").arg(start).arg(Format.formatDate(end, Formatter.DateLong));
+        }
+        return start;
     }
 
     // `event` without an id is created.
     function saveEvent(event) {
+        if (event.readOnly)
+            return false;
         const ok = event.id === undefined ? Calendar.createEvent(event).id !== undefined : Calendar.updateEvent(event);
         if (!ok)
             Notices.show(qsTr("Couldn't save the event. Try again."));
@@ -74,6 +94,9 @@ ApplicationWindow {
     }
 
     function deleteEvent(id) {
+        const event = eventById(id);
+        if (event && event.readOnly)
+            return false;
         const ok = Calendar.deleteEvent(id);
         if (!ok)
             Notices.show(qsTr("Couldn't delete the event. Try again."));
@@ -100,6 +123,8 @@ ApplicationWindow {
     }
 
     function editEvent(event) {
+        if (event.readOnly)
+            return null;
         const t = Logic.parseTime(event.time);
         return pageStack.push(Qt.resolvedUrl("pages/EventEditorDialog.qml"), {
             app: root,

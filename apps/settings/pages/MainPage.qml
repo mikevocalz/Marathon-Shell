@@ -17,9 +17,10 @@ Page {
     readonly property var wallpapers: typeof Wallpapers !== "undefined" ? Wallpapers : null
 
     // No mobile network entry on devices without a modem, no erasing
-    // where the image can't erase itself, and no Android apps without Android.
+    // where the image can't erase itself, no Android apps without Android,
+    // no developer tools without SSH and no assistant key without the key.
     function present(entries) {
-        return entries.filter(e => (e.page !== "cellular" || Modem.available) && (e.page !== "erase" || Security.canEraseAllContent) && (e.page !== "android" || AndroidApps.available));
+        return entries.filter(e => (e.page !== "cellular" || Modem.available) && (e.page !== "erase" || Security.canEraseAllContent) && (e.page !== "android" || AndroidApps.available) && (e.page !== "developer" || Security.remoteConnection !== "unavailable") && (e.page !== "assistkey" || Power.hasAssistKey) && (e.page !== "trackpad" || Power.hasTrackpad));
     }
 
     function summary(name) {
@@ -55,6 +56,12 @@ Page {
             return Updates.updateAvailable ? qsTr("Update available") : "";
         case "android":
             return Logic.androidState((AndroidApps.runtime || {}).state) + " · " + qsTr("%n apps", "", AndroidApps.apps.length);
+        case "developer":
+            return Security.remoteConnection === "on" ? qsTr("Remote connection on") : "";
+        case "trackpad":
+            return Logic.trackpadModeTitle(Settings.trackpadMode);
+        case "assistkey":
+            return Logic.assistKeyActionTitle(Settings.assistKeyPress) + " · " + Logic.assistKeyActionTitle(Settings.assistKeyHold);
         }
         return "";
     }
@@ -75,49 +82,15 @@ Page {
         id: storage
     }
 
-    component EntryItem: ListItem {
-        id: item
-
+    component EntryItem: SummaryListItem {
         required property var modelData
         readonly property string value: page.summary(modelData.page)
 
         objectName: "entry-" + (modelData.page || modelData.app)
-        contentHeight: Theme.itemSizeMedium
-        Accessible.name: value !== "" ? modelData.title + ", " + value : modelData.title
+        text: modelData.title
+        description: modelData.section !== undefined ? modelData.section + (value !== "" ? " · " + value : "") : value
+        iconSource: modelData.icon
         onClicked: page.open(modelData)
-
-        Icon {
-            id: icon
-
-            x: Theme.horizontalPageMargin
-            anchors.verticalCenter: parent.verticalCenter
-            source: item.modelData.icon
-            color: item.highlighted ? Theme.highlightColor : Theme.primaryColor
-        }
-        Column {
-            anchors {
-                left: icon.right
-                leftMargin: Theme.paddingLarge
-                right: parent.right
-                rightMargin: Theme.horizontalPageMargin
-                verticalCenter: parent.verticalCenter
-            }
-
-            Label {
-                width: parent.width
-                text: item.modelData.title
-                truncationMode: TruncationMode.Fade
-                color: item.highlighted ? Theme.highlightColor : Theme.primaryColor
-            }
-            Label {
-                width: parent.width
-                visible: text !== ""
-                text: item.modelData.section !== undefined ? item.modelData.section : item.value
-                font.pixelSize: Theme.fontSizeExtraSmall
-                truncationMode: TruncationMode.Fade
-                color: item.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
-            }
-        }
     }
 
     SilicaFlickable {

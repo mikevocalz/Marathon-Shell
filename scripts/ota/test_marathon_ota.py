@@ -17,9 +17,11 @@ from pathlib import Path
 TOOL = Path(__file__).resolve().parent / "marathon-ota"
 TRANSFERS = Path(__file__).resolve().parents[2] / "packaging" / "ota" / "sysupdate.d"
 PI_TRANSFERS = Path(__file__).resolve().parents[2] / "packaging" / "ota" / "pi" / "sysupdate.d"
+Q25_TRANSFERS = Path(__file__).resolve().parents[2] / "packaging" / "ota" / "q25" / "sysupdate.d"
 SYSUPDATE = Path("/usr/lib/systemd/systemd-sysupdate")
 IMAGE_ID = "qemu-aarch64_marathon_edge"
 PI_IMAGE_ID = "raspberry-pi5_marathon_edge"
+Q25_IMAGE_ID = "zinwa-q25_marathon_edge"
 BOOT_TYPE = "EBD0A0A2-B9E5-4433-87C0-68B6B72699C7"
 ROOT_TYPE = "B921B045-1DF0-41C3-AF44-4C6F280D3FAE"
 UUID_A = "0123456789abcdef0123456789abcdef"
@@ -31,8 +33,9 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
         pass
 
 
-@unittest.skipUnless(shutil.which("gpg") and shutil.which("gpgv") and shutil.which("zstd"),
-                     "needs gpg, gpgv and zstd")
+@unittest.skipUnless(all(map(shutil.which, ["gpg", "gpgv", "zstd", "mkfs.ext4", "debugfs",
+                                            "mkfs.erofs", "dump.erofs"])),
+                     "needs gpg, gpgv, zstd, e2fsprogs and erofs-utils")
 class FeedCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -64,10 +67,26 @@ class FeedCase(unittest.TestCase):
         self.image_dir.mkdir()
         self.feed = self.case / "feed"
 
-    def build(self, version, uuid=UUID_A, payload=b"usr"):
+    def filesystem(self, path, payload, erofs=False, size="1M", dev=False):
+        """An ext4 root, or an erofs /usr, as publish reads it; dev is what
+        MARATHON_DEV_SSH_KEY adds."""
+        tree = Path(tempfile.mkdtemp(dir=self.case))
+        usr = tree if erofs else tree / "usr"
+        (usr / "share").mkdir(parents=True)
+        (usr / "share/payload").write_bytes(payload * 1024)
+        if dev:
+            (usr / "lib/systemd/system-preset").mkdir(parents=True)
+            (usr / "lib/systemd/system-preset/10-marathon.preset").write_text("enable sshd.service\n")
+            (usr / "share/factory/root/.ssh").mkdir(parents=True)
+            (usr / "share/factory/root/.ssh/authorized_keys").write_text("ssh-ed25519 AAAA dev\n")
+        mkfs = ["mkfs.erofs", str(path), str(tree)] if erofs else ["mkfs.ext4", "-q", "-d", str(tree), str(path), size]
+        subprocess.run(mkfs, capture_output=True, check=True)
+        return path
+
+    def build(self, version, uuid=UUID_A, payload=b"usr", dev=False):
         stem = f"{IMAGE_ID}_{version}"
         (self.image_dir / f"{stem}.efi").write_bytes(b"MZ" + version.encode())
-        (self.image_dir / f"{stem}.usr-arm64.{uuid}.raw").write_bytes(payload * 4096 + b"\0" * 65536)
+        self.filesystem(self.image_dir / f"{stem}.usr-arm64.{uuid}.raw", payload + version.encode(), erofs=True, dev=dev)
         (self.image_dir / f"{stem}.usr-arm64-verity.{uuid}.raw").write_bytes(b"verity" + version.encode())
         # Splits that are not part of an update.
         (self.image_dir / f"{stem}.esp.raw").write_bytes(b"esp")
@@ -80,7 +99,7 @@ class FeedCase(unittest.TestCase):
     def build_pi(self, version, uuid=UUID_A, payload=b"slot"):
         stem = f"{self.image_id}_{version}"
         (self.image_dir / f"{stem}.boot.{uuid}.raw").write_bytes(b"boot" + payload * 1024)
-        (self.image_dir / f"{stem}.root.{uuid}.raw").write_bytes(b"root" + payload * 2048)
+        self.filesystem(self.image_dir / f"{stem}.root.{uuid}.raw", payload + version.encode())
         # mkosi still writes a UKI and the whole disk; neither is an update.
         (self.image_dir / f"{stem}.efi").write_bytes(b"MZ")
         (self.image_dir / f"{stem}.raw").write_bytes(b"disk")
@@ -184,6 +203,13 @@ class PublishTest(FeedCase):
         older = self.publish("26101701", check=False)
         self.assertNotEqual(older.returncode, 0)
         self.assertIn("older than", older.stderr)
+
+    def test_refuses_an_image_with_developer_ssh(self):
+        self.build("26101701", dev=True)
+        result = self.publish("26101701", check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("MARATHON_DEV_SSH_KEY", result.stderr)
+        self.assertFalse((self.out / "SHA256SUMS").exists())
 
     def test_refuses_a_single_partition_image(self):
         stem = f"{IMAGE_ID}_26101701"
@@ -366,6 +392,101 @@ class PiSysupdateTest(SysupdateTest):
         names = [name for name, _, _ in self.table(root)]
         self.assertEqual(names[1:5], ["marathon_26101901_boot", "marathon_26101801_boot",
                                       "marathon_26101901_root", "marathon_26101801_root"])
+
+
+class Q25Feed(FeedCase):
+    image_id = Q25_IMAGE_ID
+
+    def build_q25(self, version, payload=b"root", dev=False):
+        # build-zinwa-q25-image.sh's <image-id>_<version>.ext4, mostly holes.
+        return self.filesystem(self.image_dir / f"{self.image_id}_{version}.ext4",
+                               payload + version.encode(), size="8M", dev=dev)
+
+
+class Q25PublishTest(Q25Feed):
+    def test_feed_holds_the_compressed_root_file(self):
+        self.build_q25("26110201")
+        self.publish("26110201")
+        stem = f"{Q25_IMAGE_ID}_26110201"
+        self.assertEqual(sorted(p.name for p in self.out.iterdir()), sorted([
+            "SHA256SUMS", "SHA256SUMS.gpg", "marathon-os.metainfo.xml", f"{stem}.ext4.zst"]))
+
+    def test_refuses_a_root_with_developer_ssh(self):
+        self.build_q25("26110201", dev=True)
+        result = self.publish("26110201", check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("MARATHON_DEV_SSH_KEY", result.stderr)
+
+    def test_refuses_a_root_it_cannot_read(self):
+        (self.image_dir / f"{Q25_IMAGE_ID}_26110201.ext4").write_bytes(b"not ext4" * 1024)
+        result = self.publish("26110201", check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("cannot read", result.stderr)
+
+    def test_keeps_the_newest_versions_and_refuses_going_backwards(self):
+        for version in ["26110101", "26110201", "26110301"]:
+            self.build_q25(version)
+            self.publish(version)
+        names = {p.name for p in self.out.iterdir()}
+        self.assertEqual({n for n in names if n.endswith(".ext4.zst")},
+                         {f"{Q25_IMAGE_ID}_26110201.ext4.zst", f"{Q25_IMAGE_ID}_26110301.ext4.zst"})
+        older = self.publish("26110201", check=False)
+        self.assertIn("already in the feed", older.stderr)
+
+
+@unittest.skipUnless(SYSUPDATE.exists(), "needs systemd-sysupdate")
+class Q25SysupdateTest(Q25Feed, SysupdateTest):
+    """The Q25 transfer writing root files onto the carrier."""
+
+    test_installs_the_new_uki_with_boot_counting = None
+    test_refuses_a_feed_signed_by_an_untrusted_key = None
+
+    def device(self, url, running="26110101", instances=()):
+        root = self.case / "root"
+        (root / "usr/lib/sysupdate.d").mkdir(parents=True)
+        (root / "etc").mkdir()
+        (root / "usr/lib/os-release").write_text(
+            "ID=nura\nIMAGE_ID=zinwa-q25\nVARIANT_ID=marathon\nVERSION_ID=edge\n"
+            f"IMAGE_VERSION={running}\n")
+        images = root / ".q25-carrier/root/var/lib/marathon/images"
+        images.mkdir(parents=True)
+        # The root flashed by hand, and /home, are not sysupdate's.
+        (images / "q25-duranium-20261101-85f6c974.ext4").write_bytes(b"by hand")
+        (images / "home.luks").write_bytes(b"luks")
+        for version in instances:
+            (images / f"{Q25_IMAGE_ID}_{version}.ext4").write_bytes(version.encode())
+        for t in Q25_TRANSFERS.glob("*.transfer.in"):
+            (root / "usr/lib/sysupdate.d" / t.name.removesuffix(".in")).write_text(
+                t.read_text().replace("@MARATHON_OTA_URL@", url))
+        return root, images
+
+    def test_writes_the_root_file_beside_the_running_one(self):
+        built = self.build_q25("26110201")
+        self.publish("26110201")
+        root, images = self.device(self.serve())
+        check = self.sysupdate(root, "--verify=no", "check-new")
+        self.assertEqual(check.stdout.strip(), "26110201", check.stderr)
+        update = self.sysupdate(root, "--verify=no", "update")
+        self.assertEqual(update.returncode, 0, update.stderr)
+        new = images / f"{Q25_IMAGE_ID}_26110201.ext4"
+        self.assertEqual(sorted(p.name for p in images.iterdir()),
+                         sorted(["home.luks", "q25-duranium-20261101-85f6c974.ext4", new.name]))
+        self.assertEqual(new.read_bytes(), built.read_bytes())
+        self.assertEqual(new.stat().st_mode & 0o777, 0o600)
+        listed = json.loads(self.sysupdate(root, "--json=short", "--offline", "list").stdout)
+        self.assertEqual(listed["current"], "26110201")
+
+    def test_keeps_two_roots_and_never_the_running_one(self):
+        self.build_q25("26110301")
+        self.publish("26110301")
+        # Booted 26110201, the newest; 26110101 is the fallback before it.
+        root, images = self.device(self.serve(), running="26110201", instances=("26110101", "26110201"))
+        update = self.sysupdate(root, "--verify=no", "update")
+        self.assertEqual(update.returncode, 0, update.stderr)
+        self.assertEqual(sorted(p.name for p in images.iterdir() if p.name.startswith(Q25_IMAGE_ID)),
+                         [f"{Q25_IMAGE_ID}_26110201.ext4", f"{Q25_IMAGE_ID}_26110301.ext4"])
+        self.assertEqual((images / f"{Q25_IMAGE_ID}_26110201.ext4").read_bytes(), b"26110201")
+        self.assertTrue((images / "q25-duranium-20261101-85f6c974.ext4").exists())
 
 
 if __name__ == "__main__":

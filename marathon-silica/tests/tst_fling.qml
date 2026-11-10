@@ -43,7 +43,6 @@ TestCase {
         SilicaListView {
             property bool rowHighlighted: false
             property bool rowClicked: false
-            readonly property Item row: itemAtIndex(7)
 
             width: 540
             height: 960
@@ -202,9 +201,10 @@ TestCase {
     // A press that stops a moving view only stops it, even as the fling ends.
     function test_aPressThatStopsAFlingDoesNotClick() {
         const v = createTemporaryObject(pressList, testCase);
-        v.flick(0, -600);
-        tryVerify(() => v.moving);
-        wait(150);
+        // Give every pixel ratio the same glide duration. A fixed 600 px/s
+        // can finish before a 150 ms wait on a dense test display.
+        v.flick(0, -Fling.deceleration * Theme.pixelRatio);
+        tryVerify(() => v.moving && v.contentY > 0);
         verify(v.moving);
         touchEvent(v).press(0, v, 270, 480).commit();
         wait(50);

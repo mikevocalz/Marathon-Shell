@@ -82,8 +82,10 @@ TestCase {
 
         child(s.page, "autoBrightnessSwitch").clicked(null);
         verify(Display.autoBrightnessEnabled);
+        verify(child(s.page, "rotationSwitch").checked);
         child(s.page, "rotationSwitch").clicked(null);
         verify(Display.rotationLocked);
+        verify(!child(s.page, "rotationSwitch").checked);
         child(s.page, "reduceMotionSwitch").clicked(null);
         verify(Settings.reduceMotion);
 
@@ -102,6 +104,40 @@ TestCase {
         compare(findChild(s.page, "clockCombo"), null);
 
         compare(findChild(s.page, "wallpaperButton"), null);
+    }
+
+    function test_nightLight() {
+        const s = open("display");
+        child(s.page, "nightLightSwitch").clicked(null);
+        verify(Display.nightLightEnabled);
+
+        const warmth = child(s.page, "nightLightWarmth");
+        compare(warmth.value, 61);
+        Display.nightLightTemperature = 2700;
+        compare(warmth.value, 100);
+
+        const from = child(s.page, "nightLightFrom");
+        verify(!from.visible);
+        const schedule = child(s.page, "nightLightSchedule");
+        pick(schedule, 2);
+        compare(Display.nightLightSchedule, "custom");
+        verify(from.visible);
+        verify(child(s.page, "nightLightTo").visible);
+
+        Display.setNightLightTimes(21 * 60 + 30, 6 * 60);
+        child(s.page, "nightLightTo").clicked(null);
+        const dialog = pushed(s.app, s.page);
+        compare(dialog.hour, 6);
+        compare(dialog.minute, 0);
+        Display.nightLightFrom = 0;
+        dialog.accept();
+        tryCompare(Display, "nightLightTo", 6 * 60);
+        compare(Display.nightLightFrom, 0);
+        tryCompare(s.page, "status", PageStatus.Active);
+
+        pick(schedule, 1);
+        compare(Display.nightLightSchedule, "sunset");
+        verify(!from.visible);
     }
 
     function test_displayHidesAbsentSensors() {
@@ -137,6 +173,38 @@ TestCase {
         dawn.clicked(null);
         compare(Settings.wallpaperPath, "file:///wallpapers/dawn.svg");
         verify(dawn.current);
+    }
+
+    function test_ambienceFitsNarrowAndWideWindows() {
+        const original = Wallpapers.wallpapers;
+        const title = "<b>A long wallpaper name that keeps its literal identity</b>";
+        Wallpapers.wallpapers = [
+            {
+                name: title,
+                path: "file:///wallpapers/dawn.svg",
+                isDark: false
+            }
+        ];
+        try {
+            const s = open("ambience");
+            const grid = child(s.page, "ambienceGrid");
+            s.app.width = 320;
+            tryCompare(grid, "width", 320);
+            compare(grid.columns, 2);
+            const tile = child(s.page, "ambience-" + title);
+            const caption = child(tile, "ambienceName");
+            compare(caption.textFormat, Text.PlainText);
+            verify(caption.width > 0);
+            tile.forceActiveFocus();
+            keyClick(Qt.Key_Return);
+            compare(Settings.wallpaperPath, "file:///wallpapers/dawn.svg");
+            s.app.width = 1440;
+            tryVerify(() => grid.columns > 2);
+            verify(grid.cellWidth < grid.width / 2);
+            verify(tile.current);
+        } finally {
+            Wallpapers.wallpapers = original;
+        }
     }
 
     function test_sounds() {
@@ -317,11 +385,11 @@ TestCase {
         verify(!profile.visible);
     }
 
-    function test_noBattery() {
+    function test_unknownBatteryLevel() {
         Power.batteryLevel = -1;
         const s = open("battery");
-        compare(child(s.page, "levelLabel").text, "No battery");
-        verify(!child(s.page, "statusLabel").visible);
+        compare(child(s.page, "levelLabel").text, "Battery level unavailable");
+        compare(child(s.page, "statusLabel").visible, Power.isCharging || Power.isPluggedIn);
     }
 
     function test_storage() {

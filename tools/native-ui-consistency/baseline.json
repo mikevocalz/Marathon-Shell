@@ -1,0 +1,6 @@
+{
+  "schema": 1,
+  "source_revision": "094ed581d93e2ca0f8bca61c3a30c011ee601727",
+  "meaning": "Existing source findings awaiting native design review, not certified visual defects or approved new style literals. Remove an allowance when its source is fixed.",
+  "findings": []
+}

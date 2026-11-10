@@ -15,6 +15,7 @@ FullscreenContentPage {
     property alias currentIndex: slideshow.currentIndex
     property bool overlayShown: true
     readonly property var photo: photos.length > 0 ? photos[Math.max(0, currentIndex)] : null
+    readonly property bool imageUnavailable: !!(slideshow.currentItem as ImageViewer)?.error
 
     function deleteCurrent() {
         const id = photo.id;
@@ -42,6 +43,18 @@ FullscreenContentPage {
     Rectangle {
         anchors.fill: parent
         color: root.backgroundColor
+    }
+
+    Label {
+        objectName: "imageError"
+        anchors.centerIn: parent
+        width: parent.width - 2 * Theme.horizontalPageMargin
+        visible: root.imageUnavailable
+        text: qsTr("Couldn't open this photo. The file may have moved or be unreadable.")
+        textFormat: Text.PlainText
+        wrapMode: Text.Wrap
+        horizontalAlignment: Text.AlignHCenter
+        color: ContentStyle.mediaForeground
     }
 
     SilicaFlickable {
@@ -107,7 +120,7 @@ FullscreenContentPage {
         gradient: Gradient {
             GradientStop {
                 position: 0
-                color: Theme.rgba(Theme.overlayBackgroundColor, Theme.opacityOverlay)
+                color: ContentStyle.mediaOverlay
             }
             GradientStop {
                 position: 1
@@ -122,19 +135,24 @@ FullscreenContentPage {
         Label {
             id: titleLabel
 
+            objectName: "photoTitle"
             x: Theme.horizontalPageMargin
             y: Theme.paddingLarge
             width: parent.width - 2 * Theme.horizontalPageMargin
-            text: root.photo && root.photo.timestamp ? Format.formatDate(new Date(root.photo.timestamp), Formatter.DateLong) : Model.fileName(root.photo)
-            truncationMode: TruncationMode.Fade
-            color: Theme.lightPrimaryColor
+            text: Model.fileName(root.photo)
+            textFormat: Text.PlainText
+            wrapMode: Text.Wrap
+            color: ContentStyle.mediaForeground
         }
         Label {
             id: counterLabel
 
             anchors.top: titleLabel.bottom
             x: Theme.horizontalPageMargin
-            text: qsTr("%1 of %2").arg(root.currentIndex + 1).arg(root.photos.length)
+            width: parent.width - 2 * x
+            text: (root.photo && root.photo.timestamp ? Format.formatDate(new Date(root.photo.timestamp), Formatter.DateLong) + " · " : "") + qsTr("%1 of %2").arg(root.currentIndex + 1).arg(root.photos.length)
+            textFormat: Text.PlainText
+            wrapMode: Text.Wrap
             font.pixelSize: Theme.fontSizeExtraSmall
             color: Theme.lightSecondaryColor
         }

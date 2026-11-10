@@ -61,6 +61,22 @@ TestCase {
         compare(t.app.viewerPhoto.id, 3);
     }
 
+    function test_missingPhotoKeepsItsIdentityAndExplainsTheFailure() {
+        const t = openViewer(0);
+        const missing = Object.assign({}, t.page.photo, {
+            path: "file:///nonexistent-marathon-test/%3Cb%3EMissing%20family%20photo%3C%2Fb%3E.png"
+        });
+        t.page.photos = [missing];
+        t.page.currentIndex = 0;
+        tryVerify(() => t.page.imageUnavailable);
+        verify(findChild(t.page, "imageError").visible);
+        const title = findChild(t.page, "photoTitle");
+        compare(title.text, "<b>Missing family photo</b>.png");
+        compare(title.textFormat, Text.PlainText);
+        compare(t.app.viewerPhoto.id, missing.id);
+        compare(MediaLibrary.deleted, []);
+    }
+
     function test_keysStepThroughPhotos() {
         const t = openViewer(0);
         tryVerify(function () {

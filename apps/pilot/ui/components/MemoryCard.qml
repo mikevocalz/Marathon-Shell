@@ -7,6 +7,7 @@
 
 import QtQuick
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 import Shipwright.Pilot 1.0
 
 Glass {
@@ -36,6 +37,7 @@ Glass {
             color: Theme.highlightColor
         }
         Label {
+            textFormat: Text.PlainText
             anchors.verticalCenter: parent.verticalCenter
             width: card.width - 2 * (Theme.horizontalPageMargin + card.padding) - Theme.iconSizeSmallPlus - Theme.paddingMedium
             text: card.text
@@ -54,6 +56,7 @@ Glass {
             height: Math.max(words.height, undo.visible ? undo.height : 0)
             Label {
                 id: words
+                textFormat: Text.PlainText
                 anchors.verticalCenter: parent.verticalCenter
                 width: parent.width - (undo.visible ? undo.width + Theme.paddingMedium : 0)
                 text: "“" + fact.modelData.fact + "”"
@@ -76,6 +79,7 @@ Glass {
     }
 
     Label {
+        textFormat: Text.PlainText
         visible: card.action === "remembered" || card.action === "list"
         width: parent.width
         wrapMode: Text.Wrap

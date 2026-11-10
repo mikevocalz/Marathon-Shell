@@ -54,6 +54,32 @@ S.SilicaFlickable {
     }
 
     Accessible.role: Accessible.Pane
+
+    Connections {
+        target: root.Window.window
+        function onActiveFocusItemChanged() {
+            if (!root || !root.visible)
+                return;
+            let control = root.Window.activeFocusItem;
+            let ancestor = control;
+            while (ancestor && ancestor !== root.contentItem) {
+                if (ancestor.activeFocusOnTab)
+                    control = ancestor;
+                ancestor = ancestor.parent;
+            }
+            if (!ancestor || !control || !control.visible)
+                return;
+            const position = control.mapToItem(root, 0, 0);
+            if (position.y < 0 || control.height > root.height) {
+                root.cancelFlick();
+                ViewKeys.scrollTo(root, root.contentY + position.y);
+            } else if (position.y + control.height > root.height) {
+                root.cancelFlick();
+                ViewKeys.scrollTo(root, root.contentY + position.y + control.height - root.height);
+            }
+        }
+    }
+
     Keys.onPressed: function (event) {
         if (ViewKeys.openPulley(root, event))
             return;

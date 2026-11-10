@@ -10,6 +10,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 import Shipwright.Pilot 1.0
 import "../components"
 
@@ -82,6 +83,7 @@ Page {
                 body: qsTr("Over an app, Pilot can see what the app shows. “This” means what's on your screen. " + "Try asking:")
                 // Examples to say, not buttons.
                 Label {
+                    textFormat: Text.PlainText
                     width: parent.width
                     wrapMode: Text.Wrap
                     text: [qsTr("\u201cSummarise this\u201d"), qsTr("\u201cExplain this simply\u201d"), qsTr("\u201cReply to this\u201d"), qsTr("\u201cWhat are the key points?\u201d")].join("   ")
@@ -174,6 +176,7 @@ Page {
         spacing: Theme.paddingMedium
 
         Label {
+            textFormat: Text.PlainText
             width: parent.width
             wrapMode: Text.Wrap
             text: section.done ? qsTr("%1 · tried").arg(section.title) : section.title
@@ -182,6 +185,7 @@ Page {
             color: Theme.highlightColor
         }
         Label {
+            textFormat: Text.PlainText
             width: parent.width
             wrapMode: Text.Wrap
             text: section.body
@@ -195,6 +199,7 @@ Page {
     }
 
     component SectionNote: Label {
+        textFormat: Text.PlainText
         width: parent ? parent.width : 0
         wrapMode: Text.Wrap
         font.pixelSize: Theme.fontSizeSmall

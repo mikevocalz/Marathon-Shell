@@ -158,6 +158,16 @@ echo "wrote /out/${TARGET}"
 ICON_APK="$(echo "$TARGET" | sed "s/^marathon-shell-/marathon-icon-theme-/")"
 cp "/root/packages/aports/aarch64/${ICON_APK}" "/out/${ICON_APK}"
 echo "wrote /out/${ICON_APK}"
+SILICA_APK="$(echo "$TARGET" | sed "s/^marathon-shell-/marathon-silica-/")"
+cp "/root/packages/aports/aarch64/${SILICA_APK}" "/out/${SILICA_APK}"
+echo "wrote /out/${SILICA_APK}"
+# The built-in browser installs itself where Pacific is absent; the test app
+# is there for `apk add` on development devices.
+for SUB in browser test-app; do
+    SUB_APK="$(echo "$TARGET" | sed "s/^marathon-shell-/marathon-shell-$SUB-/")"
+    cp "/root/packages/aports/aarch64/${SUB_APK}" "/out/${SUB_APK}"
+    echo "wrote /out/${SUB_APK}"
+done
 CSCRIPT
 
 echo "+-- done: $MKOSI_PKG_DIR/$TARGET --+"

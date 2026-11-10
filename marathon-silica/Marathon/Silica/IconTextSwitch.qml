@@ -6,6 +6,7 @@ S.IconTextSwitch {
     id: root
 
     activeFocusOnTab: true
+    _label.textFormat: Text.PlainText
     Accessible.role: Accessible.CheckBox
     Accessible.name: text
     Accessible.description: description

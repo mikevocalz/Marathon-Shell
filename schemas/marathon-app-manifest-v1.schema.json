@@ -187,6 +187,12 @@
         ]
       }
     },
+    "backgroundTasks": {
+      "description": "Up to eight periodic Keel actions. Scheduling currently supports OS-installed apps only; this declaration grants no permission or automatic suspend policy.",
+      "type": "array",
+      "maxItems": 8,
+      "items": { "$ref": "#/$defs/backgroundTask" }
+    },
     "requiresQtModules": {
       "description": "Qt modules the runner loads before the app starts.",
       "type": "array",
@@ -257,6 +263,18 @@
   "allOf": [
     {
       "if": {
+        "required": ["backgroundTasks"],
+        "properties": {
+          "backgroundTasks": { "contains": { "required": ["network"] } }
+        }
+      },
+      "then": {
+        "required": ["permissions"],
+        "properties": { "permissions": { "contains": { "const": "network" } } }
+      }
+    },
+    {
+      "if": {
         "required": ["permissions"],
         "properties": { "permissions": { "contains": { "const": "secret-service" } } }
       },
@@ -274,6 +292,53 @@
     }
   ],
   "$defs": {
+    "backgroundTask": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "action", "intervalMinutes"],
+      "properties": {
+        "id": {
+          "description": "Unique within this app; no leading or trailing hyphen.",
+          "type": "string",
+          "maxLength": 32,
+          "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
+        },
+        "action": {
+          "description": "A declared Keel action accepting empty arguments without confirmation.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9._-]+$"
+        },
+        "intervalMinutes": {
+          "type": "integer",
+          "enum": [15, 30, 60, 120, 240, 360, 480, 720, 1440]
+        },
+        "network": {
+          "description": "Required connectivity, not a network permission grant. Omit for work that does not need connectivity.",
+          "enum": ["any", "unmetered"]
+        },
+        "requiresCharging": { "type": "boolean", "default": false },
+        "requiresBatteryNotLow": { "type": "boolean", "default": false },
+        "wake": {
+          "description": "Request a wake for a supported suspended device, at most hourly. Does not suspend the device or grant service access.",
+          "type": "boolean",
+          "default": false
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 600,
+          "default": 60
+        }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["wake"], "properties": { "wake": { "const": true } } },
+          "then": { "properties": { "intervalMinutes": { "minimum": 60 } } }
+        }
+      ]
+    },
     "semver": {
       "type": "string",
       "maxLength": 64,

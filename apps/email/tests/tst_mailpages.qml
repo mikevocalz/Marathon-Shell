@@ -67,7 +67,9 @@ TestCase {
             "7": body
         };
         app.openMessage("7");
-        return pushed(app, 2);
+        const page = pushed(app, 2);
+        tryCompare(page, "loadState", "ready");
+        return page;
     }
 
     // Message page
@@ -88,6 +90,39 @@ TestCase {
         compare(findChild(msg, "plainBody").text, "Hello");
         verify(!findChild(msg, "htmlBody").active);
         verify(!findChild(msg, "attachments").visible);
+    }
+
+    function test_plainMarkupAndAddressesStayLiteralAtNarrowWidth() {
+        const app = makeApp();
+        app.width = 320;
+        const sender = "<b>A long sender display name</b> <sender@example.org>";
+        const recipient = "a.long.recipient.address@example.org";
+        const body = "<b>Keep these tags visible</b>\n<a href='https://example.org'>This is plain text</a>\nA & B are meeting tomorrow.";
+        const msg = openMessage(app, {
+            subject: "Literal text",
+            from: sender,
+            to: [recipient],
+            bodyPlain: body
+        });
+        const from = findChild(msg, "fromLabel");
+        const to = findChild(msg, "toLabel");
+        const plain = findChild(msg, "plainBody");
+        from.font.pixelSize = Theme.fontSizeLarge;
+        to.font.pixelSize = Theme.fontSizeLarge;
+        plain.font.pixelSize = Theme.fontSizeLarge;
+        compare(from.text, sender);
+        compare(to.text, "To: " + recipient);
+        compare(plain.text, body);
+        for (const label of [from, to, plain]) {
+            compare(label.textFormat, Text.PlainText);
+            tryVerify(() => label.lineCount > 1);
+            verify(!label.truncated);
+            tryVerify(() => label.mapToItem(msg, label.width, 0).x <= msg.width + 1);
+        }
+        verify(plain.visible);
+        verify(!findChild(msg, "htmlBody").active);
+        verify(!msg.canShowImages);
+        compare(msg.toList, [recipient]);
     }
 
     function test_messageWithoutBody() {
@@ -122,6 +157,46 @@ TestCase {
         compare(msg.size(3145728), "3.0 MB");
     }
 
+    function test_longAttachmentKeepsItsDownloadIdentity() {
+        const app = makeApp();
+        app.width = 360;
+        const filename = "<b>Quarterly planning report with a very long descriptive filename</b>.pdf";
+        const location = "part-7-primary";
+        const msg = openMessage(app, {
+            subject: "Files",
+            from: "Ann",
+            bodyPlain: "See the attached reports",
+            attachments: [
+                {
+                    name: filename,
+                    size: 2048,
+                    location: location
+                },
+                {
+                    name: "Other planning report.pdf",
+                    size: 2048,
+                    location: "part-7-other"
+                }
+            ]
+        });
+        const row = findChild(msg, "attachment-" + filename);
+        const label = findChild(row, "attachmentName");
+        label.font.pixelSize = Theme.fontSizeLarge;
+        tryVerify(() => label.lineCount > 1);
+        compare(label.text, filename);
+        compare(label.textFormat, Text.PlainText);
+        verify(!label.truncated);
+        tryVerify(() => label.mapToItem(row, label.width, label.height).y <= row.contentHeight + 1);
+        verify(row.Accessible.name.indexOf(filename) >= 0);
+        row.forceActiveFocus();
+        keyClick(Qt.Key_Return);
+        compare(MailService.called("saveAttachment").length, 1);
+        compare(MailService.called("saveAttachment")[0].args, ["7", location]);
+        compare(msg.fetching, location);
+        verify(row.busy);
+        verify(!findChild(msg, "attachment-Other planning report.pdf").busy);
+    }
+
     function test_messageHtmlUsesWebView() {
         const app = makeApp();
         const msg = openMessage(app, {
@@ -130,7 +205,10 @@ TestCase {
             bodyHtml: "<p>Hi</p>",
             bodyPlain: "Hi"
         });
-        verify(findChild(msg, "htmlBody").active);
+        const body = findChild(msg, "htmlBody");
+        verify(body.active);
+        tryCompare(body, "status", Loader.Ready);
+        verify(body.item !== null);
         verify(!findChild(msg, "plainBody").visible);
     }
 

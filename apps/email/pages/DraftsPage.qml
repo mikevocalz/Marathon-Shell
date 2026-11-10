@@ -24,13 +24,14 @@ Page {
             text: qsTr("No drafts")
         }
 
-        delegate: ListItem {
+        delegate: SummaryListItem {
             id: item
 
             required property var modelData
 
             objectName: "draft-" + modelData.key
-            contentHeight: Theme.itemSizeMedium
+            text: modelData.subject || qsTr("(No subject)")
+            description: (modelData.to || qsTr("No recipient")) + (modelData.savedAt > 0 ? " · " + Format.formatDate(new Date(modelData.savedAt), Formatter.TimepointRelative) : "")
             Accessible.name: (modelData.subject || qsTr("(No subject)")) + ", " + (modelData.to || qsTr("No recipient"))
             onClicked: page.app.compose({
                 draftKey: modelData.key
@@ -40,26 +41,6 @@ Page {
                     objectName: "deleteItem"
                     text: qsTr("Delete")
                     onClicked: item.remorseDelete(() => page.app.deleteDraft(item.modelData.key))
-                }
-            }
-
-            Column {
-                x: Theme.horizontalPageMargin
-                width: parent.width - 2 * Theme.horizontalPageMargin
-                anchors.verticalCenter: parent.verticalCenter
-
-                Label {
-                    width: parent.width
-                    text: item.modelData.subject || qsTr("(No subject)")
-                    truncationMode: TruncationMode.Fade
-                    color: item.highlighted ? Theme.highlightColor : Theme.primaryColor
-                }
-                Label {
-                    width: parent.width
-                    text: (item.modelData.to || qsTr("No recipient")) + (item.modelData.savedAt > 0 ? " · " + Format.formatDate(new Date(item.modelData.savedAt), Formatter.TimepointRelative) : "")
-                    truncationMode: TruncationMode.Fade
-                    font.pixelSize: Theme.fontSizeExtraSmall
-                    color: item.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
                 }
             }
         }

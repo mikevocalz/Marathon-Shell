@@ -1,5 +1,6 @@
 import QtQuick
 import QtTest
+import Keel 1.0 as Keel
 import Sailfish.Silica 1.0
 import Marathon.Silica 1.0
 import Marathon.Platform 1.0
@@ -84,11 +85,23 @@ TestCase {
         }
     }
 
+    function initTestCase() {
+        Keel.Ambience.applyForwarded("/desktop/sailfish/silica/font_size_multiplier=1");
+    }
+
     function init() {
         savedRoute = "";
         Location.reset();
         Permissions.reset();
         Lifecycle.held = 0;
+    }
+
+    function cleanup() {
+        Keel.Ambience.applyForwarded("/desktop/sailfish/silica/font_size_multiplier=1");
+    }
+
+    function cleanupTestCase() {
+        Keel.Ambience.applyForwarded("");
     }
 
     function makeApp() {
@@ -184,6 +197,89 @@ TestCase {
         compare(current(app).objectName, "placePage");
         compare(app.selectedPlace.name, "Tower Bridge");
         compare(app.pageStack.depth, 2);
+    }
+
+    function test_longProviderResultRemainsLiteralAndKeepsCoordinates() {
+        Keel.Ambience.applyForwarded("/desktop/sailfish/silica/font_size_multiplier=1.5");
+        const app = makeApp();
+        app.width = 320;
+        app.height = 640;
+        const name = "<b>Research campus on the western side of the city</b>";
+        const address = name + ", Long avenue near the railway station, Dublin";
+        app.fetch = (url, done) => done(200, JSON.stringify([
+                {
+                    display_name: address,
+                    lat: "53.3",
+                    lon: "-6.2",
+                    type: "office"
+                }
+            ]));
+        app.openSearch();
+        settle(app);
+        const page = current(app);
+        findChild(page, "searchField").text = "research";
+        const view = findChild(page, "resultsView");
+        tryCompare(view, "count", 1, 10000);
+        let row = null;
+        tryVerify(() => (row = view.itemAtIndex(0)) !== null);
+        const title = findChild(row, "summaryText");
+        const detail = findChild(row, "summaryDescription");
+        compare(title.text, name);
+        compare(title.textFormat, Text.PlainText);
+        compare(detail.text, address);
+        compare(detail.textFormat, Text.PlainText);
+        tryVerify(() => title.lineCount > 1 && detail.lineCount > 1);
+        tryVerify(() => detail.mapToItem(row, 0, detail.height).y <= row.contentHeight, 3000, "place address must fit inside the grown result row");
+        row.clicked(null);
+        settle(app);
+        compare(app.selectedPlace.name, name);
+        compare(app.selectedPlace.lat, 53.3);
+        compare(app.selectedPlace.lon, -6.2);
+        const header = findChild(current(app), "placeHeader");
+        compare(header.title, name);
+        compare(header.wrapMode, Text.Wrap);
+        compare(app._defaultLabelFormat, Text.PlainText);
+    }
+
+    function test_timedOutRefreshKeepsVisibleFailureAndExistingResults() {
+        const app = makeApp();
+        app.fetch = (url, done) => done(200, JSON.stringify([
+                {
+                    display_name: "Tower Bridge, London",
+                    lat: "51.5",
+                    lon: "-0.07"
+                }
+            ]));
+        app.openSearch();
+        settle(app);
+        const page = current(app);
+        const field = findChild(page, "searchField");
+        const view = findChild(page, "resultsView");
+        field.text = "tower";
+        tryCompare(view, "count", 1, 10000);
+        app.searchTimeoutMs = 50;
+        app.fetch = (url, done) => {};
+        field.text = "museum";
+        tryCompare(app, "lastQuery", "museum", 10000);
+        tryCompare(app, "searching", false, 10000);
+        const notice = findChild(page, "searchFailureNotice");
+        verify(notice.visible);
+        verify(notice.text.indexOf(app.searchError) === 0);
+        verify(notice.text.indexOf("places already loaded") > 0);
+        compare(view.count, 1);
+        compare(field.text, "museum");
+        verify(!findChild(page, "placeholder").enabled);
+        view.pullDownMenu.openFromKeyboard(field);
+        tryVerify(() => findChild(page, "retryItem").visible);
+        let asked = "";
+        app.fetch = (url, done) => {
+            asked = url;
+            done(200, "[]");
+        };
+        findChild(page, "retryItem").clicked();
+        verify(asked.indexOf("q=museum") > 0);
+        verify(!notice.visible);
+        compare(view.count, 0);
     }
 
     // Results arriving must not take the keys from the search field.
@@ -542,6 +638,24 @@ TestCase {
         mouseClick(findChild(page, "clearAction"));
         compare(app.selectedPlace, null);
         verify(!findChild(page, "bottomPanel").visible);
+    }
+
+    function test_largeTextRouteActionWrapsWhileRequestIsPending() {
+        Keel.Ambience.applyForwarded("/desktop/sailfish/silica/font_size_multiplier=1.5");
+        const app = makeApp();
+        app.width = 320;
+        app.height = 640;
+        Location.moveTo(10, 1);
+        app.selectPlace(place);
+        const action = findChild(current(app), "directionsAction");
+        action.clicked(null);
+        compare(app.router.requests.length, 1);
+        verify(!action.enabled);
+        const label = findChild(action, "mapActionLabel");
+        compare(label.text, "Finding a route");
+        tryVerify(() => label.lineCount > 1);
+        tryVerify(() => label.mapToItem(action, 0, label.height).y <= action.height, 3000, "pending route label must fit inside the action");
+        compare(app.router.requests[0].to, [place.lat, place.lon]);
     }
 
     function test_mute() {

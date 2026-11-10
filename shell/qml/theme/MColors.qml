@@ -1,8 +1,33 @@
 pragma Singleton
 import QtQuick
 import Sailfish.Silica 1.0 as Silica
+import Marathon.Silica 1.0 as NativeStyle
 
 QtObject {
+    readonly property color contentBackground: NativeStyle.ContentStyle.mediaBackground
+    readonly property color contentForeground: NativeStyle.ContentStyle.mediaForeground
+    readonly property color glassTint: Qt.rgba(0.05, 0.05, 0.055, 0.78)
+    readonly property color keyboardBackground: Qt.rgba(0.04, 0.04, 0.05, 0.97)
+    readonly property color brandStart: "#1de9b6"
+    readonly property color brandEnd: "#00bfa5"
+    readonly property color brandGlow: "#1dbfa5"
+
+    // Air quality is a measurement scale, independent of app status colors.
+    readonly property color airQualityGood: "#7fd3a0"
+    readonly property color airQualityModerate: "#ffd36b"
+    readonly property color airQualitySensitive: "#ff9b53"
+    readonly property color airQualityUnhealthy: "#ff5e57"
+    readonly property color airQualityVeryUnhealthy: "#b48cff"
+    readonly property color sunMarker: "#ffd36b"
+
+    function scrim(opacity) {
+        return Silica.Theme.rgba(contentBackground, opacity);
+    }
+
+    function onContent(opacity) {
+        return Silica.Theme.rgba(contentForeground, opacity);
+    }
+
     // Accent and text follow the Silica ambience (wallpaper-derived);
     // surfaces stay dark glass over it.
 

@@ -10,6 +10,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 import Shipwright.Pilot 1.0
 
 Page {
@@ -105,7 +106,8 @@ Page {
                     width: column.width
                     // As tall as its two lines need at a large text size.
                     height: Math.max(Theme.itemSizeMedium, skillText.height + 2 * Theme.paddingMedium)
-                    enabled: skill.modelData.ask.length > 0
+                    enabled: skill.modelData.ask.length > 0 && Pilot.connected && !Pilot.busy
+                    Accessible.name: modelData.title + (modelData.ask.length > 0 ? ", " + modelData.ask : "")
                     onClicked: page.ask(skill.modelData.ask)
                     Icon {
                         id: skillIcon
@@ -124,15 +126,17 @@ Page {
                             verticalCenter: parent.verticalCenter
                         }
                         Label {
+                            textFormat: Text.PlainText
                             width: parent.width
-                            truncationMode: TruncationMode.Fade
+                            wrapMode: Text.Wrap
                             text: skill.modelData.title
                             color: skill.highlighted ? Theme.highlightColor : Theme.primaryColor
                         }
                         Label {
+                            textFormat: Text.PlainText
                             width: parent.width
                             visible: text.length > 0
-                            truncationMode: TruncationMode.Fade
+                            wrapMode: Text.Wrap
                             text: skill.modelData.ask.length > 0 ? qsTr("Try “%1”").arg(skill.modelData.ask) : ""
                             font.pixelSize: Theme.fontSizeExtraSmall
                             color: skill.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
@@ -145,6 +149,7 @@ Page {
                 text: qsTr("In your apps")
             }
             Label {
+                textFormat: Text.PlainText
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * x
                 wrapMode: Text.Wrap
@@ -164,9 +169,11 @@ Page {
                     bottomPadding: Theme.paddingLarge
                     spacing: Theme.paddingSmall
                     Label {
+                        textFormat: Text.PlainText
                         x: Theme.horizontalPageMargin
                         width: parent.width - 2 * x
                         text: app.modelData.name
+                        wrapMode: Text.Wrap
                         font.pixelSize: Theme.fontSizeLarge
                         font.family: Theme.fontFamilyHeading
                         color: Theme.highlightColor
@@ -179,12 +186,14 @@ Page {
                             x: Theme.horizontalPageMargin
                             width: app.width - 2 * x
                             Label {
+                                textFormat: Text.PlainText
                                 width: parent.width
                                 wrapMode: Text.Wrap
                                 text: action.modelData.asks ? qsTr("%1 · asks first").arg(action.modelData.title) : action.modelData.title
                                 color: Theme.highlightColor
                             }
                             Label {
+                                textFormat: Text.PlainText
                                 width: parent.width
                                 wrapMode: Text.Wrap
                                 text: action.modelData.description
@@ -196,11 +205,16 @@ Page {
                     BackgroundItem {
                         visible: !app.all
                         width: parent.width
-                        height: Theme.itemSizeSmall
+                        height: Math.max(Theme.itemSizeSmall, showAll.height + 2 * Theme.paddingMedium)
+                        Accessible.name: showAll.text
                         onClicked: app.all = true
                         Label {
+                            id: showAll
+                            textFormat: Text.PlainText
                             x: Theme.horizontalPageMargin
                             anchors.verticalCenter: parent.verticalCenter
+                            width: parent.width - 2 * x
+                            wrapMode: Text.Wrap
                             text: qsTr("Show all %1").arg(app.modelData.actions.length)
                             font.pixelSize: Theme.fontSizeSmall
                             color: Theme.highlightColor

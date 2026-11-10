@@ -23,55 +23,13 @@ errors=0
 
 # ─ QML ──────────────────────────────────────────────────────────────────────
 
-# Qt's own bin dir first: a bare `qmllint` on PATH can be Qt 5's, which
-# accepts Qt 6 QML and silently reports nothing.
-QT6_BINS="$(qtpaths6 --query QT_INSTALL_BINS 2>/dev/null || true)"
-QMLLINT="$( [ -x "$QT6_BINS/qmllint" ] && echo "$QT6_BINS/qmllint" || command -v qmllint-qt6 || command -v qmllint || true)"
-if [ -z "$QMLLINT" ]; then
-    echo "[lint] qmllint not installed -- QML checks skipped" >&2
+# Runtime-only registrations need generated type metadata. The strict validator
+# owns tool discovery, JSON diagnostics, imports, and source enumeration.
+if ! cmake --build "$BUILD_DIR" --target qmllint-types; then
+    echo "[lint] could not build $BUILD_DIR's qmllint-types" >&2
     errors=1
-else
-    echo "[lint] qmllint via $QMLLINT"
-
-    # Every module the QML imports, or each unresolved import turns into
-    # unqualified/missing-property noise: the shell's and each app's build
-    # (apps build into build-apps/apps/<app>/), Marathon.Silica from source,
-    # Keel's modules from KEEL_QML on a development host, and qmltypes the
-    # build writes for the modules only registered at runtime.
-    QMLDIR_ROOTS=()
-    if cmake --build "$BUILD_DIR" --target qmllint-types >/dev/null; then
-        QMLDIR_ROOTS+=("-I" "$BUILD_DIR/qmllint-types")
-    else
-        echo "[lint] could not build $BUILD_DIR's qmllint-types" >&2
-        errors=1
-    fi
-    [ -d "$BUILD_DIR/shell/qml" ] && QMLDIR_ROOTS+=("-I" "$BUILD_DIR/shell/qml")
-    [ -d "$BUILD_DIR/MarathonOS/Services" ] && QMLDIR_ROOTS+=("-I" "$BUILD_DIR")
-    QMLDIR_ROOTS+=("-I" "marathon-silica")
-    [ -n "${KEEL_QML:-}" ] && QMLDIR_ROOTS+=("-I" "$KEEL_QML")
-    APPS_BUILD_DIR="${APPS_BUILD_DIR:-build-apps}"
-    for _approot in "$APPS_BUILD_DIR"/apps/*/; do
-        [ -d "$_approot" ] && QMLDIR_ROOTS+=("-I" "$_approot")
-    done
-
-    # Test QML is left out: it resolves against each suite's own stubs.
-    QML_FILES=()
-    while IFS= read -r -d '' f; do QML_FILES+=("$f"); done < <(
-        find shell/qml apps -name '*.qml' -not -path '*/build*/*' -not -path '*/tests/*' -print0 2>/dev/null)
-    if [ "${#QML_FILES[@]}" -gt 0 ]; then
-        # Per-category levels live in .qmllint.ini at the repo root, which
-        # qmllint discovers by walking up from each file. Do NOT pass
-        # --compiler / --unqualified / --unused-imports here: an explicit
-        # flag overrides the config file, which is how the [compiler] notes
-        # used to drown out the handful of real findings. --max-warnings 0
-        # fails the run on any warning, not only on errors.
-        if ! "$QMLLINT" --max-warnings 0 \
-            "${QMLDIR_ROOTS[@]}" \
-            "${QML_FILES[@]}"; then
-            errors=1
-        fi
-    fi
 fi
+"$PROJECT_ROOT/scripts/validate-qml.sh" --build-dir "$BUILD_DIR" || errors=1
 
 # User-facing QML strings go through qsTr().
 python3 tests/lint/check-untranslated.py || errors=1

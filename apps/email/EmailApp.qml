@@ -14,6 +14,9 @@ ApplicationWindow {
     id: app
 
     property var mail: MailService
+    property string route: typeof MARATHON_APP_ROUTE !== "undefined" ? MARATHON_APP_ROUTE : ""
+    property string routeParams: typeof MARATHON_APP_ROUTE_PARAMS !== "undefined" ? MARATHON_APP_ROUTE_PARAMS : ""
+    property var pendingRoute: null
     property var draftStore: ConfigurationValue {
         key: "/apps/email/drafts"
         defaultValue: "{}"
@@ -77,8 +80,33 @@ ApplicationWindow {
         return pageStack.push(Qt.resolvedUrl("pages/MailComposePage.qml"), Object.assign({
             mail: mail,
             draftStore: draftStore,
-            draftKey: "new-" + Date.now()
+            draftKey: "new-" + Date.now(),
+            senderAccountId: mail.currentAccountId,
+            senderAccountName: mail.currentAccountName,
+            senderAccountAddress: (mail.accountList.find(a => a.id === mail.currentAccountId) || {}).address || ""
         }, properties || {}));
+    }
+
+    function handleRoute(name, params) {
+        if (name !== "message")
+            return;
+        pendingRoute = Logic.messageRoute(params);
+        if (!pendingRoute) {
+            Notices.show(qsTr("This mail notification can't be opened."));
+            return;
+        }
+        openPendingRoute();
+    }
+
+    function openPendingRoute() {
+        if (!pendingRoute || pageStack.busy || !pageStack.currentPage)
+            return;
+        const target = pendingRoute;
+        pendingRoute = null;
+        const page = pageStack.currentPage as MailMessagePage;
+        if (page && page.messageId === target.messageId && page.accountId === target.accountId)
+            return;
+        openMessage(target.messageId, target.accountId);
     }
 
     // From the share sheet: a new message with the shared files attached and
@@ -122,11 +150,14 @@ ApplicationWindow {
             mail.refresh();
     }
 
-    function openMessage(id) {
-        mail.markAsRead(id, true);
+    function openMessage(id, accountId) {
+        const composePage = pageStack.currentPage as MailComposePage;
+        if (composePage && composePage.edited)
+            composePage.persistDraft();
         return pageStack.push(Qt.resolvedUrl("pages/MailMessagePage.qml"), {
             app: app,
-            messageId: id
+            messageId: id,
+            accountId: accountId || mail.currentAccountId
         });
     }
 
@@ -162,8 +193,38 @@ ApplicationWindow {
         if (hasAccount)
             Qt.callLater(mail.refresh);
         updateLatest();
+        if (route === "message") {
+            let params;
+            try {
+                params = JSON.parse(routeParams);
+            } catch (error) {
+                Notices.show(qsTr("This mail notification can't be opened."));
+                return;
+            }
+            handleRoute(route, params);
+        }
     }
     Component.onDestruction: commitPendingMove()
+
+    Connections {
+        target: app.pageStack
+        function onBusyChanged() {
+            app.openPendingRoute();
+        }
+        function onCurrentPageChanged() {
+            app.openPendingRoute();
+        }
+    }
+
+    Connections {
+        target: typeof NavigationRouter !== "undefined" ? NavigationRouter : null
+        function onDeepLinkRequested(appId, name, params) {
+            if (appId === app.appId) {
+                app.activate();
+                app.handleRoute(name, params);
+            }
+        }
+    }
 
     Connections {
         target: app.mail

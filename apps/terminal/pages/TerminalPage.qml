@@ -152,16 +152,35 @@ Page {
                 }
             }
 
-            Label {
+            Column {
                 objectName: "exitedHint"
                 anchors {
                     bottom: keyRow.visible ? keyRow.top : parent.bottom
                     bottomMargin: Theme.paddingLarge
                     horizontalCenter: parent.horizontalCenter
                 }
-                visible: !!page.app.currentSession && !page.app.currentSession.running && !page.app.currentSession.failed
-                text: qsTr("Process exited. Tap to restart")
-                color: Theme.secondaryHighlightColor
+                width: parent.width - 2 * Theme.horizontalPageMargin
+                spacing: Theme.paddingSmall
+                visible: !!page.app.currentSession && !page.app.currentSession.running
+
+                Label {
+                    objectName: "sessionStatus"
+                    width: parent.width
+                    text: page.app.currentSession && page.app.currentSession.failed ? qsTr("Couldn't start this session") : qsTr("Process exited")
+                    textFormat: Text.PlainText
+                    wrapMode: Text.Wrap
+                    horizontalAlignment: Text.AlignHCenter
+                    color: Theme.secondaryHighlightColor
+                }
+                Button {
+                    objectName: "restartButton"
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: qsTr("Restart session")
+                    onClicked: {
+                        page.app.currentSession.start();
+                        page.focusTerminal();
+                    }
+                }
             }
 
             VirtualKeyRow {

@@ -36,6 +36,7 @@ TestCase {
         const app = createTemporaryObject(appComponent, testCase, Object.assign({
             draftStore: store
         }, props || {}));
+        app.activate();
         tryVerify(() => app.pageStack.currentPage !== null && !app.pageStack.busy);
         return app;
     }
@@ -47,6 +48,13 @@ TestCase {
         });
         MailService.addMessage(2, "Bob", "Report", false);
         MailService.addMessage(1, "Cy", "Old news", false);
+        MailService.bodies = {
+            "2": {
+                subject: "Report",
+                from: "Bob",
+                bodyPlain: "Report body"
+            }
+        };
     }
 
     function inbox(app) {
@@ -170,6 +178,79 @@ TestCase {
         compare(view(app).headerItem.children[0].description, "Work · 1 unread");
     }
 
+    function test_largeSenderKeepsTheExactMessage_data() {
+        return [
+            {
+                tag: "320 pixels",
+                width: 320
+            },
+            {
+                tag: "360 pixels",
+                width: 360
+            }
+        ];
+    }
+
+    function test_largeSenderKeepsTheExactMessage(data) {
+        const sender = "<b>Alex Morgan from the international planning team</b> <alex@example.org>";
+        const subject = "<b>A long shared subject with details for the planning meeting</b>";
+        const recipient = "selected.recipient@example.org";
+        MailService.setAccount("Work");
+        MailService.addMessage(71, sender, subject, true, {
+            snippet: "<i>A literal preview with several lines of useful context</i>",
+            hasAttachment: true
+        });
+        MailService.addMessage(72, sender, subject, true);
+        MailService.bodies = {
+            "71": {
+                from: sender,
+                subject: subject,
+                to: [recipient],
+                bodyPlain: "Selected message"
+            },
+            "72": {
+                from: sender,
+                subject: subject,
+                to: ["decoy@example.org"],
+                bodyPlain: "Other message"
+            }
+        };
+        const app = makeApp({
+            width: data.width,
+            height: 640
+        });
+        const row = delegateAt(view(app), 0);
+        const from = findChild(row, "messageSender");
+        const title = findChild(row, "messageSubject");
+        const preview = findChild(row, "messagePreview");
+        from.font.pixelSize = Theme.fontSizeHuge;
+        title.font.pixelSize = Theme.fontSizeLarge;
+        preview.font.pixelSize = Theme.fontSizeMedium;
+        tryVerify(() => from.lineCount > 1);
+        compare(from.text, sender);
+        verify(!from.truncated);
+        for (const label of [from, title, preview]) {
+            compare(label.textFormat, Text.PlainText);
+            tryVerify(() => {
+                const start = label.mapToItem(row, 0, 0);
+                const end = label.mapToItem(row, label.width, label.height);
+                return start.x >= 0 && start.y >= 0 && end.x <= row.width + 1 && end.y <= row.contentHeight + 1;
+            });
+        }
+        verify(row.Accessible.name.indexOf(sender) >= 0);
+        verify(row.Accessible.name.indexOf(subject) >= 0);
+        row.forceActiveFocus();
+        keyClick(Qt.Key_Return);
+        const message = pushed(app, 2);
+        tryCompare(message, "loadState", "ready");
+        compare(message.messageId, "71");
+        compare(findChild(message, "fromLabel").text, sender);
+        compare(message.toList, [recipient]);
+        compare(findChild(message, "plainBody").text, "Selected message");
+        tryVerify(() => MailService.called("markAsRead").length === 1);
+        compare(MailService.called("markAsRead")[0].args, ["71", true]);
+    }
+
     function test_syncErrorWithMessages() {
         withMessages();
         MailService.syncState = "error";
@@ -196,12 +277,15 @@ TestCase {
         verify(!pulley.busy);
         MailService.syncState = "syncing";
         verify(pulley.busy);
-        compare(sync.text, "Stop");
+        compare(sync.text, "Syncing…");
+        verify(!sync.enabled);
+        const refreshes = MailService.called("refresh").length;
         sync.clicked();
-        compare(MailService.called("cancelSync").length, 1);
+        compare(MailService.called("refresh").length, refreshes);
         MailService.syncState = "idle";
         verify(!pulley.busy);
         compare(sync.text, "Sync");
+        verify(sync.enabled);
     }
 
     function test_syncTimesOut() {
@@ -314,6 +398,8 @@ TestCase {
         mouseClick(delegateAt(view(app), 0));
         const msg = pushed(app, 2);
         compare(msg.messageId, "3");
+        tryCompare(msg, "loadState", "ready");
+        tryVerify(() => MailService.called("markAsRead").length === 1);
         compare(MailService.called("markAsRead")[0].args, ["3", true]);
         compare(app.unreadCount, 0);
     }
@@ -351,6 +437,7 @@ TestCase {
         const app = makeApp();
         app.openMessage("2");
         const msg = pushed(app, 2);
+        tryCompare(msg, "loadState", "ready");
         findChild(msg, "deleteItem").clicked();
         pushed(app, 1);
         compare(app.pendingMoveId, "2");
@@ -365,6 +452,7 @@ TestCase {
         const app = makeApp();
         app.openMessage("2");
         const msg = pushed(app, 2);
+        tryCompare(msg, "loadState", "ready");
         findChild(msg, "unreadItem").clicked();
         pushed(app, 1);
         const calls = MailService.called("markAsRead");
@@ -405,7 +493,9 @@ TestCase {
         withMessages();
         const app = makeApp();
         app.openMessage("2");
-        findChild(pushed(app, 2), "archiveItem").clicked();
+        const msg = pushed(app, 2);
+        tryCompare(msg, "loadState", "ready");
+        findChild(msg, "archiveItem").clicked();
         pushed(app, 1);
         findChild(inbox(app), "remorse").cancel();
         compare(app.pendingMoveId, "");

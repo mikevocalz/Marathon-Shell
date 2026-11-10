@@ -1,9 +1,11 @@
 import QtQuick
 import QtTest
+import Keel 1.0 as Keel
 import Sailfish.Silica 1.0
 import Marathon.Silica 1.0
 import Marathon.Platform 1.0
 import ".."
+import "../ClockLogic.js" as Logic
 
 TestCase {
     id: testCase
@@ -22,9 +24,21 @@ TestCase {
         }
     }
 
+    function initTestCase() {
+        Keel.Ambience.applyForwarded("/desktop/sailfish/silica/font_size_multiplier=1");
+    }
+
     function init() {
         Alarms.reset();
         Settings.values = {};
+    }
+
+    function cleanup() {
+        Keel.Ambience.applyForwarded("/desktop/sailfish/silica/font_size_multiplier=1");
+    }
+
+    function cleanupTestCase() {
+        Keel.Ambience.applyForwarded("");
     }
 
     function makeApp() {
@@ -110,6 +124,27 @@ TestCase {
         compare(app.alarms.length, 0);
     }
 
+    function test_longAlarmLabelGrowsWithoutChangingItsIdentity() {
+        Keel.Ambience.applyForwarded("/desktop/sailfish/silica/font_size_multiplier=1.5");
+        const app = makeApp();
+        app.width = 320;
+        app.height = 640;
+        const label = "<b>Leave early for the appointment across town</b>";
+        const id = app.saveAlarm("", 6, 45, label, [1, 2, 3, 4, 5]);
+        const tabs = tabsOf(app);
+        let row = null;
+        tryVerify(() => (row = findChild(tabs.currentItem, "alarmItem")) !== null);
+        const summary = findChild(row, "alarmSummary");
+        tryVerify(() => summary.lineCount > 1);
+        compare(summary.textFormat, Text.PlainText);
+        verify(summary.text.indexOf(label) === 0);
+        verify(row.contentHeight > Theme.itemSizeLarge);
+        tryVerify(() => summary.mapToItem(row, 0, summary.height).y <= row.contentHeight, 3000, "alarm summary must fit inside the grown row");
+        row.clicked(null);
+        compare(app.alarms[0].id, id);
+        compare(app.alarms[0].enabled, false);
+    }
+
     function test_backendFailureReported() {
         const app = makeApp();
         Alarms.fail = true;
@@ -174,12 +209,40 @@ TestCase {
         verify(list.count >= 1);
         page.query = "dublin";
         compare(list.count, 1);
+        compare(findChild(page, "citySearch").text, "dublin");
         let item = null;
         tryVerify(() => (item = findChild(list, "addCityItem")) !== null);
         item.clicked(null);
         compare(app.cities[app.cities.length - 1].name, "Dublin");
         compare(app.cities[app.cities.length - 1].tz, "Europe/Dublin");
         tryVerify(() => app.pageStack.depth === 1);
+    }
+
+    function test_longCityNameReflowsWithLargeText() {
+        Keel.Ambience.applyForwarded("/desktop/sailfish/silica/font_size_multiplier=1.5");
+        const app = makeApp();
+        app.width = 320;
+        app.height = 640;
+        const name = "<b>Long city name shared by a distant family</b>";
+        app.cities = [
+            {
+                name: name,
+                tz: "Europe/Dublin"
+            }
+        ];
+        const tabs = tabsOf(app);
+        tabs.moveTo(1, PagedView.Immediate);
+        let row = null;
+        tryVerify(() => (row = findChild(tabs.currentItem, "cityItem")) !== null);
+        const title = findChild(row, "cityName");
+        const time = findChild(row, "cityTime");
+        tryCompare(findChild(row, "cityLayout"), "columns", 1);
+        compare(title.text, name);
+        compare(title.textFormat, Text.PlainText);
+        tryVerify(() => title.lineCount > 1);
+        verify(time.mapToItem(row, 0, 0).y >= title.mapToItem(row, 0, title.height).y);
+        verify(time.mapToItem(row, 0, time.height).y <= row.contentHeight);
+        verify(row.Accessible.name.indexOf(name) === 0);
     }
 
     function test_addCitySearchTakesKeys() {
@@ -208,16 +271,32 @@ TestCase {
 
     function test_cityTime() {
         const app = makeApp();
+        const now = new Date(Date.UTC(2026, 0, 1, 12, 0));
+        const local = now.getTimezoneOffset() * 60;
+        compare(app.cityTime({
+            name: "Dublin",
+            tz: "Europe/Dublin"
+        }, now).diff, "Local");
         compare(app.cityTime({
             name: "London",
             tz: "Europe/London"
-        }, new Date()).diff, "Local");
+        }, now).diff, Logic.offsetLabel(local));
+        const tokyo = app.cityTime({
+            name: "Tokyo",
+            tz: "Asia/Tokyo"
+        }, now);
+        compare(tokyo.time, Format.formatDate(new Date(2026, 0, 1, 21, 0), Formatter.TimeValue));
+        compare(tokyo.weekday, Qt.locale().dayName(4, Locale.ShortFormat).toUpperCase());
+        compare(app.cityTime({
+            name: "Gone",
+            tz: "Nowhere/Gone"
+        }, now).time, "—:—");
         const legacy = app.cityTime({
             name: "Atlantis",
             offset: -3
-        }, new Date(Date.UTC(2026, 0, 1, 12, 0)));
+        }, now);
         compare(legacy.time, Format.formatDate(new Date(2026, 0, 1, 9, 0), Formatter.TimeValue));
-        compare(legacy.diff, "-3h");
+        compare(legacy.diff, Logic.offsetLabel(-3 * 3600 + local));
     }
 
     function test_countdownHoldsBackgroundAndRings() {
@@ -318,6 +397,29 @@ TestCase {
         compare(app.countdown.remaining, 0);
     }
 
+    function test_timerKeyboardAndNarrowPresets() {
+        Keel.Ambience.applyForwarded("/desktop/sailfish/silica/font_size_multiplier=1.5");
+        const app = makeApp();
+        app.width = 320;
+        app.height = 640;
+        const tabs = tabsOf(app);
+        tabs.moveTo(3, PagedView.Immediate);
+        let grid = null;
+        tryVerify(() => (grid = findChild(tabs.currentItem, "presetGrid")) !== null);
+        tryVerify(() => grid.columns < 3);
+        app.setTimer(300);
+        const dial = findChild(tabs.currentItem, "timerDial");
+        verify(dial.width <= app.width - 2 * Theme.horizontalPageMargin);
+        dial.forceActiveFocus();
+        keyClick(Qt.Key_Space);
+        verify(app.countdown.running);
+        compare(Alarms.hidden.length, 1);
+        keyClick(Qt.Key_Return);
+        verify(!app.countdown.running);
+        compare(Alarms.hidden.length, 0);
+        compare(app.countdown.total, 300);
+    }
+
     function test_setAnyTimerLength() {
         const app = makeApp();
         const tabs = tabsOf(app);
@@ -378,5 +480,26 @@ TestCase {
         pauseReset.clicked(null);
         compare(app.stopwatch.elapsed, 0);
         compare(app.stopwatch.laps.length, 0);
+    }
+
+    function test_narrowStopwatchKeepsControlsClearOfElapsedTime() {
+        Keel.Ambience.applyForwarded("/desktop/sailfish/silica/font_size_multiplier=1.5");
+        const app = makeApp();
+        app.width = 320;
+        app.height = 640;
+        const tabs = tabsOf(app);
+        tabs.moveTo(2, PagedView.Immediate);
+        let start = null;
+        tryVerify(() => (start = findChild(tabs.currentItem, "startLap")) !== null);
+        const time = findChild(tabs.currentItem, "stopwatchTime");
+        tryVerify(() => start.mapToItem(time, 0, 0).y >= time.height);
+        start.clicked(null);
+        const started = app.stopwatch.startedAt;
+        app.width = 1024;
+        app.height = 768;
+        verify(app.stopwatch.running);
+        compare(app.stopwatch.startedAt, started);
+        findChild(tabs.currentItem, "pauseReset").clicked(null);
+        verify(!app.stopwatch.running);
     }
 }

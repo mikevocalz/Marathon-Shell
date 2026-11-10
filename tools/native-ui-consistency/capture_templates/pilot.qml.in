@@ -1,0 +1,59 @@
+import QtQuick
+import QtQuick.Window
+import QtTest
+import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
+import Shipwright.Pilot 1.0
+import "@REPO@/apps/pilot/ui/pages"
+import "@REPO@/apps/pilot/ui/components"
+
+TestCase {
+    id: testCase
+    name: "NativeReviewPilot"
+    when: windowShown
+    visible: true
+    width: 320
+    height: 640
+
+    // Same native host as Pilot's interaction suite. Every visible page and
+    // card is production QML; only Shipwright.Pilot is a service fixture.
+    Component {
+        id: appComponent
+        ApplicationWindow { initialPage: MainPage {} }
+    }
+@HELPERS@
+
+    function test_capture() {
+        Pilot.reset();
+        Conversation.model.clear();
+        Conversation.now = {};
+        Conversation.guide = ["hidden"];
+        Conversation.draft = "Also include the workshop notes";
+        Conversation.model.append(Conversation.entry({
+            who: "you", kind: "you", time: "09:30",
+            text: "What should I prepare for Wednesday's planning review?"
+        }));
+        Conversation.model.append(Conversation.entry({
+            kind: "answer", time: "09:30", via: "phone", ms: 45,
+            payload: JSON.stringify({
+                text: "Review the compact layouts, confirm the agenda and bring your workshop notes. The planning meeting is Wednesday at 10:00.",
+                how: [{ kind: "app", text: "Read the selected calendar and the task notes you shared." }]
+            })
+        }));
+        const app = createTemporaryObject(appComponent, testCase, { width: 320, height: 640 });
+        verify(app);
+        tryVerify(() => app.pageStack.currentPage !== null && !app.pageStack.busy);
+        const page = app.pageStack.currentPage;
+        const list = findChild(page, "conversation");
+        tryCompare(list, "count", 2);
+        list.toEnd();
+        tryVerify(() => list.atYEnd);
+        app.contentItem.forceActiveFocus();
+        capture(app, "pilot-main-320x640", 320, 640);
+        resizeApp(app, 1024, 768);
+        list.toEnd();
+        tryVerify(() => list.atYEnd);
+        compare(findChild(page, "input").text, "Also include the workshop notes");
+        capture(app, "pilot-main-1024x768", 1024, 768);
+    }
+}

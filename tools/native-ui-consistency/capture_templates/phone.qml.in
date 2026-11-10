@@ -1,0 +1,49 @@
+import QtQuick
+import QtQuick.Window
+import QtTest
+import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
+import Marathon.Platform 1.0
+import "@REPO@/apps/phone"
+
+TestCase {
+    id: testCase
+    name: "NativeReviewPhone"
+    when: windowShown
+    visible: true
+    width: 320
+    height: 640
+
+    Component { id: storeComponent; QtObject { property var value: 0 } }
+    Component { id: appComponent; PhoneApp {} }
+@HELPERS@
+
+    function test_capture() {
+        Telephony.reset();
+        Contacts.reset();
+        CallHistory.reset();
+        Permissions.reset();
+        Contacts.contacts = [
+            { id: 41, name: "Grace Murray Hopper · International engineering", phone: "+1 555 123 4567", email: "grace@example.org", favorite: true },
+            { id: 42, name: "Grace Murray Hopper · International engineering", phone: "+1 555 123 4568", email: "", favorite: true },
+            { id: 43, name: "Ada Lovelace", phone: "+44 20 7946 0001", email: "ada@example.org", favorite: false }
+        ];
+        const app = createTemporaryObject(appComponent, testCase, {
+            width: 320, height: 640, callLogSeen: createTemporaryObject(storeComponent, testCase)
+        });
+        verify(app);
+        tryVerify(() => app.pageStack.currentPage !== null && !app.pageStack.busy);
+        Telephony.incomingCall("5551234567");
+        tryVerify(() => app.incomingPage !== null && app.pageStack.currentPage === app.incomingPage && !app.pageStack.busy);
+        compare(findChild(app.incomingPage, "callerLabel").text, Contacts.contacts[0].name);
+        capture(app, "phone-incoming-320x640", 320, 640);
+        findChild(app.incomingPage, "declineButton").clicked(null);
+        tryVerify(() => app.pageStack.depth === 1 && !app.pageStack.busy);
+        resizeApp(app, 720, 720);
+        app.pageStack.currentPage.tabs.moveTo(2);
+        const people = findChild(app.pageStack.currentPage, "people");
+        verify(people);
+        tryVerify(() => people.count === 3 && Math.abs(people.mapToItem(app, 0, 0).x) < 1);
+        capture(app, "phone-contacts-720x720", 720, 720);
+    }
+}

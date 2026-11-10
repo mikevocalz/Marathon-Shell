@@ -37,6 +37,7 @@ CoverBackground {
             label: qsTr("unread")
         }
         Label {
+            textFormat: Text.PlainText
             objectName: "noUnread"
             width: parent.width
             visible: cover.unread === 0
@@ -50,6 +51,7 @@ CoverBackground {
             visible: cover.sender !== ""
 
             Label {
+                textFormat: Text.PlainText
                 objectName: "latestSender"
                 width: parent.width
                 text: cover.sender
@@ -57,6 +59,7 @@ CoverBackground {
                 font.pixelSize: Theme.fontSizeSmall
             }
             Label {
+                textFormat: Text.PlainText
                 objectName: "latestSubject"
                 width: parent.width
                 visible: text !== ""

@@ -26,6 +26,10 @@ TestCase {
                     SectionHeader {
                         text: "Today"
                     }
+                    Label {
+                        objectName: "providerLabel"
+                        text: "<b>Account name</b>"
+                    }
                     Button {
                         objectName: "focusTarget"
                         y: 300
@@ -107,6 +111,17 @@ TestCase {
 
     function init() {
         log = [];
+    }
+
+    function test_providerLabelsUsePlainTextByDefault() {
+        const a = createTemporaryObject(app, testCase);
+        tryVerify(() => a.pageStack.currentPage !== null);
+        compare(a._defaultLabelFormat, Text.PlainText);
+        const label = findChild(a.pageStack.currentPage, "providerLabel");
+        verify(label);
+        compare(label.textFormat, Text.PlainText);
+        label.text = "<i>A newly synchronized account</i>";
+        compare(label.textFormat, Text.PlainText);
     }
 
     function test_backPopsPage() {

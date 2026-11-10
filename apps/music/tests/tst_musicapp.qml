@@ -17,14 +17,6 @@ TestCase {
         LibraryStub {}
     }
     Component {
-        id: mediaStub
-        MediaStub {}
-    }
-    Component {
-        id: playerComponent
-        Player {}
-    }
-    Component {
         id: storeStub
         QtObject {
             property var value: "[]"
@@ -35,24 +27,50 @@ TestCase {
         MusicApp {
             width: 540
             height: 1140
+            playlistStore: QtObject {
+                property var value: "[]"
+            }
+            sessionStore: QtObject {
+                property var value: ""
+            }
+            player: Player {
+                media: MediaStub {}
+            }
         }
     }
 
+    property var appWindows: []
+
+    function init() {
+        failOnWarning(/TypeError: Cannot read property .* of null/);
+    }
+
+    function createApp(properties) {
+        const app = createTemporaryObject(appComponent, this, properties);
+        verify(app !== null);
+        appWindows.push(app);
+        return app;
+    }
+
+    function cleanup() {
+        // QtTest destroys temporary objects in creation order. Close the
+        // windows before independent library/session fixtures so live native
+        // bindings cannot observe already-destroyed dependencies.
+        for (const app of appWindows) {
+            if (app && typeof app.destroy === "function")
+                app.destroy();
+        }
+        appWindows = [];
+        wait(0);
+    }
+
     function makeApp(library) {
-        const props = {
-            playlistStore: createTemporaryObject(storeStub, this),
-            sessionStore: createTemporaryObject(storeStub, this, {
-                value: ""
-            }),
-            player: createTemporaryObject(playerComponent, this, {
-                media: createTemporaryObject(mediaStub, this)
-            })
-        };
+        const props = {};
         if (library !== null)
             props.library = library === undefined ? createTemporaryObject(libraryStub, this) : library;
         else
             props.library = null;
-        const app = createTemporaryObject(appComponent, this, props);
+        const app = createApp(props);
         tryVerify(() => app.pageStack.currentPage !== null && app.pageStack.currentPage.status === PageStatus.Active);
         tryVerify(() => app.loaded);
         return app;
@@ -81,15 +99,8 @@ TestCase {
         const library = createTemporaryObject(libraryStub, this, {
             deliver: false
         });
-        const app = createTemporaryObject(appComponent, this, {
-            library: library,
-            playlistStore: createTemporaryObject(storeStub, this),
-            sessionStore: createTemporaryObject(storeStub, this, {
-                value: ""
-            }),
-            player: createTemporaryObject(playerComponent, this, {
-                media: createTemporaryObject(mediaStub, this)
-            })
+        const app = createApp({
+            library: library
         });
         tryVerify(() => app.pageStack.currentPage !== null && app.pageStack.currentPage.status === PageStatus.Active);
         compare(library.loads, 1);
@@ -297,6 +308,54 @@ TestCase {
         compare(app.player.repeatMode, "all");
     }
 
+    function test_narrowPlayerKeepsAllTransportActionsReachable() {
+        const app = makeApp();
+        app.width = 320;
+        app.player.playTracks(app.tracks, 0);
+        app.openPlayer();
+        tryCompare(app.pageStack, "depth", 2);
+        tryCompare(app.pageStack, "busy", false);
+        const page = app.pageStack.currentPage;
+        for (const name of ["previousButton", "playPauseButton", "nextButton", "shuffleButton", "repeatButton"]) {
+            const button = findChild(page, name);
+            const left = button.mapToItem(page, 0, 0).x;
+            verify(left >= 0 && left + button.width <= page.width, name + " is inside the page");
+        }
+        const next = findChild(page, "nextButton");
+        next.forceActiveFocus();
+        keyClick(Qt.Key_Return);
+        compare(app.player.currentTrack.path, "file:///m/2.mp3");
+    }
+
+    function test_longTrackIdentityStaysPlainAndReadable() {
+        const title = "<b>A long track title with many words for the narrow player</b>";
+        const library = createTemporaryObject(libraryStub, this, {
+            tracks: [
+                {
+                    id: 7,
+                    path: "file:///m/exact.mp3",
+                    title: title,
+                    artist: "<i>A very long artist name</i>",
+                    album: "Album",
+                    duration: 200,
+                    trackNumber: 1
+                }
+            ]
+        });
+        const app = makeApp(library);
+        app.width = 320;
+        app.player.playTracks(app.tracks, 0);
+        app.openPlayer();
+        tryCompare(app.pageStack, "depth", 2);
+        tryCompare(app.pageStack, "busy", false);
+        const label = findChild(app.pageStack.currentPage, "playerTitle");
+        compare(label.text, title);
+        compare(label.textFormat, Text.PlainText);
+        verify(!label.truncated);
+        verify(label.lineCount > 1);
+        compare(app.player.currentTrack.path, "file:///m/exact.mp3");
+    }
+
     function test_playbackErrorSkipsTrack() {
         const app = makeApp();
         app.player.playTracks(app.tracks, 0);
@@ -323,13 +382,9 @@ TestCase {
         const session = createTemporaryObject(storeStub, this, {
             value: ""
         });
-        const first = createTemporaryObject(appComponent, this, {
+        const first = createApp({
             library: createTemporaryObject(libraryStub, this),
-            playlistStore: createTemporaryObject(storeStub, this),
-            sessionStore: session,
-            player: createTemporaryObject(playerComponent, this, {
-                media: createTemporaryObject(mediaStub, this)
-            })
+            sessionStore: session
         });
         tryVerify(() => first.loaded);
         first.player.playTracks(first.tracks, 2);
@@ -338,13 +393,9 @@ TestCase {
         compare(JSON.parse(session.value).index, 2);
         compare(JSON.parse(session.value).position, 15000);
 
-        const next = createTemporaryObject(appComponent, this, {
+        const next = createApp({
             library: createTemporaryObject(libraryStub, this),
-            playlistStore: createTemporaryObject(storeStub, this),
-            sessionStore: session,
-            player: createTemporaryObject(playerComponent, this, {
-                media: createTemporaryObject(mediaStub, this)
-            })
+            sessionStore: session
         });
         tryVerify(() => next.loaded);
         compare(next.player.currentTrack.title, "Dawn");

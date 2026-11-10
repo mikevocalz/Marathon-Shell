@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
 
-use crate::{apps, archive, paths, permissions, signature};
+use crate::{apps, archive, paths, permissions, signature, transaction};
 
 /// What a permission means, for the install screen.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,6 +38,12 @@ pub enum Refusal {
     /// them once the user agrees.
     Held(Box<Plan>),
     Failed(String),
+    /// The new generation is visible. Its parent-directory sync failed; retry
+    /// recovery rather than reporting that the old app was restored.
+    Committed {
+        plan: Box<Plan>,
+        detail: String,
+    },
 }
 
 impl From<String> for Refusal {
@@ -97,7 +103,9 @@ fn check_manifest(manifest: &Value) -> Result<String, Refusal> {
     {
         return Err("Invalid or missing manifest.json".to_owned().into());
     }
-    if id.contains("..") || id.contains(['/', '\\']) || id.starts_with('.') {
+    crate::manifest::check_third_party_background(manifest)
+        .map_err(|message| Refusal::Failed(message.to_owned()))?;
+    if !transaction::valid_id(id) {
         audit(
             libc::LOG_ALERT,
             &format!("[SECURITY] Path traversal blocked: appId={id}"),
@@ -141,7 +149,9 @@ fn plan(manifest: &Value, signer: &str, approved: &[String]) -> Result<Plan, Ref
         );
         return Err(format!("Permissions with no description: {list}").into());
     }
-    let installed = read_json(&paths::receipt(&id));
+    // A copy of an OS app adds to what the OS's copy was allowed.
+    let installed = read_json(&paths::receipt(&id))
+        .or_else(|| read_json(&paths::system_app(&id).join("manifest.json")));
     let added: Vec<String> = installed.as_ref().map_or_else(Vec::new, |r| {
         let had = permissions_of(r);
         wanted
@@ -176,65 +186,150 @@ fn plan(manifest: &Value, signer: &str, approved: &[String]) -> Result<Plan, Ref
 
 /// The receipt is what the user approved: the permissions the plan disclosed
 /// and, for an update, consented to. The scanner trusts it, not the manifest.
-fn write_receipt(manifest: &Value, signer: &str, migrated: bool) -> std::io::Result<()> {
-    let id = text(manifest, "id");
-    let mut receipt = json!({"id": id, "version": text(manifest, "version"), "signer": signer, "permissions": permissions_of(manifest)});
+fn write_receipt(
+    root: &Path,
+    manifest: &Value,
+    signer: &str,
+    migrated: bool,
+    boot: &str,
+) -> std::io::Result<()> {
+    let mut receipt = json!({"id": text(manifest, "id"), "version": text(manifest, "version"), "signer": signer, "permissions": permissions_of(manifest), "bootId": boot});
     if migrated {
         receipt["migrated"] = Value::Bool(true);
     }
-    let path = paths::receipt(id);
-    let mut file =
-        tempfile::NamedTempFile::new_in(path.parent().unwrap_or_else(|| Path::new(".")))?;
-    serde_json::to_writer_pretty(&mut file, &receipt)?;
-    file.persist(path).map(drop).map_err(|e| e.error)
+    transaction::write_json(&root.join("receipt.json"), &receipt)
 }
 
-fn copy_tree(from: &Path, to: &Path) -> std::io::Result<()> {
-    for entry in walkdir::WalkDir::new(from) {
-        let entry = entry?;
-        let target = to.join(
-            entry
-                .path()
-                .strip_prefix(from)
-                .unwrap_or_else(|_| entry.path()),
+/// Only Marathon's own key may replace an app the OS ships, and only with a
+/// newer version than the OS's and the one already installed beside it.
+fn may_replace_os_app(id: &str, version: &str, signer: &str) -> Result<(), String> {
+    let Some(os) = apps::system(id) else {
+        return Ok(());
+    };
+    if !apps::is_system_signer(signer) {
+        return Err("A system app has this id".to_owned());
+    }
+    if !apps::is_newer(version, &os.version) {
+        return Err(format!(
+            "The system's {id} {} is not older than {version}",
+            os.version
+        ));
+    }
+    let installed = read_json(&paths::receipt(id));
+    let installed = installed
+        .as_ref()
+        .map(|r| text(r, "version"))
+        .unwrap_or_default();
+    if apps::is_newer(installed, version) {
+        return Err(format!(
+            "{id} {installed} is installed, newer than {version}"
+        ));
+    }
+    Ok(())
+}
+
+fn place(
+    source: &Path,
+    signer: &str,
+    approved: &[String],
+    migrated: bool,
+) -> Result<Plan, Refusal> {
+    let original = read_json(&source.join("manifest.json"))
+        .ok_or_else(|| "Invalid or missing manifest.json".to_owned())?;
+    let id = check_manifest(&original)?;
+    let locked = transaction::LockedApp::acquire(&id)
+        .map_err(|e| format!("Cannot lock {id} for installation: {e}"))?;
+    let pending = locked.pending().map_err(|e| e.to_string())?;
+    crate::cleanup::allow_reinstall(&pending, &id).map_err(Refusal::Failed)?;
+    if let Some(current) = locked.selected().map_err(|e| e.to_string())? {
+        let receipt =
+            transaction::read_json(&current.join("receipt.json")).map_err(|e| e.to_string())?;
+        if current == locked.current() {
+            normalize_legacy(&locked).map_err(Refusal::Failed)?;
+            return Err(
+                "Legacy installation migrated safely; restart the device before updating it"
+                    .to_owned()
+                    .into(),
+            );
+        }
+        if receipt["legacyBoot"].as_str() == Some(&locked.boot) {
+            return Err(
+                "Legacy installation migrated safely; restart the device before updating it"
+                    .to_owned()
+                    .into(),
+            );
+        }
+    }
+    let stage = locked
+        .stage()
+        .map_err(|e| format!("Cannot stage {id}: {e}"))?;
+    transaction::copy_tree(source, &stage.path().join("files"))
+        .map_err(|e| format!("Failed to stage app files; installed version retained: {e}"))?;
+    // Plan from the private staged copy, not the mutable developer directory.
+    let manifest = read_json(&stage.path().join("files/manifest.json"))
+        .ok_or_else(|| "Invalid staged manifest.json".to_owned())?;
+    if check_manifest(&manifest)? != id {
+        return Err("App ID changed while staging".to_owned().into());
+    }
+    let entry = stage
+        .path()
+        .join("files")
+        .join(text(&manifest, "entryPoint"));
+    if !fs::symlink_metadata(&entry).is_ok_and(|metadata| metadata.is_file()) {
+        return Err(
+            "Staged entryPoint must name an existing regular file; installed version retained"
+                .to_owned()
+                .into(),
         );
-        if entry.file_type().is_dir() {
-            fs::create_dir_all(&target)?;
-        } else {
-            fs::copy(entry.path(), &target)?;
-        }
     }
-    Ok(())
+    let plan = plan(&manifest, signer, approved)?;
+    may_replace_os_app(&id, text(&manifest, "version"), signer)?;
+    write_receipt(stage.path(), &manifest, signer, migrated, &locked.boot)
+        .map_err(|e| format!("Failed to record staged installation: {e}"))?;
+    // Keep the generation before publication: a post-rename failure must never
+    // let TempDir remove the newly visible installation.
+    let generation = stage.keep();
+    match locked.publish(&generation) {
+        Ok(()) => Ok(plan),
+        Err(transaction::PublishError::Before(error)) => {
+            let cleanup = fs::remove_dir_all(&generation);
+            let suffix = cleanup.err().map_or_else(String::new, |e| format!("; staging cleanup failed: {e}"));
+            Err(format!("Installation not published; previous version retained: {error}{suffix}").into())
+        }
+        Err(transaction::PublishError::Committed(error)) => Err(Refusal::Committed {
+            plan: Box::new(plan),
+            detail: format!("New app generation is visible, but publication durability requires recovery: {error}"),
+        }),
+    }
 }
 
-fn remove(path: &Path) -> std::io::Result<()> {
-    match fs::remove_dir_all(path) {
-        Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
-        _ => Ok(()),
+pub(crate) fn normalize_legacy(locked: &transaction::LockedApp) -> Result<(), String> {
+    let current = locked.current();
+    let mut receipt =
+        transaction::read_json(&current.join("receipt.json")).map_err(|e| e.to_string())?;
+    if receipt["id"] != locked.id {
+        return Err("Legacy receipt does not match app ID".to_owned());
     }
-}
-
-fn place(manifest: &Value, source: &Path, signer: &str, moved: bool) -> Result<(), Refusal> {
-    let id = text(manifest, "id");
-    if paths::system_app(id).join("manifest.json").exists() {
-        return Err("A system app has this id".to_owned().into());
-    }
-    let dest = paths::install_dir(id);
-    remove(&dest).map_err(|e| format!("Failed to remove existing installation: {e}"))?;
-    fs::create_dir_all(&dest).map_err(|e| format!("Failed to create {}: {e}", dest.display()))?;
-    let files = paths::files_dir(id);
-    let placed = (moved && fs::rename(source, &files).is_ok()) || copy_tree(source, &files).is_ok();
-    if !placed || write_receipt(manifest, signer, false).is_err() {
-        remove(&dest).ok();
-        return Err(if placed {
-            "Failed to record the installation"
-        } else {
-            "Failed to copy app files"
+    let stage = locked.stage().map_err(|e| e.to_string())?;
+    transaction::copy_tree(&current.join("files"), &stage.path().join("files"))
+        .map_err(|e| e.to_string())?;
+    receipt["bootId"] = Value::String(locked.boot.clone());
+    receipt["legacyBoot"] = Value::String(locked.boot.clone());
+    transaction::write_json(&stage.path().join("receipt.json"), &receipt)
+        .map_err(|e| e.to_string())?;
+    // The retained legacy directory also needs its ownership/boot record for
+    // collection after restart; changing these fields never changes approval.
+    transaction::write_json(&current.join("receipt.json"), &receipt).map_err(|e| e.to_string())?;
+    let generation = stage.keep();
+    match locked.normalize(&generation) {
+        Ok(()) => Ok(()),
+        Err(transaction::PublishError::Before(e)) => {
+            Err(format!("Legacy migration was not published: {e}"))
         }
-        .to_owned()
-        .into());
+        Err(transaction::PublishError::Committed(e)) => Err(format!(
+            "Legacy migration is visible; durability recovery required: {e}"
+        )),
     }
-    Ok(())
 }
 
 /// A copy of `package` (and its signature) checked and unpacked in a private
@@ -261,12 +356,7 @@ pub fn install_package(package: &Path, approved: &[String]) -> Result<Plan, Refu
         );
         format!("Failed to extract package: {e}")
     })?;
-    let manifest = read_json(&extracted.join("manifest.json"))
-        .ok_or_else(|| "Invalid manifest.json".to_owned())?;
-    check_manifest(&manifest)?;
-    let plan = plan(&manifest, &signer, approved)?;
-    place(&manifest, &extracted, &signer, true)?;
-    Ok(plan)
+    place(&extracted, &signer, approved, false)
 }
 
 /// Development only (`MARATHON_ALLOW_UNSIGNED=1`): a directory is not signed.
@@ -288,12 +378,7 @@ pub fn install_directory(dir: &Path, approved: &[String]) -> Result<Plan, Refusa
             dir.display()
         ),
     );
-    let manifest = read_json(&dir.join("manifest.json"))
-        .ok_or_else(|| "Invalid or missing manifest.json".to_owned())?;
-    check_manifest(&manifest)?;
-    let plan = plan(&manifest, "", approved)?;
-    place(&manifest, dir, "", false)?;
-    Ok(plan)
+    place(dir, "", approved, false)
 }
 
 /// The signing key's id, empty for an unsigned package the developer
@@ -343,41 +428,82 @@ pub fn verify(package: &Path) -> Result<String, String> {
     Err(format!("Package verification failed: {refused}"))
 }
 
-pub fn can_uninstall(app_id: &str) -> bool {
-    apps::find(app_id).is_some_and(|a| !a.is_protected && a.path == paths::files_dir(app_id))
-}
-
-/// `dataLifecycle` (`docs/APP_MANIFEST_SCHEMA.md`): the cache always goes; app
-/// data unless the app says "keep"; files in the user's media folders never.
-/// Whether the app's data went too.
-pub fn uninstall(app_id: &str) -> Result<bool, String> {
-    if !can_uninstall(app_id) {
-        return Err(if apps::find(app_id).is_some() {
-            "Cannot uninstall a protected or system app"
-        } else {
-            "App not found"
+/// Removes superseded pointers under the same lock as installs and uninstalls.
+/// Generations remain available to running apps until a later boot collects them.
+pub fn remove_superseded() -> Vec<String> {
+    let mut removed = Vec::new();
+    for id in apps::superseded() {
+        let result = (|| {
+            let locked = transaction::LockedApp::acquire(&id).map_err(|e| e.to_string())?;
+            if !apps::superseded().contains(&id) {
+                return Ok(false);
+            }
+            if locked.selected().map_err(|e| e.to_string())? == Some(locked.current()) {
+                normalize_legacy(&locked)?;
+            }
+            if read_json(&paths::receipt(&id))
+                .is_some_and(|receipt| receipt["legacyBoot"].as_str() == Some(&locked.boot))
+            {
+                return Err("Legacy installation retained until device restart".to_owned());
+            }
+            locked.unpublish().map_err(|e| e.to_string())?;
+            Ok::<_, String>(true)
+        })();
+        match result {
+            Ok(true) => removed.push(id),
+            Ok(false) => {}
+            Err(e) => audit(
+                libc::LOG_WARNING,
+                &format!("Superseded app retained: app={id} reason={e}"),
+            ),
         }
-        .to_owned());
     }
-    let keep = read_json(&paths::files_dir(app_id).join("manifest.json")).is_some_and(|m| {
-        m.pointer("/dataLifecycle/appData").and_then(Value::as_str) == Some("keep")
-    });
-    remove(&paths::install_dir(app_id)).map_err(|e| format!("Failed to remove app files: {e}"))?;
-    remove(&paths::cache_dir(app_id)).ok();
-    if !keep {
-        remove(&paths::data_dir(app_id)).ok();
-        remove(&paths::config_dir(app_id)).ok();
-    }
-    Ok(!keep)
+    removed
 }
 
-/// Installs used to live in the directory that is also the app's writable
-/// data, so an app could rewrite its own manifest. Each is copied into the
-/// read-only install root with a receipt for the permissions its manifest
-/// declares now; the old directory stays as the app's data. The ids whose
-/// manifest claimed "protected", which a user install never is: their
-/// stored grants came from that claim.
+pub fn can_uninstall(app_id: &str) -> bool {
+    if !transaction::valid_id(app_id) {
+        return false;
+    }
+    if paths::user_installs()
+        .join(".cleanup")
+        .join(format!("{app_id}.json"))
+        .is_file()
+    {
+        return true;
+    }
+    let root = paths::selected_install(app_id).ok().flatten();
+    apps::find(app_id)
+        .is_some_and(|a| !a.is_protected && root.is_some_and(|r| a.path == r.join("files")))
+}
+
+pub use crate::cleanup::{pending_uninstalls, uninstall, CleanupState, UninstallReport};
+
+/// Copy former writable installs into the generation store under the app lock.
+/// The old directory remains app data. Permission grants from a formerly claimed
+/// protected flag are invalidated by the caller.
 pub fn migrate_legacy_installs() -> Vec<String> {
+    for entry in fs::read_dir(paths::user_installs())
+        .into_iter()
+        .flatten()
+        .flatten()
+    {
+        let Ok(id) = entry.file_name().into_string() else {
+            continue;
+        };
+        if !transaction::valid_id(&id) || !entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+            continue;
+        }
+        let normalized = transaction::LockedApp::acquire(&id)
+            .map_err(|e| e.to_string())
+            .and_then(|locked| normalize_legacy(&locked));
+        if let Err(error) = normalized {
+            audit(
+                libc::LOG_WARNING,
+                &format!("Legacy app needs recovery before launch: app={id} reason={error}"),
+            );
+        }
+    }
     let legacy = paths::legacy_installs();
     if fs::canonicalize(&legacy).ok() == fs::canonicalize(paths::system_apps()).ok() {
         return Vec::new();
@@ -387,6 +513,9 @@ pub fn migrate_legacy_installs() -> Vec<String> {
         let Ok(id) = entry.file_name().into_string() else {
             continue;
         };
+        if !transaction::valid_id(&id) || !entry.file_type().is_ok_and(|t| t.is_dir()) {
+            continue;
+        }
         let Some(manifest) = read_json(&entry.path().join("manifest.json")) else {
             continue;
         };
@@ -396,20 +525,38 @@ pub fn migrate_legacy_installs() -> Vec<String> {
         {
             continue;
         }
-        let copied = fs::create_dir_all(paths::install_dir(&id)).is_ok()
-            && copy_tree(&entry.path(), &paths::files_dir(&id)).is_ok()
-            && write_receipt(&manifest, "", true).is_ok();
-        if !copied {
-            remove(&paths::install_dir(&id)).ok();
-            continue;
-        }
-        audit(
-            libc::LOG_NOTICE,
-            &format!("[SECURITY] Install moved out of its data directory: app={id}"),
-        );
-        if manifest.get("protected").and_then(Value::as_bool) == Some(true) {
-            claimed.push(id);
+        match place(&entry.path(), "", &[], true) {
+            Ok(_) => {
+                if manifest.get("protected").and_then(Value::as_bool) == Some(true) {
+                    claimed.push(id);
+                }
+            }
+            Err(e) => audit(
+                libc::LOG_WARNING,
+                &format!("Legacy install retained: app={id} reason={e:?}"),
+            ),
         }
     }
     claimed
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn user_installs_cannot_silently_accept_unsupported_schedules() {
+        let mut manifest =
+            json!({"id": "com.example.notes", "name": "Notes", "entryPoint": "NotesApp.qml"});
+        assert!(check_manifest(&manifest).is_ok());
+        manifest["backgroundTasks"] = json!([]);
+        assert!(check_manifest(&manifest).is_ok());
+        manifest["backgroundTasks"] =
+            json!([{ "id": "sync", "action": "notes.sync", "intervalMinutes": 60 }]);
+        assert!(
+            matches!(check_manifest(&manifest), Err(Refusal::Failed(message)) if message.contains("third-party task registration is not supported"))
+        );
+        manifest["backgroundTasks"] = json!(true);
+        assert!(check_manifest(&manifest).is_err());
+    }
 }

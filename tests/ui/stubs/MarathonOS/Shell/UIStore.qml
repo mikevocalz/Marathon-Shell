@@ -27,6 +27,9 @@ QtObject {
     function closeSearch() {
         searchOpen = false;
     }
+    function openSearch() {
+        searchOpen = true;
+    }
     function openApp(appId, name, icon) {
         opened = opened.concat([appId]);
     }

@@ -51,7 +51,7 @@ function alarmIn(when, now) {
     const ms = when - now;
     if (ms < 60000)
         return qsTr("Alarm in less than a minute");
-    const mins = Math.ceil(ms / 60000);
+    const mins = Math.floor(ms / 60000);
     const d = Math.floor(mins / 1440);
     const h = Math.floor(mins % 1440 / 60);
     const m = mins % 60;
@@ -127,6 +127,19 @@ function zoneFor(city, known) {
 function offsetDate(offset, now) {
     const d = new Date(now.getTime() + offset * 3600000);
     return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes());
+}
+
+// "+5h", "-3:30h", from a difference to local time in seconds.
+function offsetLabel(seconds) {
+    if (seconds === 0)
+        return qsTr("Same time");
+    const mins = Math.abs(seconds) / 60;
+    return (seconds > 0 ? "+" : "-") + Math.floor(mins / 60) + (mins % 60 ? ":" + pad2(mins % 60) : "") + "h";
+}
+
+// "Europe/Dublin" -> "Dublin", "America/New_York" -> "New York".
+function zoneCity(zone) {
+    return zone.split("/").pop().replace(/_/g, " ");
 }
 
 function moveCity(cities, from, to) {

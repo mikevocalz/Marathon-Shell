@@ -12,6 +12,7 @@
 
 import QtQuick
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 
 Item {
     id: card
@@ -70,7 +71,7 @@ Item {
             x: card.mine ? 0 : -radius
             width: parent.width + radius
             height: parent.height
-            radius: Theme.paddingLarge
+            radius: Theme.paddingSmall
             color: card.kind === "confirm" && card.pending ? Theme.rgba(Theme.highlightBackgroundColor, Theme.highlightBackgroundOpacity) : card.mine ? Theme.rgba(Theme.highlightBackgroundColor, Theme.opacityFaint) : Theme.rgba(Theme.primaryColor, 0.08)
         }
 
@@ -84,10 +85,11 @@ Item {
 
             Label {
                 id: titleLabel
+                textFormat: Text.PlainText
                 objectName: "cardTitle"
                 visible: card.kind === "confirm"
                 width: parent.width
-                truncationMode: TruncationMode.Fade
+                wrapMode: Text.Wrap
                 color: Theme.highlightColor
                 text: card.title
             }
@@ -102,6 +104,7 @@ Item {
                 text: card.kind === "confirm" ? card.detail : card.text
             }
             Label {
+                textFormat: Text.PlainText
                 objectName: "outboundNote"
                 visible: card.kind === "confirm" && card.outbound
                 width: parent.width
@@ -113,7 +116,7 @@ Item {
             Button {
                 objectName: "settingsButton"
                 visible: card.pointsToSettings
-                preferredWidth: Theme.buttonWidthSmall
+                preferredWidth: Math.min(Theme.buttonWidthSmall, parent.width)
                 text: qsTr("Open settings")
                 onClicked: card.openSettings()
             }
@@ -121,31 +124,35 @@ Item {
                 id: cameraButton
                 objectName: "cameraButton"
                 visible: card.kind === "camera" && !card.answered
-                preferredWidth: Theme.buttonWidthSmall
+                preferredWidth: Math.min(Theme.buttonWidthSmall, parent.width)
                 text: qsTr("Take photo")
                 onClicked: card.look(card.detail)
             }
-            Row {
+            Flow {
                 id: buttonRow
                 visible: card.kind === "confirm" && !card.answered
                 width: parent.width
                 spacing: Theme.paddingMedium
                 Button {
                     objectName: "cancelButton"
-                    width: (buttonRow.width - buttonRow.spacing) / 2
+                    enabled: Conversation.canSend
+                    preferredWidth: Math.min(Theme.buttonWidthExtraSmall, buttonRow.width)
                     text: qsTr("Cancel")
                     onClicked: card.answer(false)
                 }
                 Button {
                     objectName: "allowButton"
-                    width: (buttonRow.width - buttonRow.spacing) / 2
+                    enabled: Conversation.canSend
+                    preferredWidth: Math.min(Theme.buttonWidthExtraSmall, buttonRow.width)
                     text: card.destructive ? qsTr("Do it") : qsTr("Allow")
                     onClicked: card.answer(true)
                 }
             }
             Label {
                 id: stampLabel
+                textFormat: Text.PlainText
                 objectName: "cardStamp"
+                wrapMode: Text.Wrap
                 width: parent.width
                 horizontalAlignment: card.mine ? Text.AlignRight : Text.AlignLeft
                 font.pixelSize: Theme.fontSizeExtraSmall

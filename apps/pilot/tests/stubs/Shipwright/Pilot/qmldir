@@ -1,0 +1,2 @@
+module Shipwright.Pilot
+singleton Pilot 1.0 Pilot.qml

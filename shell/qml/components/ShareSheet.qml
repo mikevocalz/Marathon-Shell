@@ -56,7 +56,7 @@ Item {
     Rectangle {
         objectName: "shareScrim"
         anchors.fill: parent
-        color: "black"
+        color: MColors.contentBackground
         opacity: shareSheet.shown ? 0.5 : 0
 
         Behavior on opacity {

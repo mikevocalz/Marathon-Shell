@@ -121,6 +121,7 @@ Page {
                             verticalCenter: parent.verticalCenter
                         }
                         text: card.title || Logic.displayHost(card.url) || qsTr("New tab")
+                        textFormat: Text.PlainText
                         truncationMode: TruncationMode.Fade
                         color: card.current || card.highlighted ? Theme.highlightColor : Theme.primaryColor
                     }
@@ -133,7 +134,7 @@ Page {
                             verticalCenter: parent.verticalCenter
                         }
                         icon.source: "image://theme/icon-m-close"
-                        Accessible.name: qsTr("Close tab")
+                        Accessible.name: qsTr("Close tab: %1").arg(card.title || Logic.displayHost(card.url) || qsTr("New tab"))
                         onClicked: root.browser.closeTab(card.tabId)
                     }
                 }

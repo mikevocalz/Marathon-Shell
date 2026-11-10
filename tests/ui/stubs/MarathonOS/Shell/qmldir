@@ -2,6 +2,10 @@ module MarathonOS.Shell
 ShellStub 1.0 ShellStub.qml
 singleton MTypography 1.0 ../../../../../shell/qml/theme/MTypography.qml
 singleton MColors 1.0 ../../../../../shell/qml/theme/MColors.qml
+# These links keep self-importing singletons in this module while using the
+# production files unchanged. Out-of-module URLs recurse during type loading.
+singleton MSpacing 1.0 MSpacing.qml
+singleton MRadius 1.0 MRadius.qml
 singleton MBlur 1.0 ../../../../../shell/qml/theme/MBlur.qml
 singleton MHaptics 1.0 ../../../../../shell/qml/ui/MHaptics.qml
 singleton MMotion 1.0 MMotion.qml
@@ -53,6 +57,7 @@ singleton WindowOrigins 1.0 ../../../../../shell/qml/core/WindowOrigins.qml
 GestureTracker 1.0 GestureTracker.qml
 WindowTextureItem 1.0 WindowTextureItem.qml
 singleton WeatherClient 1.0 WeatherClient.qml
+singleton NotesTaskClient 1.0 NotesTaskClient.qml
 FilteredAppModel 1.0 FilteredAppModel.qml
 Key 1.0 ../../../../../shell/qml/keyboard/UI/Key.qml
 PredictionBar 1.0 ../../../../../shell/qml/keyboard/UI/PredictionBar.qml
@@ -70,3 +75,5 @@ MTabBar 1.0 ../../../../../shell/qml/ui/MTabBar.qml
 FileChooserModel 1.0 FileChooserModel.qml
 BackdropProbe 1.0 BackdropProbe.qml
 NativeSurfaceItem 1.0 NativeSurfaceItem.qml
+
+singleton CalendarEventsClient 1.0 CalendarEventsClient.qml

@@ -6,6 +6,8 @@ S.ApplicationWindow {
 
     property string appId: ""
 
+    _defaultLabelFormat: Text.PlainText
+
     signal minimizeRequested
 
     // A combo box's or list item's menu is not among its children; a pulley menu is.

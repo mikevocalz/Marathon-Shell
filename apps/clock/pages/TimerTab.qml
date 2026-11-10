@@ -56,17 +56,15 @@ TabItem {
             bottomPadding: Theme.paddingLarge
 
             // Tap the dial to start or pause, as Jolla Clock's timers do.
-            MouseArea {
+            BackgroundItem {
                 id: dial
 
                 objectName: "timerDial"
                 anchors.horizontalCenter: parent.horizontalCenter
-                width: Theme.itemSizeHuge * 2
+                width: Math.min(parent.width - 2 * Theme.horizontalPageMargin, Theme.itemSizeHuge * 2)
                 height: width
                 enabled: root.countdown.remaining > 0
-                Accessible.role: Accessible.Button
                 Accessible.name: root.countdown.running ? qsTr("Pause timer") : qsTr("Start timer")
-                Accessible.onPressAction: root.toggle()
                 onClicked: root.toggle()
 
                 ProgressCircle {
@@ -78,8 +76,12 @@ TabItem {
                 Label {
                     objectName: "timerTime"
                     anchors.centerIn: parent
+                    width: parent.width - 2 * Theme.paddingLarge
                     text: Logic.formatCountdown(root.countdown.remaining)
                     font.pixelSize: Theme.fontSizeHuge
+                    fontSizeMode: Text.HorizontalFit
+                    minimumPixelSize: Theme.fontSizeLarge
+                    horizontalAlignment: Text.AlignHCenter
                     font.features: ({
                             "tnum": 1
                         })
@@ -102,11 +104,20 @@ TabItem {
             Grid {
                 id: presets
 
+                objectName: "presetGrid"
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * Theme.horizontalPageMargin
                 visible: root.idle
-                columns: 3
+                columns: Math.max(1, Math.min(3, Math.floor((width + spacing) / (presetText.advanceWidth + 2 * Theme.paddingLarge + spacing))))
                 spacing: Theme.paddingMedium
+
+                TextMetrics {
+                    id: presetText
+
+                    text: qsTr("%n min", "", 30)
+                    font.pixelSize: Theme.fontSizeMedium
+                    font.family: Theme.fontFamily
+                }
 
                 Repeater {
                     objectName: "presets"
@@ -115,7 +126,7 @@ TabItem {
                     Button {
                         required property int modelData
 
-                        width: (presets.width - 2 * presets.spacing) / 3
+                        width: (presets.width - (presets.columns - 1) * presets.spacing) / presets.columns
                         text: qsTr("%n min", "", modelData)
                         onClicked: {
                             root.countdown.set(modelData * 60);

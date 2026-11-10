@@ -5,6 +5,23 @@ import "../CalendarLogic.js" as Logic
 TestCase {
     name: "CalendarLogic"
 
+    function test_remoteRangesRespectExclusiveEndDates() {
+        const event = {
+            source: "caldav",
+            date: "2026-10-20",
+            endDate: "2026-10-22",
+            allDay: true
+        };
+        verify(Logic.occursOn(event, new Date(2026, 9, 20)));
+        verify(Logic.occursOn(event, new Date(2026, 9, 21)));
+        verify(!Logic.occursOn(event, new Date(2026, 9, 22)));
+        event.allDay = false;
+        event.endTime = "01:00";
+        verify(Logic.occursOn(event, new Date(2026, 9, 22)));
+        event.endTime = "00:00";
+        verify(!Logic.occursOn(event, new Date(2026, 9, 22)));
+    }
+
     function test_dateKeys() {
         compare(Logic.dateKey(new Date(2026, 0, 5)), "2026-01-05");
         const d = Logic.parseDate("2026-10-12");
@@ -12,6 +29,20 @@ TestCase {
         compare(d.getMonth(), 9);
         compare(d.getDate(), 12);
         verify(isNaN(Logic.parseDate("").getTime()));
+    }
+
+    function test_multiDayAccountEventsStayUpcomingUntilTheirEnd() {
+        const event = {
+            id: "dav:trip",
+            source: "caldav",
+            date: "2026-10-20",
+            time: "10:00",
+            endDate: "2026-10-22",
+            endTime: "09:00"
+        };
+        compare(Logic.upcoming([event], new Date(2026, 9, 21, 23, 0)).length, 1);
+        compare(Logic.upcoming([event], new Date(2026, 9, 22, 8, 0)).length, 1);
+        compare(Logic.upcoming([event], new Date(2026, 9, 22, 10, 0)).length, 0);
     }
 
     function test_times() {

@@ -14,6 +14,7 @@ Column {
         id: valueLabel
 
         objectName: "coverValue"
+        textFormat: Text.PlainText
         width: root.width
         visible: text !== ""
         color: S.Theme.highlightColor
@@ -29,6 +30,7 @@ Column {
         id: captionLabel
 
         objectName: "coverLabel"
+        textFormat: Text.PlainText
         width: root.width
         visible: text !== ""
         font.pixelSize: S.Theme.fontSizeSmall

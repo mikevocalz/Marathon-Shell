@@ -32,7 +32,7 @@ DockedPanel {
                     top: parent.top
                     bottom: parent.bottom
                 }
-                Accessible.name: qsTr("Now playing: %1").arg(titleLabel.text)
+                Accessible.name: qsTr("Now playing: %1 by %2").arg(titleLabel.text).arg(panel.track ? panel.track.artist : "")
                 onClicked: panel.music.openPlayer()
 
                 Column {
@@ -45,12 +45,14 @@ DockedPanel {
 
                         width: parent.width
                         text: panel.track ? panel.track.title : ""
+                        textFormat: Text.PlainText
                         truncationMode: TruncationMode.Fade
                         color: details.highlighted ? Theme.highlightColor : Theme.primaryColor
                     }
                     Label {
                         width: parent.width
                         text: panel.track ? panel.track.artist : ""
+                        textFormat: Text.PlainText
                         truncationMode: TruncationMode.Fade
                         font.pixelSize: Theme.fontSizeSmall
                         color: details.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor

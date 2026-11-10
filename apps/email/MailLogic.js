@@ -23,6 +23,16 @@ const encryptions = [1, 2, 0];
 const imapPorts = { 0: 143, 1: 993, 2: 143 };
 const smtpPorts = { 0: 25, 1: 465, 2: 587 };
 
+function messageRoute(params) {
+    if (!params || typeof params !== "object" || Array.isArray(params))
+        return null;
+    if (typeof params.messageId !== "string" || !/^message:[0-9a-f]{32}$/.test(params.messageId))
+        return null;
+    if (typeof params.accountId !== "string" || !/^[1-9][0-9]{0,18}$/.test(params.accountId))
+        return null;
+    return { messageId: params.messageId, accountId: params.accountId };
+}
+
 function presetForEmail(email) {
     const domain = String(email).split("@")[1] || "";
     return domainPresets[domain.trim().toLowerCase()] || "";

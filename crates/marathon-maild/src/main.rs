@@ -245,8 +245,12 @@ impl Core {
     async fn notify(&self, ids: &[i64]) {
         for id in ids.iter().take(5) {
             let id = *id;
-            let raw = match self.store.with(move |s| s.raw(id)).await {
-                Ok(Some(raw)) => raw,
+            let message = match self
+                .store
+                .with(move |s| s.message(&store::MessageId::Local(id)))
+                .await
+            {
+                Ok(Some(message)) => message,
                 Ok(None) => continue,
                 Err(e) => {
                     log::warn(
@@ -256,7 +260,7 @@ impl Core {
                     continue;
                 }
             };
-            let m = store::summarise(&raw);
+            let m = store::summarise(&message.raw);
             let summary = if m.sender.is_empty() {
                 "Mail".to_owned()
             } else {
@@ -270,6 +274,14 @@ impl Core {
             let hints = HashMap::from([
                 ("category", Value::from("email.arrived")),
                 ("desktop-entry", Value::from("email")),
+                ("route", Value::from("message")),
+                (
+                    "routeParams",
+                    Value::from(HashMap::from([
+                        ("messageId", Value::from(message.id())),
+                        ("accountId", Value::from(message.account.to_string())),
+                    ])),
+                ),
             ]);
             let sent = self
                 .bus
@@ -358,16 +370,68 @@ impl Core {
         }
     }
 
-    /// A message by its id: its account, folder and UID.
-    async fn locate(&self, message: &str) -> fdo::Result<(Account, String, u32, i64)> {
-        let mid = id(message)?;
-        let (account, folder, uid) = self
+    async fn locate(&self, message: &str) -> fdo::Result<(Account, store::Message)> {
+        let key = store::MessageId::parse(message)
+            .ok_or_else(|| fdo::Error::InvalidArgs("invalid message id".into()))?;
+        let message = self
             .store
-            .with(move |s| s.locate(mid))
+            .with(move |s| s.message(&key))
             .await
             .map_err(failed)?
-            .ok_or_else(|| fdo::Error::InvalidArgs("no such message".into()))?;
-        Ok((self.account(account).await?, folder, uid, mid))
+            .ok_or_else(|| fdo::Error::FileNotFound("no such message".into()))?;
+        Ok((self.account(message.account).await?, message))
+    }
+
+    async fn message(&self, key: &str, account: Option<i64>) -> fdo::Result<store::Row> {
+        let (a, message) = self.locate(key).await?;
+        if account.is_some_and(|expected| expected != a.id) {
+            return Err(fdo::Error::FileNotFound(
+                "no message in that account".into(),
+            ));
+        }
+        let stable_id = message.id();
+        let needs_body = !message.has_cached_body();
+        let mut raw = message.raw;
+        if needs_body {
+            let mut session = self.session(&a).await.ok_or_else(|| {
+                failed("The message body is not cached. Connect to load it and try again.")
+            })?;
+            let whole =
+                imap::whole(&mut session, &message.folder, message.uid, message.validity).await;
+            session.logout().await.ok();
+            raw = whole.map_err(|e| failed(e.message()))?;
+            if mail_parser::MessageParser::default().parse(&raw).is_none() {
+                return Err(failed("cannot decode message"));
+            }
+        }
+        let reference = message.reference;
+        let (still_present, raw) = self
+            .store
+            .with(move |s| {
+                let present = if needs_body {
+                    s.cache_body(&reference, &raw)?
+                } else {
+                    s.has_message_reference(&reference)?
+                };
+                Ok::<_, rusqlite::Error>((present, raw))
+            })
+            .await
+            .map_err(failed)?;
+        if !still_present {
+            return Err(fdo::Error::FileNotFound(
+                "message is no longer available".into(),
+            ));
+        }
+        let mut details = store::open(&raw);
+        if details.is_empty() {
+            return Err(failed("cannot decode message"));
+        }
+        details.insert("messageId", Value::from(stable_id));
+        details.insert("accountId", Value::from(a.id.to_string()));
+        details.insert("accountName", Value::from(a.name));
+        details.insert("accountAddress", Value::from(a.address));
+        details.insert("folderId", Value::from(message.folder));
+        Ok(details)
     }
 
     /// Verifies a new account by signing in; it is kept only if that works.
@@ -466,26 +530,17 @@ impl MailService {
         message: String,
     ) -> fdo::Result<HashMap<&'static str, Value<'static>>> {
         admit(&self.0.bus, &h, "Mail", MAIL).await?;
-        let (a, folder, uid, mid) = self.0.locate(&message).await?;
-        let mut raw = self
-            .0
-            .store
-            .with(move |s| s.raw(mid))
-            .await
-            .map_err(failed)?
-            .unwrap_or_default();
-        if mail_parser::MessageParser::default()
-            .parse(&raw)
-            .is_some_and(|m| m.text_body().len() + m.html_body().len() == 0)
-        {
-            if let Some(mut s) = self.0.session(&a).await {
-                if let Ok(whole) = imap::whole(&mut s, &folder, uid).await {
-                    raw = whole;
-                }
-                s.logout().await.ok();
-            }
-        }
-        Ok(store::open(&raw))
+        self.0.message(&message, None).await
+    }
+
+    async fn get_message_in_account(
+        &self,
+        #[zbus(header)] h: Header<'_>,
+        message: String,
+        account: String,
+    ) -> fdo::Result<store::Row> {
+        admit(&self.0.bus, &h, "Mail", MAIL).await?;
+        self.0.message(&message, Some(id(&account)?)).await
     }
 
     /// `(syncState, lastError)`: offline, connecting, idle, syncing or error.
@@ -582,18 +637,31 @@ impl MailService {
         read: bool,
     ) -> fdo::Result<()> {
         admit(&self.0.bus, &h, "Mail", MAIL).await?;
-        let (a, folder, uid, mid) = self.0.locate(&message).await?;
-        self.0
+        let (a, message) = self.0.locate(&message).await?;
+        let reference = message.reference.clone();
+        let changed = self
+            .0
             .store
-            .with(move |s| s.set_seen(mid, read))
+            .with(move |s| s.set_seen_reference(&reference, read))
             .await
             .map_err(failed)?;
+        if !changed {
+            return Err(fdo::Error::FileNotFound(
+                "message is no longer available".into(),
+            ));
+        }
         self.0.changed(a.id).await;
         let core = self.0.clone();
         io::spawn(async move {
             if let Some(mut s) = core.session(&a).await {
-                imap::set_seen(&mut s, &folder, uid, read).await.ok();
-                let fresh = imap::sync(&mut s, &core.store, a.id, &folder)
+                if let Err(e) =
+                    imap::set_seen(&mut s, &message.folder, message.uid, message.validity, read)
+                        .await
+                {
+                    core.state(a.id, "error", e.message().to_owned()).await;
+                    return;
+                }
+                let fresh = imap::sync(&mut s, &core.store, a.id, &message.folder)
                     .await
                     .unwrap_or_default();
                 core.notify(&fresh).await;
@@ -612,7 +680,7 @@ impl MailService {
         kind: String,
     ) -> fdo::Result<bool> {
         admit(&self.0.bus, &h, "Mail", MAIL).await?;
-        let (a, folder, uid, mid) = self.0.locate(&message).await?;
+        let (a, message) = self.0.locate(&message).await?;
         let account = a.id;
         let Some(to) = self
             .0
@@ -623,22 +691,32 @@ impl MailService {
         else {
             return Ok(false);
         };
-        if to == folder {
+        if to == message.folder {
             return Ok(false);
         }
-        self.0
+        let reference = message.reference.clone();
+        let deleted = self
+            .0
             .store
-            .with(move |s| s.delete(mid))
+            .with(move |s| s.delete_reference(&reference))
             .await
             .map_err(failed)?;
+        if !deleted {
+            return Err(fdo::Error::FileNotFound(
+                "message is no longer available".into(),
+            ));
+        }
         self.0.changed(a.id).await;
         let core = self.0.clone();
         io::spawn(async move {
             if let Some(mut s) = core.session(&a).await {
-                if let Err(e) = imap::move_to(&mut s, &folder, uid, &to).await {
-                    log::warn("Mail", format_args!("move: {}", e.message()));
+                if let Err(e) =
+                    imap::move_to(&mut s, &message.folder, message.uid, message.validity, &to).await
+                {
+                    core.state(a.id, "error", e.message().to_owned()).await;
+                    return;
                 }
-                let fresh = imap::sync(&mut s, &core.store, a.id, &folder)
+                let fresh = imap::sync(&mut s, &core.store, a.id, &message.folder)
                     .await
                     .unwrap_or_default();
                 core.notify(&fresh).await;
@@ -709,18 +787,15 @@ impl MailService {
         location: String,
     ) -> fdo::Result<bool> {
         admit(&self.0.bus, &h, "Mail", MAIL).await?;
-        let (_, _, _, mid) = self.0.locate(&message).await?;
+        let (_, selected) = self.0.locate(&message).await?;
         let index: usize = location
             .parse()
             .map_err(|e| fdo::Error::InvalidArgs(format!("bad location: {e}")))?;
         let saved = self
             .0
             .store
-            .with(move |s| {
-                let Some(raw) = s.raw(mid)? else {
-                    return Ok(None);
-                };
-                let Some((name, bytes)) = store::attachment(&raw, index) else {
+            .with(move |_s| {
+                let Some((name, bytes)) = store::attachment(&selected.raw, index) else {
                     return Ok(None);
                 };
                 let dir = marathon_rt::dirs::home().join("Downloads");
@@ -978,11 +1053,12 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         watched: Arc::default(),
         setup: Arc::default(),
     };
+    let accounts = core.store.with(|s| s.accounts()).await?;
     bus.object_server()
         .at(PATH, MailService(core.clone()))
         .await?;
     bus.request_name(BUS_NAME).await?;
-    for a in core.store.with(|s| s.accounts()).await? {
+    for a in accounts {
         let core = core.clone();
         io::spawn(async move { core.watch(a.id).await });
     }

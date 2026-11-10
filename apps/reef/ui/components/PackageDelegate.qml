@@ -2,12 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // One app in a list (catalogueModel, installedModel): the icon, the title,
-// what it does in a line, its category (and who publishes it, when that is
-// not Shipwright), and on the right what matters now: an update, that it
-// is installed, or what it costs.
+// what it does, its source and publisher, and its current installation state.
 
 import QtQuick
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 import "Texts.js" as Texts
 
 ListItem {
@@ -30,6 +29,9 @@ ListItem {
     required property int jobPercent
 
     contentHeight: Math.max(Theme.itemSizeLarge, column.height + 2 * Theme.paddingMedium)
+    Accessible.name: [title, summary, categoryLabel, publisher, stateText()].filter(function (value) {
+        return value.length > 0;
+    }).join(", ")
 
     function stateText() {
         // While the store handler works on it, how far it has got.
@@ -64,50 +66,51 @@ ListItem {
         id: column
         anchors {
             left: appIcon.right
-            right: stateLabel.left
+            right: parent.right
             leftMargin: Theme.paddingLarge
-            // Room before the price, so a long summary fades out well
-            // short of it.
-            rightMargin: 2 * Theme.paddingLarge
+            rightMargin: Theme.horizontalPageMargin
             verticalCenter: parent.verticalCenter
         }
+        spacing: Theme.paddingSmall
 
         Label {
             id: titleLabel
+            objectName: "packageTitle"
             width: parent.width
             text: row.title
             color: row.highlighted ? Theme.highlightColor : Theme.primaryColor
-            truncationMode: TruncationMode.Fade
+            textFormat: Text.PlainText
+            wrapMode: Text.Wrap
         }
         Label {
+            objectName: "packageSummary"
             width: parent.width
             text: row.summary
             color: row.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
             font.pixelSize: Theme.fontSizeExtraSmall
-            truncationMode: TruncationMode.Fade
+            textFormat: Text.PlainText
+            wrapMode: Text.Wrap
         }
         Label {
             width: parent.width
             text: [row.isNew && row.installState === "not_installed" ? qsTr("New") : "", row.source === "fdroid" ? qsTr("Android") : "", row.categoryLabel, row.publisher !== "Shipwright" ? row.publisher : ""].filter(function (s) {
                 return s.length > 0;
             }).join(" · ")
-            // Plain like the rest of the row: an update waiting (on the
-            // right) is the one thing a row highlights.
             color: row.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
             opacity: Theme.opacityHigh
             font.pixelSize: Theme.fontSizeTiny
-            truncationMode: TruncationMode.Fade
+            textFormat: Text.PlainText
+            wrapMode: Text.Wrap
         }
-    }
-
-    Label {
-        id: stateLabel
-        anchors.right: parent.right
-        anchors.rightMargin: Theme.horizontalPageMargin
-        anchors.verticalCenter: parent.verticalCenter
-        text: row.stateText()
-        color: row.jobState === "failed" ? Theme.errorColor : row.installState === "update_available" || row.jobState !== "" ? Theme.highlightColor : Theme.secondaryColor
-        font.pixelSize: Theme.fontSizeSmall
-        font.bold: row.installState === "update_available"
+        Label {
+            objectName: "packageState"
+            width: parent.width
+            text: row.stateText()
+            textFormat: Text.PlainText
+            wrapMode: Text.Wrap
+            color: row.jobState === "failed" ? Theme.errorColor : row.installState === "update_available" || row.jobState !== "" ? Theme.highlightColor : Theme.secondaryColor
+            font.pixelSize: Theme.fontSizeSmall
+            font.bold: row.installState === "update_available"
+        }
     }
 }

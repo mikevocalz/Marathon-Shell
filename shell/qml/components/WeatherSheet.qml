@@ -405,23 +405,23 @@ Item {
 
                             GradientStop {
                                 position: 0
-                                color: "#7fd3a0"
+                                color: MColors.airQualityGood
                             }
                             GradientStop {
                                 position: 0.3
-                                color: "#ffd36b"
+                                color: MColors.airQualityModerate
                             }
                             GradientStop {
                                 position: 0.6
-                                color: "#ff9b53"
+                                color: MColors.airQualitySensitive
                             }
                             GradientStop {
                                 position: 0.85
-                                color: "#ff5e57"
+                                color: MColors.airQualityUnhealthy
                             }
                             GradientStop {
                                 position: 1
-                                color: "#b48cff"
+                                color: MColors.airQualityVeryUnhealthy
                             }
                         }
 
@@ -498,7 +498,7 @@ Item {
                             radius: width / 2
                             x: arc.width / 2 + Math.cos(angle) * arc.width / 2 - width / 2
                             y: arc.height - Math.sin(angle) * arc.height - height / 2
-                            color: "#ffd36b"
+                            color: MColors.sunMarker
                         }
                     }
                 }

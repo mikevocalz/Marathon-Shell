@@ -51,11 +51,20 @@ S.ContextMenu {
         onPressedOutside: root.close()
     }
 
+    // Keep the guard for the rest of the pointer event, but tie its release
+    // to the menu's lifetime so deleting a closing row cannot call into it.
+    property Timer _guardRelease: Timer {
+        interval: 0
+        onTriggered: root._guarding = root.active
+    }
+
     onActiveChanged: {
-        if (active)
+        if (active) {
+            _guardRelease.stop();
             _guarding = true;
-        else
-            Qt.callLater(() => _guarding = active);
+        } else {
+            _guardRelease.restart();
+        }
         if (!active && _keyboardReturnFocus) {
             const back = _keyboardReturnFocus;
             _keyboardReturnFocus = null;

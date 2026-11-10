@@ -14,7 +14,7 @@ ListItem {
 
     signal playRequested
 
-    contentHeight: Theme.itemSizeMedium
+    contentHeight: Math.max(Theme.itemSizeMedium, labels.height + 2 * Theme.paddingMedium)
     Accessible.name: current ? qsTr("%1 by %2, playing").arg(track.title).arg(track.artist) : qsTr("%1 by %2").arg(track.title).arg(track.artist)
     onClicked: playRequested()
 
@@ -71,6 +71,8 @@ ListItem {
     }
 
     Column {
+        id: labels
+
         anchors {
             left: duration.right
             leftMargin: Theme.paddingMedium
@@ -81,14 +83,18 @@ ListItem {
 
         Label {
             width: parent.width
+            objectName: "trackTitle"
             text: item.track.title
-            truncationMode: TruncationMode.Fade
+            textFormat: Text.PlainText
+            wrapMode: Text.Wrap
             color: item.highlighted || item.current ? Theme.highlightColor : Theme.primaryColor
         }
         Label {
             width: parent.width
+            objectName: "trackArtist"
             text: item.track.artist
-            truncationMode: TruncationMode.Fade
+            textFormat: Text.PlainText
+            wrapMode: Text.Wrap
             font.pixelSize: Theme.fontSizeSmall
             color: item.highlighted || item.current ? Theme.secondaryHighlightColor : Theme.secondaryColor
         }

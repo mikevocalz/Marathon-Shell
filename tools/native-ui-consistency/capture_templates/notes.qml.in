@@ -1,0 +1,53 @@
+import QtQuick
+import QtQuick.Window
+import QtTest
+import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
+import Keel 1.0 as Native
+import "@REPO@/apps/notes"
+
+TestCase {
+    id: testCase
+    name: "NativeReviewNotes"
+    when: windowShown
+    visible: true
+    width: 320
+    height: 640
+
+    Component { id: storeComponent; QtObject { property var value } }
+    Component { id: appComponent; NotesApp {} }
+@HELPERS@
+
+    function test_capture() {
+        const notes = [
+            { id: 41, title: "Review accessible layouts with the international planning team",
+                content: "Review accessible layouts with the international planning team\n\nKeep each person's name, source and next step readable on the compact screen.\n\n- [ ] Confirm Wednesday's agenda\n- [x] Prepare the sample content\n#design",
+                timestamp: 1794303000000, pinned: true, task: { completed: false, dueDate: "2026-11-11" } },
+            { id: 42, title: "Workshop notes", content: "Workshop notes\n\nBring the draft agenda and record the agreed follow-up owners.\n#community", timestamp: 1794216600000 }
+        ];
+        Native.Ambience.applyForwarded("/desktop/jolla/theme/font/sizeCategory='huge'\n");
+        const app = createTemporaryObject(appComponent, testCase, {
+            width: 320, height: 640,
+            store: createTemporaryObject(storeComponent, testCase, { value: JSON.stringify(notes) }),
+            imported: createTemporaryObject(storeComponent, testCase, { value: true }),
+            legacySettings: null, route: "/tasks"
+        });
+        verify(app);
+        tryVerify(() => app.workspace !== null && app.workspace.collectionPage !== null && !app.pageStack.busy);
+        const list = findChild(app.workspace.collectionPage, "tasksView");
+        tryCompare(list, "count", 3);
+        capture(app, "notes-task-large-320x640", 320, 640);
+        Native.Ambience.applyForwarded("");
+        resizeApp(app, 1024, 768);
+        verify(app.workspace.isWide);
+        app.workspace.openNote(41);
+        tryVerify(() => app.workspace.currentEditor !== null && app.workspace.currentEditor.status === PageStatus.Active);
+        compare(app.workspace.currentEditor.noteId, 41);
+        app.contentItem.forceActiveFocus();
+        capture(app, "notes-workspace-1024x768", 1024, 768);
+    }
+
+    function cleanup() {
+        Native.Ambience.applyForwarded("");
+    }
+}

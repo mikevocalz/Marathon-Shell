@@ -9,6 +9,7 @@
 import QtQuick
 import QtQuick.Shapes
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 
 Item {
     id: orb
@@ -279,9 +280,12 @@ Item {
         }
     }
 
-    MouseArea {
+    IconButton {
+        objectName: "voiceAction"
         anchors.fill: parent
+        visible: orb.glyph
         enabled: orb.enabled
+        Accessible.name: qsTr("Ask Pilot by voice")
         onClicked: orb.clicked()
     }
 }

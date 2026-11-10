@@ -37,7 +37,7 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        color: "black"
+        color: MColors.contentBackground
         opacity: 0.35
     }
 

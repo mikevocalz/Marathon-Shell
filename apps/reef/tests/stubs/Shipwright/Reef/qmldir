@@ -1,0 +1,2 @@
+module Shipwright.Reef
+singleton Reef 1.0 Reef.qml

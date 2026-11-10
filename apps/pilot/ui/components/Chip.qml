@@ -6,6 +6,7 @@
 
 import QtQuick
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 
 BackgroundItem {
     id: chip
@@ -21,17 +22,20 @@ BackgroundItem {
     // At most as wide as its parent, when the parent has a width of its
     // own (a Row sized by its chips has none to give).
     readonly property real _natural: _lead + label.implicitWidth + 2 * Theme.paddingLarge
-    width: parent && parent.width > 0 ? Math.min(_natural, parent.width) : _natural
+    implicitWidth: _natural
+    width: parent && parent.width > 0 ? Math.min(implicitWidth, parent.width) : implicitWidth
     // The touch target is a full row; the pill drawn inside stays slim.
-    height: Theme.itemSizeSmall
+    height: Math.max(Theme.itemSizeSmall, label.implicitHeight + 2 * Theme.paddingMedium)
+    Accessible.role: Accessible.Button
+    Accessible.name: text
     _backgroundColor: "transparent"
     highlightedColor: "transparent"
 
     Rectangle {
         anchors.verticalCenter: parent.verticalCenter
         width: parent.width
-        height: Theme.itemSizeExtraSmall
-        radius: height / 2
+        height: parent.height - Theme.paddingSmall
+        radius: Theme.paddingSmall
         color: chip.down ? Theme.rgba(Theme.highlightBackgroundColor, 0.35) : Theme.rgba(Theme.primaryColor, chip.secondary ? 0.04 : 0.08)
         border.width: 1
         border.color: Theme.rgba(chip.secondary ? Theme.primaryColor : Theme.highlightColor, chip.secondary ? 0.10 : 0.30)
@@ -50,6 +54,7 @@ BackgroundItem {
             radius: width / 2
             color: Theme.rgba(Theme.highlightColor, 0.25)
             Label {
+                textFormat: Text.PlainText
                 anchors.centerIn: parent
                 text: chip.monogram.toUpperCase()
                 font.pixelSize: Theme.fontSizeTiny
@@ -67,10 +72,11 @@ BackgroundItem {
         }
         Label {
             id: label
+            textFormat: Text.PlainText
             anchors.verticalCenter: parent.verticalCenter
             width: Math.min(implicitWidth, chip.width - 2 * Theme.paddingLarge - chip._lead)
             text: chip.text
-            truncationMode: TruncationMode.Fade
+            wrapMode: Text.Wrap
             font.pixelSize: Theme.fontSizeSmall
             color: chip.down ? Theme.highlightColor : chip.secondary ? Theme.secondaryColor : Theme.primaryColor
         }

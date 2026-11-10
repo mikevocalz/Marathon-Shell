@@ -10,6 +10,7 @@ ListItem {
 
     property var message
     readonly property bool outgoing: message.isOutgoing
+    readonly property bool canRetry: outgoing && message.status === "failed"
     readonly property real dayHeight: day.visible ? day.implicitHeight : 0
     readonly property real textWidth: width * 0.8 - Theme.horizontalPageMargin
 
@@ -19,8 +20,16 @@ ListItem {
 
     contentHeight: dayHeight + pictures.height + body.height + (time.visible ? time.height : 0) + (status.visible ? status.height : 0) + Theme.paddingMedium
     Accessible.name: message.text
-    Accessible.description: outgoing ? qsTr("Sent") : qsTr("Received")
+    Accessible.description: canRetry ? qsTr("Not sent. Activate to try again.") : outgoing && message.status === "sending" ? qsTr("Sending") : outgoing ? qsTr("Sent") : qsTr("Received")
+    onClicked: if (canRetry)
+        retryRequested()
     menu: ContextMenu {
+        MenuItem {
+            objectName: "retryItem"
+            visible: root.canRetry
+            text: qsTr("Try again")
+            onClicked: root.retryRequested()
+        }
         MenuItem {
             objectName: "copyItem"
             text: qsTr("Copy")
@@ -35,6 +44,7 @@ ListItem {
 
     Label {
         id: day
+        textFormat: Text.PlainText
         width: parent.width
         visible: root.message.showDay
         topPadding: Theme.paddingLarge
@@ -78,19 +88,23 @@ ListItem {
                     Accessible.role: Accessible.Graphic
                     Accessible.name: attachment.modelData.name
 
-                    MouseArea {
+                    BackgroundItem {
+                        objectName: "openPicture-" + attachment.modelData.name
                         anchors.fill: parent
+                        enabled: attachment.path !== ""
+                        Accessible.name: qsTr("Open %1").arg(attachment.modelData.name)
                         onClicked: root.pictureOpened(attachment.path)
                     }
                 }
 
                 Label {
                     id: fileName
+                    textFormat: Text.PlainText
 
                     width: parent.width
                     visible: !attachment.isPicture
                     text: attachment.modelData.name
-                    truncationMode: TruncationMode.Fade
+                    wrapMode: Text.Wrap
                     horizontalAlignment: root.outgoing ? Text.AlignRight : Text.AlignLeft
                     color: Theme.secondaryHighlightColor
                 }
@@ -115,6 +129,7 @@ ListItem {
 
     Label {
         id: time
+        textFormat: Text.PlainText
         anchors.top: body.bottom
         x: root.outgoing ? parent.width - width - Theme.horizontalPageMargin : Theme.horizontalPageMargin
         visible: root.message.showTime
@@ -126,12 +141,16 @@ ListItem {
     // Sending, or not sent with a way to try again.
     Label {
         id: status
+        textFormat: Text.PlainText
 
         objectName: "bubbleStatus"
         anchors.top: time.visible ? time.bottom : body.bottom
         x: parent.width - width - Theme.horizontalPageMargin
+        width: root.textWidth
+        wrapMode: Text.Wrap
+        horizontalAlignment: Text.AlignRight
         visible: root.outgoing && (root.message.status === "sending" || root.message.status === "failed")
-        text: root.message.status === "failed" ? qsTr("Not sent · Tap to try again") : qsTr("Sending…")
+        text: root.message.status === "failed" ? qsTr("Not sent · Try again") : qsTr("Sending…")
         font.pixelSize: Theme.fontSizeTiny
         color: root.message.status === "failed" ? Theme.errorColor : Theme.secondaryHighlightColor
 

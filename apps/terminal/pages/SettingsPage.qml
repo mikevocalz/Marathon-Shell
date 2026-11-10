@@ -17,8 +17,8 @@ Page {
     FontMetrics {
         id: metrics
 
-        font.family: "monospace"
-        font.pixelSize: 100
+        font.family: ContentStyle.monospaceFamily
+        font.pixelSize: Theme.fontSizeMedium
     }
 
     SilicaFlickable {

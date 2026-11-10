@@ -6,9 +6,10 @@
   "entryPoint": "CalendarApp.qml",
   "icon": "assets/icon.svg",
   "author": "Marathon OS",
-  "permissions": ["notifications", "storage"],
+  "permissions": ["notifications", "storage", "calendar"],
   "permissionReasons": {
-    "storage": "Saves your events and reminders"
+    "storage": "Saves your events and reminders",
+    "calendar": "Shows your account calendars alongside local events"
   },
   "minShellVersion": "1.0.0",
   "protected": true,

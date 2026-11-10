@@ -20,7 +20,7 @@ history.
 | Group | Packages |
 |---|---|
 | Shell and system | `marathon-shell`, `postmarketos-ui-marathon`, `marathon-base-config`, `marathon-plymouth-theme`, `marathon-boot-logo` |
-| UI framework | `keel-silica` (Sailfish Silica components for Qt 6), `keel-mcp` (MCP server for apps' Keel Actions) |
+| UI framework | `keel-silica` (Sailfish Silica components for Qt 6), `marathon-silica` (shared native controls), `marathon-icon-theme` (theme icons), `keel-mcp` (MCP server for apps' Keel Actions) |
 | Apps and services | `pacific` (browser), `wpewebkit`, `shoal-pilot` and `shoal-pilotd` (Pilot assistant), `shipwright-reef` (Reef, the store), `marathon-mail-oauth`, `qmf` |
 | Device overlays | `device-purism-librem5-marathon`, `device-pine64-pinephone-marathon`, `device-raspberry-pi5-marathon`, `device-hackberrypi-cm5-marathon` (layers on the Pi 5 overlay), `device-oneplus-enchilada-marathon` (dormant) |
 | Kernels and boot | `linux-purism-librem5-marathon`, `linux-postmarketos-allwinner-marathon`, `u-boot-pinephone-marathon`, `linux-marathon` (SDM845) |
@@ -30,6 +30,16 @@ history.
 (`scripts/qemu/lib/build-pilot-apk.sh`). `pacific` builds from a local
 Shipwright checkout (`PACIFIC_SRC`; default `~/Developer/Shipwright`), or
 comes prebuilt through `packaging/vendor/shipwright.lock`.
+
+`marathon-silica` and `marathon-icon-theme` are architecture-independent
+subpackages built by the `marathon-shell` aport. Pilot and Reef depend on
+the shared controls, which bring in Keel, Qt and the matching icon theme
+without depending on the shell package. The shell builder stages both
+subpackages beside its own APK; release artifacts and image caches must
+retain that complete set. When updating a development device manually,
+install the matching shell, shared controls and icon APKs in one `apk add`
+transaction. Update matching browser or test-app subpackages too if they
+are already installed. `packaging/scripts/push-cm5.sh` does this for its device loop.
 
 ## Building
 

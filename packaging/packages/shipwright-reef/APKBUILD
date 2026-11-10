@@ -6,13 +6,14 @@
 # and it follows a branch.
 pkgname=shipwright-reef
 pkgver=0.1.0
-pkgrel=2
+pkgrel=4
 pkgdesc="Reef app store for Marathon"
 url="https://github.com/patrickjquinn/Marathon-Shell"
 arch="aarch64 x86_64"
 license="Apache-2.0 AND CC-BY-4.0"
 depends="
 	keel-silica
+	marathon-silica
 	qt6-qtdeclarative
 	"
 makedepends="

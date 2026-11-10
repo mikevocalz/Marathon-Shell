@@ -63,7 +63,7 @@ Item {
                 width: parent.width
                 height: Math.round(width * screenshotPreview.height / Math.max(1, screenshotPreview.width))
                 radius: Silica.Theme.paddingSmall / 2
-                color: "black"
+                color: MColors.contentBackground
                 clip: true
 
                 Image {
@@ -143,7 +143,7 @@ Item {
         id: flashOverlay
 
         anchors.fill: parent
-        color: "#FFFFFF"
+        color: MColors.contentForeground
         opacity: 0
         z: 3100
 

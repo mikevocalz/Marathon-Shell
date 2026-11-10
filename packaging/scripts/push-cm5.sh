@@ -51,22 +51,49 @@ pmbootstrap build "$PKG" --force 2>&1 | tail -3
 APK=$(ls -t "$PKGS_EDGE/$PKG"-[0-9]*.apk 2>/dev/null | head -1)
 [ -f "$APK" ] || { echo "ERROR: built APK not found in $PKGS_EDGE" >&2; exit 1; }
 echo "+ built $APK ($(du -h "$APK" | cut -f1))"
+APKS=("$APK")
+VERSION="${APK##*/}"
+VERSION="${VERSION#"$PKG-"}"
+add_subpackage() {
+    local file="$PKGS_EDGE/$1-$VERSION"
+    [ -f "$file" ] || { echo "ERROR: matching subpackage not found: $file" >&2; exit 1; }
+    APKS+=("$file")
+}
+if [ "$PKG" = "marathon-shell" ]; then
+    add_subpackage marathon-silica
+    add_subpackage marathon-icon-theme
+fi
 
 # 5. Push + install on device
-SSH="sshpass -p $CM5_PASS ssh -o StrictHostKeyChecking=no $CM5_USER@$CM5_HOST"
-SCP="sshpass -p $CM5_PASS scp -o StrictHostKeyChecking=no"
+SSH=(sshpass -p "$CM5_PASS" ssh -o StrictHostKeyChecking=no "$CM5_USER@$CM5_HOST")
+SCP=(sshpass -p "$CM5_PASS" scp -o StrictHostKeyChecking=no)
 
-REMOTE_APK="/tmp/$(basename "$APK")"
-echo "+ scp $APK → $CM5_HOST:$REMOTE_APK"
-$SCP "$APK" "$CM5_USER@$CM5_HOST:$REMOTE_APK"
+if [ "$PKG" = "marathon-shell" ]; then
+    # These depend on the exact shell version. Upgrade installed copies,
+    # without adding the optional browser or development test app.
+    for package in marathon-shell-browser marathon-shell-test-app; do
+        if "${SSH[@]}" "apk info --exists $package" >/dev/null 2>&1; then
+            add_subpackage "$package"
+        fi
+    done
+fi
+
+REMOTE_APKS=()
+for file in "${APKS[@]}"; do
+    remote="/tmp/${file##*/}"
+    echo "+ scp $file → $CM5_HOST:$remote"
+    "${SCP[@]}" "$file" "$CM5_USER@$CM5_HOST:$remote"
+    REMOTE_APKS+=("$remote")
+done
 
 echo "+ apk install (requires root via sudo)"
-$SSH "echo 027602 | sudo -S apk add --allow-untrusted $REMOTE_APK" 2>&1 | tail -5
+printf -v install_args ' %q' "${REMOTE_APKS[@]}"
+printf '%s\n' "$CM5_PASS" | "${SSH[@]}" "sudo -S apk add --allow-untrusted$install_args" 2>&1 | tail -5
 
 # 6. Restart shell session so user picks up new binary
 if [ "$PKG" = "marathon-shell" ]; then
     echo "+ restarting greetd to reload shell"
-    $SSH "echo 027602 | sudo -S systemctl restart greetd"
+    printf '%s\n' "$CM5_PASS" | "${SSH[@]}" "sudo -S systemctl restart greetd"
 fi
 
 echo "DONE — refresh on device"

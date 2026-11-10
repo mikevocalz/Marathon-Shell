@@ -119,11 +119,13 @@ Page {
                         opacity: provider.enabled ? 1 : Theme.opacityLow
 
                         Label {
+                            textFormat: Text.PlainText
                             width: parent.width
                             text: provider.modelData.name
                             color: provider.highlighted ? Theme.highlightColor : Theme.primaryColor
                         }
                         Label {
+                            textFormat: Text.PlainText
                             objectName: "offlineNote"
                             width: parent.width
                             visible: provider.needsNetwork
@@ -136,6 +138,7 @@ Page {
             }
 
             Label {
+                textFormat: Text.PlainText
                 objectName: "status"
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * Theme.horizontalPageMargin
@@ -147,6 +150,7 @@ Page {
                 color: page.failed ? Theme.errorColor : Theme.highlightColor
             }
             Label {
+                textFormat: Text.PlainText
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * Theme.horizontalPageMargin
                 topPadding: Theme.paddingLarge

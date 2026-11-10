@@ -1,2 +1,3 @@
 module MarathonOS.Services
 singleton MailService 1.0 MailService.qml
+singleton NavigationRouter 1.0 NavigationRouter.qml

@@ -32,27 +32,18 @@ Page {
             }
         }
 
-        delegate: ListItem {
+        delegate: SummaryListItem {
             id: item
 
             required property var modelData
 
             width: view.width
-            contentHeight: Theme.itemSizeSmall
-            Accessible.name: item.modelData.name
+            text: modelData.name
+            description: qsTr("%n song(s)", "", modelData.paths.length)
             onClicked: {
                 page.music.savePlaylists(Playlists.addTrack(page.music.playlists, item.modelData.id, page.track.path));
                 Notices.show(qsTr("Added to %1").arg(item.modelData.name));
                 pageStack.pop();
-            }
-
-            Label {
-                x: Theme.horizontalPageMargin
-                width: parent.width - 2 * Theme.horizontalPageMargin
-                anchors.verticalCenter: parent.verticalCenter
-                text: item.modelData.name
-                truncationMode: TruncationMode.Fade
-                color: item.highlighted ? Theme.highlightColor : Theme.primaryColor
             }
         }
 

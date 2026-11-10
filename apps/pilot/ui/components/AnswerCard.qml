@@ -8,7 +8,9 @@
 // what Pilot looked at, searched and used, and what left the phone.
 
 import QtQuick
+import QtQuick.Layouts
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 import Shipwright.Pilot 1.0
 
 Glass {
@@ -24,6 +26,11 @@ Glass {
     property var how: []
     property bool showHow: false
     signal ask(string question)
+
+    function copyAnswer() {
+        Clipboard.text = text;
+        Notices.show(qsTr("Copied"), Notice.Short);
+    }
 
     function provenance() {
         var t = ms > 0 ? (ms < 1000 ? ms + " ms" : (ms / 1000).toLocaleString(Qt.locale(), "f", 1) + " s") : "";
@@ -98,10 +105,7 @@ Glass {
         ContextMenu {
             MenuItem {
                 text: qsTr("Copy")
-                onClicked: {
-                    Clipboard.text = card.text;
-                    Notices.show(qsTr("Copied"), Notice.Short);
-                }
+                onClicked: card.copyAnswer()
             }
         }
     }
@@ -123,37 +127,61 @@ Glass {
         }
     }
 
-    // Where it was made, and, tapped, how.
-    BackgroundItem {
-        objectName: "howToggle"
-        visible: provenanceLabel.text.length > 0 || card.how.length > 0
+    // Provenance remains readable at large text sizes; both actions use the
+    // native keyboard/accessibility path.
+    GridLayout {
         width: parent.width
-        height: Theme.itemSizeSmall
-        enabled: card.how.length > 0
-        highlightedColor: Theme.rgba(Theme.highlightBackgroundColor, 0.2)
-        onClicked: {
-            card.showHow = !card.showHow;
-            Conversation.markGuide("how");
-        }
-        Label {
-            id: provenanceLabel
-            anchors.verticalCenter: parent.verticalCenter
-            width: parent.width - (howLabel.visible ? howLabel.width + Theme.paddingMedium : 0)
-            truncationMode: TruncationMode.Fade
-            text: card.provenance()
-            font.pixelSize: Theme.fontSizeExtraSmall
-            color: Theme.secondaryHighlightColor
-        }
-        Label {
-            id: howLabel
-            anchors {
-                right: parent.right
-                verticalCenter: parent.verticalCenter
+        columns: width < Theme.buttonWidthMedium ? 1 : 2
+        columnSpacing: Theme.paddingMedium
+        rowSpacing: Theme.paddingSmall
+
+        BackgroundItem {
+            objectName: "howToggle"
+            Layout.fillWidth: true
+            implicitHeight: Math.max(Theme.itemSizeSmall, howContent.height + 2 * Theme.paddingMedium)
+            enabled: card.how.length > 0
+            Accessible.role: Accessible.Button
+            Accessible.name: card.showHow ? qsTr("Hide how Pilot answered") : qsTr("How Pilot answered")
+            Accessible.description: card.provenance()
+            onClicked: {
+                card.showHow = !card.showHow;
+                Conversation.markGuide("how");
             }
-            visible: card.how.length > 0
-            text: card.showHow ? qsTr("Hide how") : qsTr("How Pilot answered")
-            font.pixelSize: Theme.fontSizeExtraSmall
-            color: Theme.highlightColor
+            Column {
+                id: howContent
+
+                width: parent.width
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Theme.paddingSmall
+
+                Label {
+                    width: parent.width
+                    visible: text !== ""
+                    text: card.provenance()
+                    textFormat: Text.PlainText
+                    wrapMode: Text.Wrap
+                    font.pixelSize: Theme.fontSizeExtraSmall
+                    color: Theme.secondaryHighlightColor
+                }
+                Label {
+                    width: parent.width
+                    visible: card.how.length > 0
+                    text: card.showHow ? qsTr("Hide how") : qsTr("How Pilot answered")
+                    textFormat: Text.PlainText
+                    wrapMode: Text.Wrap
+                    font.pixelSize: Theme.fontSizeExtraSmall
+                    color: Theme.highlightColor
+                }
+            }
+        }
+        Button {
+            objectName: "copyAnswer"
+            Layout.alignment: Qt.AlignRight
+            preferredWidth: Math.min(Theme.buttonWidthExtraSmall, parent.width)
+            text: qsTr("Copy")
+            Accessible.name: qsTr("Copy answer")
+            enabled: card.text !== ""
+            onClicked: card.copyAnswer()
         }
     }
     Column {
@@ -177,6 +205,7 @@ Glass {
                 }
                 Label {
                     id: stepText
+                    textFormat: Text.PlainText
                     x: Theme.paddingLarge
                     width: parent.width - x
                     text: step.modelData.text
@@ -187,6 +216,7 @@ Glass {
             }
         }
         Label {
+            textFormat: Text.PlainText
             width: parent.width
             wrapMode: Text.Wrap
             font.pixelSize: Theme.fontSizeExtraSmall
@@ -208,6 +238,9 @@ Glass {
                 width: parent ? parent.width : 0
                 height: Math.max(Theme.itemSizeSmall, question.height + 2 * Theme.paddingMedium)
                 highlightedColor: Theme.rgba(Theme.highlightBackgroundColor, 0.25)
+                enabled: Conversation.canSend
+                Accessible.role: Accessible.Button
+                Accessible.name: modelData
                 onClicked: card.ask(followup.modelData)
                 Separator {
                     width: parent.width
@@ -215,6 +248,7 @@ Glass {
                 }
                 Label {
                     id: question
+                    textFormat: Text.PlainText
                     anchors.verticalCenter: parent.verticalCenter
                     width: parent.width - arrow.width - Theme.paddingMedium
                     text: followup.modelData

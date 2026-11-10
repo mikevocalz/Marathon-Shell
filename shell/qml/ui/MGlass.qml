@@ -31,9 +31,9 @@ Item {
 
     property real blurMultiplier: 1.0
 
-    property color tint: Qt.rgba(0.05, 0.05, 0.055, 0.78)
+    property color tint: MColors.glassTint
 
-    property color borderColor: Qt.rgba(1, 1, 1, 0.06)
+    property color borderColor: MColors.onContent(0.06)
 
     property bool topHairline: true
 
@@ -138,6 +138,6 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         height: 1
-        color: Qt.rgba(1, 1, 1, 0.04)
+        color: MColors.onContent(0.04)
     }
 }

@@ -25,7 +25,7 @@ Page {
 
     function rowTitle(row) {
         if (row.kind === "all")
-            return qsTr("Photos");
+            return row.videoCount > 0 ? qsTr("Photos & videos") : qsTr("Photos");
         if (row.kind === "videos")
             return qsTr("Videos");
         if (row.kind === "memory")
@@ -51,8 +51,8 @@ Page {
             required property string section
 
             text: section === "memories" ? qsTr("Memories") : section === "albums" ? qsTr("Albums") : ""
-            visible: text !== ""
-            height: visible ? implicitHeight : 0
+            // Not by visible: the view shows each section item it reuses.
+            height: text !== "" ? implicitHeight : 0
         }
 
         delegate: ListItem {
@@ -60,29 +60,18 @@ Page {
 
             required property var modelData
 
-            contentHeight: Theme.itemSizeLarge
+            contentHeight: Math.max(Theme.itemSizeLarge, labels.height + 2 * Theme.paddingMedium)
             enabled: modelData.count > 0 || modelData.videoCount > 0
             Accessible.name: root.rowTitle(modelData) + ", " + root.rowDetail(modelData)
             onClicked: root.open(modelData)
 
-            // Jolla Gallery: item count, cover, then the name.
-            Label {
-                objectName: "rowCount"
-                x: Theme.horizontalPageMargin
-                width: countMetrics.width
-                anchors.verticalCenter: parent.verticalCenter
-                horizontalAlignment: Text.AlignRight
-                text: Number(row.modelData.count + (row.modelData.videoCount || 0)).toLocaleString(Qt.locale(), "f", 0)
-                font.pixelSize: Theme.fontSizeLarge
-                color: row.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
-            }
-
             Image {
                 id: thumb
 
-                x: Theme.horizontalPageMargin + countMetrics.width + Theme.paddingLarge
-                width: Theme.itemSizeLarge
+                x: Theme.horizontalPageMargin
+                width: Theme.itemSizeMedium
                 height: width
+                anchors.verticalCenter: parent.verticalCenter
                 source: row.modelData.cover ? (row.modelData.cover.thumbnailPath || row.modelData.cover.path) : ""
                 sourceSize.width: width
                 sourceSize.height: height
@@ -98,7 +87,9 @@ Page {
                 }
             }
 
-            Label {
+            Column {
+                id: labels
+
                 anchors {
                     left: thumb.right
                     leftMargin: Theme.paddingLarge
@@ -106,18 +97,26 @@ Page {
                     rightMargin: Theme.horizontalPageMargin
                     verticalCenter: parent.verticalCenter
                 }
-                text: root.rowTitle(row.modelData)
-                font.pixelSize: Theme.fontSizeLarge
-                truncationMode: TruncationMode.Fade
-                color: row.highlighted ? Theme.highlightColor : Theme.primaryColor
+                spacing: Theme.paddingSmall
+
+                Label {
+                    objectName: "collectionTitle"
+                    width: parent.width
+                    text: root.rowTitle(row.modelData)
+                    textFormat: Text.PlainText
+                    wrapMode: Text.Wrap
+                    color: row.highlighted ? Theme.highlightColor : Theme.primaryColor
+                }
+                Label {
+                    objectName: "rowCount"
+                    width: parent.width
+                    text: root.rowDetail(row.modelData)
+                    textFormat: Text.PlainText
+                    wrapMode: Text.Wrap
+                    font.pixelSize: Theme.fontSizeExtraSmall
+                    color: row.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
+                }
             }
-        }
-
-        TextMetrics {
-            id: countMetrics
-
-            font.pixelSize: Theme.fontSizeLarge
-            text: "00"
         }
 
         BusyLabel {

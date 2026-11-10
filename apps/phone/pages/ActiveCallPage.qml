@@ -39,107 +39,128 @@ Page {
         onTriggered: root.now = Date.now()
     }
 
-    Column {
-        id: info
+    SilicaFlickable {
+        id: callBody
 
+        objectName: "callBody"
         anchors {
+            top: parent.top
             left: parent.left
             right: parent.right
-            leftMargin: Theme.horizontalPageMargin
-            rightMargin: Theme.horizontalPageMargin
-            top: parent.top
-            topMargin: root.keypadOpen ? Theme.paddingLarge : Theme.itemSizeLarge
-        }
-        spacing: Theme.paddingSmall
-
-        Label {
-            objectName: "nameLabel"
-            width: parent.width
-            horizontalAlignment: Text.AlignHCenter
-            text: root.phone.callName || Phone.format(root.phone.callNumber)
-            font.pixelSize: Theme.fontSizeExtraLarge
-            wrapMode: Text.Wrap
-            maximumLineCount: 2
-            elide: Text.ElideRight
-            Accessible.role: Accessible.Heading
-        }
-        Label {
-            width: parent.width
-            horizontalAlignment: Text.AlignHCenter
-            visible: text.length > 0
-            text: root.keypadOpen && root.tones.length > 0 ? root.tones : root.phone.callName ? Phone.format(root.phone.callNumber) : ""
-            color: Theme.secondaryColor
-            elide: Text.ElideLeft
-        }
-        Label {
-            objectName: "statusLabel"
-            width: parent.width
-            topPadding: root.keypadOpen ? 0 : Theme.paddingLarge
-            horizontalAlignment: Text.AlignHCenter
-            text: root.callStatus
-            color: Theme.highlightColor
-            font.pixelSize: Theme.fontSizeHuge
-            font.weight: Font.ExtraLight
-            Accessible.name: root.connected || root.endedAt > 0 ? qsTr("Call duration %1").arg(text) : text
-        }
-        Label {
-            objectName: "endedLabel"
-            width: parent.width
-            horizontalAlignment: Text.AlignHCenter
-            visible: root.endedAt > 0
-            text: qsTr("Call ended")
-            color: Theme.highlightColor
-            font.pixelSize: Theme.fontSizeLarge
-        }
-    }
-
-    Row {
-        visible: root.endedAt === 0
-        anchors {
-            top: info.bottom
-            topMargin: Theme.paddingLarge
-            horizontalCenter: parent.horizontalCenter
-        }
-        spacing: Theme.paddingLarge
-
-        CallToggle {
-            name: "speaker"
-            checked: root.speaker
-            icon: "image://theme/icon-l-speaker"
-            text: qsTr("Speaker")
-            onToggled: {
-                root.speaker = !root.speaker;
-                Telephony.setSpeakerphone(root.speaker);
-            }
-        }
-        CallToggle {
-            name: "keypad"
-            checked: root.keypadOpen
-            icon: "image://theme/icon-l-dialpad"
-            text: qsTr("Keypad")
-            onToggled: root.keypadOpen = !root.keypadOpen
-        }
-        CallToggle {
-            name: "mute"
-            checked: root.muted
-            icon: root.muted ? "image://theme/icon-l-mic-mute" : "image://theme/icon-l-mic"
-            text: qsTr("Mute")
-            onToggled: {
-                root.muted = !root.muted;
-                Telephony.setCallMuted(root.muted);
-            }
-        }
-    }
-
-    Keypad {
-        objectName: "dtmfKeypad"
-        anchors {
             bottom: endCallButton.top
             bottomMargin: Theme.paddingLarge
         }
-        visible: root.keypadOpen
-        vanityDialNumbersVisible: false
-        onClicked: number => root.sendTone(number)
+        clip: true
+        contentHeight: callContent.height + 2 * Theme.paddingLarge
+
+        Column {
+            id: callContent
+
+            x: Theme.horizontalPageMargin
+            y: Theme.paddingLarge
+            width: parent.width - 2 * x
+            spacing: Theme.paddingLarge
+
+            Column {
+                id: info
+
+                width: parent.width
+                spacing: Theme.paddingSmall
+
+                Label {
+                    textFormat: Text.PlainText
+                    objectName: "nameLabel"
+                    width: parent.width
+                    horizontalAlignment: Text.AlignHCenter
+                    text: root.phone.callName || Phone.format(root.phone.callNumber)
+                    font.pixelSize: Theme.fontSizeExtraLarge
+                    wrapMode: Text.Wrap
+                    Accessible.role: Accessible.Heading
+                }
+                Label {
+                    textFormat: Text.PlainText
+                    width: parent.width
+                    horizontalAlignment: Text.AlignHCenter
+                    visible: text.length > 0
+                    text: root.keypadOpen && root.tones.length > 0 ? root.tones : root.phone.callName ? Phone.format(root.phone.callNumber) : ""
+                    color: Theme.secondaryColor
+                    wrapMode: Text.Wrap
+                }
+                Label {
+                    textFormat: Text.PlainText
+                    objectName: "statusLabel"
+                    wrapMode: Text.Wrap
+                    width: parent.width
+                    topPadding: root.keypadOpen ? 0 : Theme.paddingLarge
+                    horizontalAlignment: Text.AlignHCenter
+                    text: root.callStatus
+                    color: Theme.highlightColor
+                    font.pixelSize: Theme.fontSizeHuge
+                    font.weight: Font.ExtraLight
+                    Accessible.name: root.connected || root.endedAt > 0 ? qsTr("Call duration %1").arg(text) : text
+                }
+                Label {
+                    textFormat: Text.PlainText
+                    objectName: "endedLabel"
+                    wrapMode: Text.Wrap
+                    width: parent.width
+                    horizontalAlignment: Text.AlignHCenter
+                    visible: root.endedAt > 0
+                    text: qsTr("Call ended")
+                    color: Theme.highlightColor
+                    font.pixelSize: Theme.fontSizeLarge
+                }
+            }
+
+            Row {
+                id: controls
+
+                width: parent.width
+                visible: root.endedAt === 0
+                spacing: Theme.paddingSmall
+
+                CallToggle {
+                    name: "speaker"
+                    width: (controls.width - 2 * controls.spacing) / 3
+                    checked: root.speaker
+                    icon: "image://theme/icon-l-speaker"
+                    text: qsTr("Speaker")
+                    onToggled: {
+                        root.speaker = !root.speaker;
+                        Telephony.setSpeakerphone(root.speaker);
+                    }
+                }
+                CallToggle {
+                    name: "keypad"
+                    width: (controls.width - 2 * controls.spacing) / 3
+                    checked: root.keypadOpen
+                    icon: "image://theme/icon-l-dialpad"
+                    text: qsTr("Keypad")
+                    onToggled: root.keypadOpen = !root.keypadOpen
+                }
+                CallToggle {
+                    name: "mute"
+                    width: (controls.width - 2 * controls.spacing) / 3
+                    checked: root.muted
+                    icon: root.muted ? "image://theme/icon-l-mic-mute" : "image://theme/icon-l-mic"
+                    text: qsTr("Mute")
+                    onToggled: {
+                        root.muted = !root.muted;
+                        Telephony.setCallMuted(root.muted);
+                    }
+                }
+            }
+
+            Keypad {
+                objectName: "dtmfKeypad"
+                width: parent.width
+                visible: root.keypadOpen
+                vanityDialNumbersVisible: false
+                onClicked: number => root.sendTone(number)
+            }
+        }
+
+        VerticalScrollDecorator {}
     }
 
     Button {
@@ -151,7 +172,7 @@ Page {
             bottom: parent.bottom
             bottomMargin: 2 * Theme.paddingLarge
         }
-        preferredWidth: Theme.buttonWidthLarge
+        preferredWidth: Math.min(Theme.buttonWidthLarge, parent.width - 2 * Theme.horizontalPageMargin)
         enabled: root.endedAt === 0
         icon.source: "image://theme/icon-m-end-call"
         text: qsTr("End call")
@@ -183,6 +204,7 @@ Page {
             onClicked: toggle.toggled()
         }
         Label {
+            textFormat: Text.PlainText
             objectName: toggle.name + "Label"
             width: parent.width
             horizontalAlignment: Text.AlignHCenter

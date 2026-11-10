@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtQuick.Layouts
 import Sailfish.Silica 1.0
 import Marathon.Silica 1.0
 import Marathon.Platform 1.0
@@ -59,8 +60,8 @@ Page {
         section.delegate: SectionHeader {
             required property string section
 
-            visible: section !== "today"
-            height: visible ? implicitHeight : 0
+            // Not by visible: the view shows each section item it reuses.
+            height: section === "today" ? 0 : implicitHeight
             text: section === "pinned" ? qsTr("Pinned") : section === "today" ? "" : Format.formatDate(new Date(Number(section)), Formatter.TimepointSectionRelative)
         }
 
@@ -90,7 +91,7 @@ Page {
         ViewPlaceholder {
             enabled: view.count === 0
             text: root.query !== "" ? qsTr("No matches") : root.archive ? qsTr("Archive is empty") : qsTr("No messages")
-            hintText: root.query !== "" ? "" : root.archive ? qsTr("Archived conversations appear here") : qsTr("Pull down to write a new message")
+            hintText: root.query !== "" ? qsTr("Try another name, number or phrase") : root.archive ? qsTr("Archived conversations appear here") : qsTr("Pull down to write a new message")
         }
 
         delegate: ListItem {
@@ -103,8 +104,8 @@ Page {
             readonly property string draft: root.app.drafts[modelData.id] || ""
 
             objectName: "conversation-" + modelData.id
-            contentHeight: Math.max(Theme.itemSizeMedium, name.height + preview.height + 2 * Theme.paddingMedium)
-            Accessible.name: Logic.displayName(modelData) + (unread > 0 ? ", " + qsTr("%n unread", "", unread) : "")
+            contentHeight: Math.max(Theme.itemSizeMedium, labels.height + 2 * Theme.paddingMedium)
+            Accessible.name: Logic.displayName(modelData) + (modelData.contactName ? ", " + (modelData.displayNumber || Sms.formatNumber(modelData.contactNumber)) : "") + (unread > 0 ? ", " + qsTr("%n unread", "", unread) : "")
             menu: ContextMenu {
                 MenuItem {
                     visible: item.unread > 0
@@ -133,68 +134,103 @@ Page {
             }
             onClicked: root.app.openConversation(modelData)
 
-            Icon {
-                id: pinIcon
+            Column {
+                id: labels
+
                 x: Theme.horizontalPageMargin
-                anchors.verticalCenter: name.verticalCenter
-                visible: item.pinned
-                width: visible ? Theme.iconSizeSmall : 0
-                height: Theme.iconSizeSmall
-                source: "image://theme/icon-s-pin"
-            }
-            Label {
-                id: name
-                anchors {
-                    left: pinIcon.right
-                    leftMargin: item.pinned ? Theme.paddingSmall : 0
-                    right: time.left
-                    rightMargin: Theme.paddingMedium
-                    top: parent.top
-                    topMargin: Theme.paddingMedium
+                width: parent.width - 2 * x
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Theme.paddingSmall
+
+                GridLayout {
+                    width: parent.width
+                    columns: nameRow.implicitWidth + time.implicitWidth + columnSpacing <= width ? 2 : 1
+                    columnSpacing: Theme.paddingMedium
+                    rowSpacing: Theme.paddingSmall
+
+                    RowLayout {
+                        id: nameRow
+
+                        Layout.fillWidth: true
+                        spacing: Theme.paddingSmall
+
+                        Icon {
+                            visible: item.pinned
+                            width: Theme.iconSizeSmall
+                            height: width
+                            source: "image://theme/icon-s-pin"
+                        }
+                        Label {
+                            id: name
+
+                            objectName: "conversationName"
+                            Layout.fillWidth: true
+                            text: Logic.displayName(item.modelData)
+                            textFormat: Text.PlainText
+                            wrapMode: Text.Wrap
+                            font.bold: item.unread > 0
+                            color: item.highlighted || item.unread > 0 ? Theme.highlightColor : Theme.primaryColor
+                        }
+                    }
+                    Label {
+                        id: time
+
+                        Layout.fillWidth: true
+                        text: item.modelData.lastTimestamp ? Format.formatDate(new Date(item.modelData.lastTimestamp), isNaN(Number(item.modelData.section)) ? Formatter.TimepointRelative : Formatter.TimeValue) : ""
+                        textFormat: Text.PlainText
+                        wrapMode: Text.Wrap
+                        font.pixelSize: Theme.fontSizeExtraSmall
+                        color: item.unread > 0 ? Theme.highlightColor : Theme.secondaryColor
+                    }
                 }
-                text: Logic.displayName(item.modelData)
-                truncationMode: TruncationMode.Fade
-                color: item.highlighted || item.unread > 0 ? Theme.highlightColor : Theme.primaryColor
-            }
-            Label {
-                id: time
-                anchors {
-                    right: parent.right
-                    rightMargin: Theme.horizontalPageMargin
-                    baseline: name.baseline
+                Label {
+                    objectName: "conversationNumber"
+                    width: parent.width
+                    visible: !!item.modelData.contactName
+                    text: item.modelData.displayNumber || Sms.formatNumber(item.modelData.contactNumber)
+                    textFormat: Text.PlainText
+                    wrapMode: Text.Wrap
+                    font.pixelSize: Theme.fontSizeExtraSmall
+                    color: item.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
                 }
-                text: item.modelData.lastTimestamp ? Format.formatDate(new Date(item.modelData.lastTimestamp), isNaN(Number(item.modelData.section)) ? Formatter.TimepointRelative : Formatter.TimeValue) : ""
-                font.pixelSize: Theme.fontSizeExtraSmall
-                color: item.unread > 0 ? Theme.highlightColor : Theme.secondaryColor
-            }
-            Label {
-                id: preview
-                objectName: "preview"
-                anchors {
-                    left: parent.left
-                    leftMargin: Theme.horizontalPageMargin
-                    right: count.visible ? count.left : parent.right
-                    rightMargin: count.visible ? Theme.paddingMedium : Theme.horizontalPageMargin
-                    top: name.bottom
+                RowLayout {
+                    width: parent.width
+                    spacing: Theme.paddingMedium
+
+                    Label {
+                        id: preview
+
+                        objectName: "preview"
+                        Layout.fillWidth: true
+                        text: item.draft !== "" ? qsTr("Draft: %1").arg(item.draft) : item.modelData.lastMessage
+                        textFormat: Text.PlainText
+                        font.pixelSize: Theme.fontSizeSmall
+                        wrapMode: Text.Wrap
+                        elide: Text.ElideRight
+                        maximumLineCount: 2
+                        color: item.draft !== "" || item.highlighted ? Theme.secondaryHighlightColor : item.unread > 0 ? Theme.primaryColor : Theme.secondaryColor
+                    }
+                    Rectangle {
+                        objectName: "unreadBadge"
+                        Layout.alignment: Qt.AlignTop
+                        visible: item.unread > 0
+                        implicitWidth: Math.max(height, countLabel.implicitWidth + 2 * Theme.paddingSmall)
+                        implicitHeight: countLabel.implicitHeight + Theme.paddingSmall / 2
+                        radius: height / 2
+                        color: Theme.highlightColor
+
+                        Label {
+                            id: countLabel
+
+                            anchors.centerIn: parent
+                            text: item.unread > 99 ? "99+" : item.unread
+                            textFormat: Text.PlainText
+                            font.pixelSize: Theme.fontSizeExtraSmall
+                            font.bold: true
+                            color: Theme.darkPrimaryColor
+                        }
+                    }
                 }
-                text: item.draft !== "" ? qsTr("Draft: %1").arg(item.draft) : item.modelData.lastMessage
-                font.pixelSize: Theme.fontSizeSmall
-                wrapMode: Text.Wrap
-                elide: Text.ElideRight
-                maximumLineCount: 2
-                color: item.draft !== "" || item.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
-            }
-            Label {
-                id: count
-                anchors {
-                    right: parent.right
-                    rightMargin: Theme.horizontalPageMargin
-                    top: name.bottom
-                }
-                visible: item.unread > 0
-                text: item.unread
-                font.pixelSize: Theme.fontSizeSmall
-                color: Theme.highlightColor
             }
         }
 

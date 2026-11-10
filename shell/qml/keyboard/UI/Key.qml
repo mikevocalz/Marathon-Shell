@@ -91,7 +91,7 @@ Rectangle {
         y: -height - Math.round(10 * Constants.scaleFactor)
         z: 1000
         radius: Silica.Theme.paddingMedium
-        color: Qt.rgba(0, 0, 0, 0.9)
+        color: MColors.scrim(0.9)
 
         Text {
             text: key.displayText
@@ -130,7 +130,7 @@ Rectangle {
             width: alternatePopup.popupWidth
             height: key.height + 2 * alternatePopup.padding
             radius: Silica.Theme.paddingMedium
-            color: Qt.rgba(0, 0, 0, 0.9)
+            color: MColors.scrim(0.9)
 
             Row {
                 anchors.centerIn: parent
@@ -175,7 +175,8 @@ Rectangle {
             key.pressed = true;
             longPressTriggered = false;
             key.selectedAlternate = -1;
-            HapticManager.light();
+            if (SettingsManagerCpp.keyboardHapticStrength !== "off")
+                HapticManager.light();
             longPressTimer.restart();
 
             mouse.accepted = true;
@@ -223,7 +224,8 @@ Rectangle {
         onTriggered: {
             mouseArea.longPressTriggered = true;
             if (key.alternateChars.length > 0) {
-                HapticManager.medium();
+                if (SettingsManagerCpp.keyboardHapticStrength !== "off")
+                    HapticManager.medium();
                 mouseArea.holdPoint = Qt.point(mouseArea.mouseX, mouseArea.mouseY);
                 key.showingAlternates = true;
             }

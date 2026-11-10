@@ -15,8 +15,9 @@ Page {
 
         objectName: "ambienceGrid"
         anchors.fill: parent
-        cellWidth: width / 2
-        cellHeight: Math.round(cellWidth * 1.6)
+        readonly property int columns: Math.max(2, Math.floor(width / (Theme.itemSizeHuge + 2 * Theme.paddingLarge)))
+        cellWidth: width / columns
+        cellHeight: Math.max(Math.round(cellWidth * 1.6), Theme.itemSizeHuge + 3 * Theme.fontSizeSmall + 2 * Theme.paddingSmall)
         model: page.store ? page.store.wallpapers : []
         header: PageHeader {
             title: qsTr("Ambience")
@@ -71,19 +72,25 @@ Page {
                     bottom: image.bottom
                 }
                 height: name.height + 2 * Theme.paddingSmall
-                color: Qt.rgba(0, 0, 0, 0.6)
+                color: ContentStyle.mediaOverlay
 
                 Label {
                     id: name
 
+                    objectName: "ambienceName"
+
                     anchors {
                         left: parent.left
                         leftMargin: Theme.paddingMedium
-                        right: check.left
+                        right: check.visible ? check.left : parent.right
+                        rightMargin: Theme.paddingMedium
                         verticalCenter: parent.verticalCenter
                     }
                     text: item.modelData.name
-                    truncationMode: TruncationMode.Fade
+                    textFormat: Text.PlainText
+                    wrapMode: Text.Wrap
+                    maximumLineCount: 3
+                    elide: Text.ElideRight
                     font.pixelSize: Theme.fontSizeSmall
                     color: item.current || item.highlighted ? Theme.highlightColor : Theme.primaryColor
                 }

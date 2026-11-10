@@ -6,6 +6,7 @@
 
 import QtQuick
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 
 BackgroundItem {
     id: tile
@@ -13,6 +14,8 @@ BackgroundItem {
     required property string categoryId
     required property string label
     required property string icon
+
+    Accessible.name: tile.label
 
     height: Theme.itemSizeSmall
 

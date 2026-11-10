@@ -6,6 +6,7 @@
 
 import QtQuick
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 import Shipwright.Pilot 1.0
 
 Page {
@@ -57,11 +58,6 @@ Page {
             description: qsTr("New notifications, messages and calendar changes are sorted into Pilot events.")
         },
         {
-            name: "cloud_asr",
-            label: qsTr("Cloud speech recognition"),
-            description: qsTr("If the phone can't understand you, the audio is sent to be recognised. Off by default.")
-        },
-        {
             name: "spoken_nudges",
             label: qsTr("Spoken nudges"),
             description: qsTr("Pilot may speak when something urgent arrives.") + englishVoiceNote
@@ -111,6 +107,7 @@ Page {
             }
 
             Label {
+                textFormat: Text.PlainText
                 objectName: "settingsMessage"
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * Theme.horizontalPageMargin
@@ -149,6 +146,7 @@ Page {
                 text: qsTr("What Pilot remembers")
             }
             Label {
+                textFormat: Text.PlainText
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * x
                 visible: page.memories.length === 0
@@ -174,6 +172,7 @@ Page {
                     }
                     Label {
                         id: memoryText
+                        textFormat: Text.PlainText
                         x: Theme.horizontalPageMargin
                         width: parent.width - 2 * x
                         anchors.verticalCenter: parent.verticalCenter
@@ -236,6 +235,7 @@ Page {
             BackgroundItem {
                 id: egressLink
                 objectName: "egressLink"
+                Accessible.name: qsTr("What left this phone")
                 width: parent.width
                 // As tall as its lines need at a large text size.
                 height: Math.max(Theme.itemSizeMedium, rowText.height + 2 * Theme.paddingSmall)
@@ -250,14 +250,16 @@ Page {
                         verticalCenter: parent.verticalCenter
                     }
                     Label {
+                        textFormat: Text.PlainText
                         width: parent.width
-                        truncationMode: TruncationMode.Fade
+                        wrapMode: Text.Wrap
                         color: egressLink.highlighted ? Theme.highlightColor : Theme.primaryColor
                         text: qsTr("What left this phone")
                     }
                     Label {
+                        textFormat: Text.PlainText
                         width: parent.width
-                        truncationMode: TruncationMode.Fade
+                        wrapMode: Text.Wrap
                         font.pixelSize: Theme.fontSizeExtraSmall
                         color: egressLink.highlighted ? Theme.secondaryHighlightColor : Theme.secondaryColor
                         text: qsTr("Each request: when, where to, how much")
@@ -275,7 +277,7 @@ Page {
                 Button {
                     objectName: "exportButton"
                     anchors.horizontalCenter: parent.horizontalCenter
-                    preferredWidth: Theme.buttonWidthMedium
+                    preferredWidth: Math.min(Theme.buttonWidthMedium, parent.width - 2 * Theme.horizontalPageMargin)
                     text: qsTr("Export")
                     onClicked: {
                         var path = Pilot.defaultExportPath();
@@ -286,7 +288,7 @@ Page {
                 Button {
                     objectName: "wipeButton"
                     anchors.horizontalCenter: parent.horizontalCenter
-                    preferredWidth: Theme.buttonWidthMedium
+                    preferredWidth: Math.min(Theme.buttonWidthMedium, parent.width - 2 * Theme.horizontalPageMargin)
                     text: qsTr("Delete records")
                     onClicked: remorse.execute(qsTr("Deleting Pilot's records"), function () {
                         var err = Pilot.wipe();
@@ -304,6 +306,7 @@ Page {
                 visible: page.voiceModelsBytes > 0
                 topPadding: Theme.paddingLarge
                 Label {
+                    textFormat: Text.PlainText
                     objectName: "voiceModelsLabel"
                     x: Theme.horizontalPageMargin
                     width: parent.width - 2 * Theme.horizontalPageMargin
@@ -315,7 +318,7 @@ Page {
                 Button {
                     objectName: "removeVoiceModelsButton"
                     anchors.horizontalCenter: parent.horizontalCenter
-                    preferredWidth: Theme.buttonWidthMedium
+                    preferredWidth: Math.min(Theme.buttonWidthMedium, parent.width - 2 * Theme.horizontalPageMargin)
                     text: qsTr("Remove downloaded voice models")
                     onClicked: remorse.execute(qsTr("Removing voice models"), function () {
                         var err = Pilot.removeVoiceModels();
@@ -327,6 +330,7 @@ Page {
                 }
             }
             Label {
+                textFormat: Text.PlainText
                 objectName: "dataMessage"
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * Theme.horizontalPageMargin

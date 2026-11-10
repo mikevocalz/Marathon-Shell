@@ -8,9 +8,10 @@ itself.
 Two targets build this way with `MARATHON_IMAGE_LAYOUT=ab`: the QEMU dev-sim,
 and the Raspberry Pi 5 / HackberryPi CM5, which has no boot counter and uses
 the Pi firmware's one-shot tryboot instead ([Raspberry Pi](#raspberry-pi-5--hackberrypi-cm5)).
-Every other device keeps its single-root image and Settings says it can't
-install updates. [Per-device status](#per-device-status) lists what each one
-still needs.
+Every Zinwa Q25 image updates too: its root is a file, so the next root is
+written beside it ([Zinwa Q25](#zinwa-q25)). Every other device keeps its
+single-root image and Settings says it can't install updates.
+[Per-device status](#per-device-status) lists what each one still needs.
 
 ## Choice: systemd-sysupdate
 
@@ -49,11 +50,11 @@ Sources: duranium `DESIGN.md` (in the generated tree), [sysupdate.d(5)](https://
 ## How it fits together
 
 ```
- build host                              thrivelobal.com (MARATHON_OTA_URL)
+ build host                              github.com/patrickjquinn/marathon-updates
  ──────────                              ───────────────────────────────────
- build-image.sh MARATHON_IMAGE_LAYOUT=ab  <url>/<image-id>/
+ build-image.sh MARATHON_IMAGE_LAYOUT=ab  release <channel>/<image-id> (MARATHON_OTA_URL/<image-id>/)
    └ mkosi: ESP + erofs /usr + verity       <id>_<v>.usr-arm64.<uuid>.raw.zst
- marathon-ota publish ──── rsync ────────►  <id>_<v>.usr-arm64-verity.<uuid>.raw.zst
+ marathon-ota publish ─ gh release ──────►  <id>_<v>.usr-arm64-verity.<uuid>.raw.zst
    zstd, SHA256SUMS, gpg --detach-sign      <id>_<v>.efi
                                             SHA256SUMS, SHA256SUMS.gpg
                                             marathon-os.metainfo.xml
@@ -96,8 +97,9 @@ as Store installs already do.
 versions (2 by default, matching `InstancesMax=2`). It refuses a version that
 is already published or older than the newest one. Payloads land first, and
 `SHA256SUMS` and its signature land last, so a client never sees a version whose
-files are missing. With `--upload` it rsyncs the payloads, then the manifest,
-then deletes pruned files.
+files are missing. With `--github` it mirrors the feed onto a GitHub release
+([Hosting](#hosting-github-releases)); with `--upload` it rsyncs the payloads,
+then the manifest, then deletes pruned files.
 
 `--notes FILE` becomes the release's AppStream description: blank lines
 separate paragraphs, and lines starting `- ` or `* ` are list items, which
@@ -120,7 +122,9 @@ Marathon's feed. To rotate keys, ship an image whose keyring holds both keys,
 then start signing with the new one.
 
 The transfers are templates in `packaging/ota/sysupdate.d/`, rendered with
-`MARATHON_OTA_URL` (default `https://thrivelobal.com/marathon/updates`). The UKI
+`MARATHON_OTA_URL` (default
+`https://github.com/patrickjquinn/marathon-updates/releases/download/$MARATHON_OTA_CHANNEL`,
+channel `stable` unless set to `test`). The UKI
 transfer is named last, so a new boot entry appears only after its `/usr` is
 written. Its `AppStream=` points at the catalog that gives Settings each
 release's download size and notes.
@@ -177,23 +181,96 @@ differs from the last one whose shell came up, which it records in
 an update and every retry of a trial boot; a rollback or a fresh flash shows
 the plain splash. It never fails a boot.
 
-The update channel picker is gone. Channels were GitHub pre-releases, and
-images are built for one release (`edge`), which sysupdate matches as `%w`.
-Staged rollout is not implemented. Promoting a build from a test feed to the
-public one is the manual equivalent.
+There is no channel picker on the phone: an image follows the channel it was
+built for (`MARATHON_OTA_CHANNEL`), and images are built for one release
+(`edge`), which sysupdate matches as `%w`. Staged rollout is not implemented.
+Publishing a device-tested build from the test feed to stable is the manual
+equivalent.
 
-### Health check
+### Hosting: GitHub releases
 
-`marathon-boot-health.service` (crate `crates/marathon-health`) is required by
-`boot-complete.target` and runs only when systemd-boot is counting
-(`LoaderBootCountPath` set). It waits up to `MARATHON_HEALTH_TIMEOUT_SECS`
-(300 s) for any `/run/user/*/marathon-shell-ready`. The shell writes that file
-on its first frame. If the file never appears, the unit fails and the boot is
-not blessed. marathon-health then reboots, but only if the reboot can lead
-somewhere: either the entry still has tries left, or another entry in
-`EFI/Linux` is good or has tries. An entry already at zero that is the only one
-left stays up, so a device with nothing to fall back to never reboot-loops.
-Blessed entries are not counted, so it never runs on them.
+The feeds are releases of the public repository
+[patrickjquinn/marathon-updates](https://github.com/patrickjquinn/marathon-updates),
+one per channel and image id, tagged `<channel>/<image id>`:
+`stable/zinwa-q25_marathon_edge`, `stable/hackberrypi-cm5_marathon_edge`,
+`stable/raspberry-pi5_marathon_edge` (a plain Pi 5),
+`stable/qemu-aarch64_marathon_edge`, and the same under `test/` as
+pre-releases. A release's download URL is
+`https://github.com/patrickjquinn/marathon-updates/releases/download/<tag>/<asset>`,
+so `MARATHON_OTA_URL` ends in `/releases/download/<channel>` and the
+transfers' `@MARATHON_OTA_URL@/%M_%W_%w/` lands in the release for the
+phone's own image id, unchanged from a plain web server. GitHub answers each
+download with a 302 to its object store; systemd-pull, and the shell's
+AppStream fetch (ureq), follow it. Pages cannot serve these: it refuses files
+over 100 MB, and sysupdate fetches `SHA256SUMS` and the payloads from one
+base URL.
+
+```sh
+scripts/ota/marathon-ota publish --image-dir <mkosi.output>/<image id> --version <v> \
+    --feed /mnt/deckard-build/marathon-feeds/test --gnupghome ~/.marathon-secrets/ota/gnupg \
+    --notes notes.txt --github patrickjquinn/marathon-updates --channel test
+scripts/ota/check-feed q25 <running version> --url https://github.com/patrickjquinn/marathon-updates/releases/download/test
+```
+
+`--github` creates the release when it is missing, uploads payloads the
+release lacks, then uploads `marathon-os.metainfo.xml`, `SHA256SUMS` and
+`SHA256SUMS.gpg` as `*.new` and renames each over the old one, deletes the
+pruned versions' assets, and waits until GitHub serves the new manifest and
+signature. The local feed directory is the release's mirror and decides what
+is kept: keep it (`gh release download <tag> -D <dir>` restores it), and
+`marathon-ota github-sync` pushes it again after a failed upload.
+`scripts/ota/check-feed q25|pi|qemu <running version> [--install]` then runs
+the device's own transfers, rendered with the feed's URL, through the host's
+systemd-sysupdate with the image's keyring, in a user namespace.
+
+Limits:
+
+- An asset must be under 2 GiB; `marathon-ota --github` refuses a larger one.
+  The Pi's root slot was 778 MB and its boot slot 103 MB compressed
+  (26102001); the Q25's root is about 1.8 GB (1.82 GB for 26103101). Each
+  `.ext4.zst` is checked at publish time, and one over the limit needs a smaller root or
+  stronger compression (`zstd -19 --long=27`, which systemd-pull's default
+  128 MiB window still reads), since sysupdate cannot join split files.
+- Replacing an asset is not atomic, and downloads lag a replaced asset by
+  about a second. A phone checking in that window sees the old manifest
+  (nothing new) or a manifest and signature that don't match, a check error
+  that the next check clears.
+- A HackberryPi image is a Pi 5 image plus the HackberryPi overlay, but its
+  image id is `hackberrypi-cm5` (`MARATHON_IMAGE_DEVICE`, set by
+  `build-image.sh` when the overlay's apk is in `mkosi.packages`, and
+  pipeline patch 0056), so a plain Pi 5 and a HackberryPi never read each
+  other's feed. Images built before that say `raspberry-pi5`: a HackberryPi
+  moves to its own feed by one reflash, as it must anyway to leave the old
+  feed URL.
+
+The repository's CI (`validate`) checks each feed on every release change
+and daily: a good signature by `keys/marathon-ota.asc` (this repository's
+`packaging/ota/marathon-ota.asc`), every asset listed in `SHA256SUMS` and
+nothing else, the AppStream catalog's versions matching, every asset under
+2 GiB, and small assets against their checksums. Signing stays on the
+publisher's machine.
+
+Proved on 2026-11-02 against the real repository with
+`test/sysupdate-proof_marathon_edge` (an image id no image has, tiny
+payloads): the host's systemd-sysupdate 259 with the Q25 transfer verified
+`SHA256SUMS.gpg` with the OTA key through GitHub's redirect, installed
+26110201 byte for byte, then 26110203 after two more publishes with
+`--keep 2` had pruned 26110201's assets from the release, and kept two
+roots; with the host's own keyring it refused the feed ("Signature
+verification failed").
+
+### What updates how
+
+| | Updated by | Apps |
+|---|---|---|
+| system | the OS image (this document) | shell, the on-screen keyboard, Settings, Phone, Messages, Contacts, Camera, Clock, Reef, Deckard |
+| Reef | Reef, from its signed catalogue | Pacific and Shipwright's other closed apps (`packaging/vendor/shipwright.lock`), Pilot, Maps, Music, Notes, Calendar, Mail, Gallery, and the other apps |
+
+Every image keeps shipping the Reef-updated apps. Today an OS update is still
+the only way any of them changes. The plan for Reef to update the apps the
+image ships is in [Reef-updated Marathon apps](reef/marathon-catalogue.md#reef-updated-marathon-apps).
+Reef installs a newer copy in the home directory, beside the image's read-only
+one, and the newer of the two runs.
 
 ## Raspberry Pi 5 / HackberryPi CM5
 
@@ -274,6 +351,130 @@ the slots and `autoboot.txt` alone ([FACTORY_RESET.md](FACTORY_RESET.md)).
 Settings shows a version that failed its trials as rolled back, from the same
 `GetVersion` logic as on QEMU.
 
+## Zinwa Q25
+
+The Q25 boots the stock bootloader's U-Boot, then systemd-boot from an ESP
+inside userdata's nested GPT. Partition 2 of that GPT is the ext4 carrier,
+mounted at `/.q25-carrier/root`; the root is an ext4 image file on it,
+`/var/lib/marathon/images/<name>.ext4`, which the carrier initramfs
+loop-mounts as `/` from the entry's `q25.rootfs_file=`. `/home` is
+`home.luks` in the same directory and outlives every root. Each root
+carries its own kernel, initramfs, DTB and command line: `arm` copies the new
+root's `/boot` to the ESP's `q25-boot/<name>` and boots its counted entry from
+there, and the fallback keeps the old root's. A root armed by an older
+`q25-root-install`, which copied the booted entry, starts once on the older
+kernel; its `sync-boot` (in `q25-root-arm.service`, before `arm`) then points
+that counted entry at its own files and restarts. U-Boot in `lk_a` follows
+the root ([U-Boot](#u-boot)). Ubuntu Touch on Android hardware kept its root the same way, as a
+`system.img` on userdata, and Android's Virtual A/B stages an update's
+copy-on-write images as files in `/data`.
+
+### Update, trial and commit
+
+1. `marathon-10-q25-root.transfer` (`packaging/ota/q25/sysupdate.d`, which
+   `build-image.sh` installs in every Q25 image) is a sysupdate
+   `regular-file` target. It downloads
+   `zinwa-q25_marathon_edge_<v>.ext4.zst`, checks it against the signed
+   `SHA256SUMS`, unpacks it sparse into the images directory as
+   `zinwa-q25_marathon_edge_<v>.ext4`, mode 0600, and keeps two such roots,
+   never the running one (`InstancesMax=2`, `ProtectVersion=%A`). Roots
+   flashed by hand under other names are not sysupdate's and stay. The
+   carrier keeps room for two 32 GiB roots beside `/home`.
+2. At shutdown, `q25-root-arm.service` runs `q25-root-install arm` once
+   NetworkManager, BlueZ, ModemManager and sysupdated have stopped. For the
+   newest installed root that is newer than `IMAGE_VERSION` and has no boot
+   entry yet, it loop-mounts the new root, copies this phone's state into
+   it (below), and writes `marathon-q25-b-<name>+3.conf`, a copy of the
+   booted entry with only `q25.rootfs_file` changed;
+   `marathon-q25-a-fallback.conf`, the booted entry itself; and
+   `default marathon-q25-*` in `loader.conf`, backed up once as
+   `loader.conf.before-<name>`. Other `marathon-q25-b-*` entries go. A root
+   installed before a power loss is armed at the next boot, which then
+   restarts before greetd.
+3. systemd-boot boots the newest `marathon-q25` entry with tries left,
+   renaming it `+2-1`, `+1-2`, `+0-3` (U-Boot has `CONFIG_FAT_WRITE` and
+   renames files). Once `q25-boot-check` passes (greetd and the GPU guard
+   active), `q25-boot-bless` drops the counter. An entry at `+0-3` sorts
+   last and the fallback boots; Settings shows the version as rolled back,
+   and it is never armed again.
+
+The booted entry is found as `q25-boot-bless` finds it: the one whose
+`options` equal `/proc/cmdline` less systemd-boot's `initrd=` words. When
+several match (the fallback has the same options as the hand-made entry it
+was copied from), ours wins, then the loader default. This firmware has
+EFI runtime services off, so there is no `LoaderEntrySelected` or
+`LoaderBootCountPath`, and `marathon-boot-health` does not run.
+
+### State carried into a new root
+
+Each root is a whole image, so the phone's own state in `/etc` and `/var`
+is copied into the new one at arm time, in the spirit of Ubuntu Touch's
+`writable-paths` and Alpine's `lbu`, as a fixed list in `q25-root-install`
+taken from `scripts/q25/explain/per-phone-state.toml`: `machine-id`,
+`hostname`, `machine-info`, `locale.conf`, `localtime`, `adjtime`, the SSH
+host keys, NetworkManager's connections and `/var/lib/NetworkManager`, the
+APN in `/etc/q25-modem/modem.conf`, `/var/lib/bluetooth`,
+`/var/lib/q25-modem` (the modem's NV overlay) and systemd's rfkill and
+timesync state. Everything else comes fresh from the image, including
+`/etc/shadow`, sshd enablement and `/root/.ssh` (a build without
+`MARATHON_DEV_SSH_KEY` has no SSH), `/var/lib/deckard` (Android's data is
+in `/home`) and system-wide Flatpaks in `/var/lib/flatpak` (Reef installs
+per user, in `/home`).
+
+### U-Boot
+
+U-Boot is the first part ("lk") of the `lk_a` partition; MediaTek's
+`bl2_ext`, `aee`, `lk_main_dtb` and their certificates follow it, are the
+phone's own and cannot be shipped. `scripts/build-zinwa-q25-image.sh`
+builds U-Boot (`scripts/q25/build-q25-uboot.sh`, byte for byte the tested
+binary) and writes it into the root as `/usr/lib/q25/u-boot-q25.bin`.
+After `q25-boot-bless` on every boot that reached `boot-complete.target`,
+`q25-lk-update.service` compares it with the U-Boot in `lk_a` and, if they
+differ:
+
+1. rebuilds the lk image as `gimme-uboot.py` does (new U-Boot padded to
+   16 bytes under the old lk header and certificates, the other parts
+   verbatim; checked byte-equal with `gimme-uboot.py` for three U-Boots);
+2. saves the current `lk_a` as
+   `/var/lib/marathon/lk/lk_a-<sha256 prefix>.img` on the carrier (the
+   three newest are kept);
+3. writes `lk_a` with `fsync`, reads it back and compares the hash; on a
+   mismatch it writes the saved image back.
+
+It leaves an `lk_a` alone that holds no Marathon U-Boot (stock LK) or whose
+part list does not parse, and a U-Boot too big for the hand-off below
+(0x120 4 KiB blocks). So an update brings its U-Boot only after a boot of
+the new root was blessed, and a rollback brings the older root's U-Boot
+back the same way. `lk_b` keeps the U-Boot it was installed with.
+
+U-Boot enters fastboot on every boot (`fastboot continue` boots on), then
+runs a one-shot test boot if Linux armed one (`Q25ONCE1` in `misc`'s block
+0x7f, cleared and read back before it runs `/q25-oneshot/env.txt` from the
+ESP), then the CPU0 hand-off: it sets the modem bank remaps and EMI MPU
+regions 22-27 for CONNSYS and the modem, and restarts itself from `lk_a`
+through BL31's `MTK_SIP_KERNEL_BOOT`, the way LK starts Linux. Without it
+CPU0 corrupts memory. The restarted U-Boot adds
+`/chosen/marathon,mtk-kernel-boot` to the DT; `q25-platform-prepare`
+takes CPU0 offline before udev starts unless that property is there.
+`/loader/q25-no-handoff` on the ESP skips the hand-off (CPU0 then stays
+offline); a failed hand-off step falls back to the same path.
+
+To put back a saved `lk_a`: `fastboot flash lk_a lk_a-<sha>.img` while
+U-Boot holds fastboot, or mtkclient if U-Boot does not start.
+
+### Publishing
+
+```sh
+MARATHON_OTA_CHANNEL=test scripts/build-zinwa-q25-image.sh --bump
+scripts/ota/marathon-ota publish --image-dir ~/.cache/marathon-build/q25/zinwa-q25_marathon_edge \
+    --version <IMAGE_VERSION> --feed /mnt/deckard-build/marathon-feeds/test --gnupghome ~/.marathon-secrets/ota/gnupg \
+    --notes notes.txt --github patrickjquinn/marathon-updates --channel test
+```
+
+A phone running a root flashed by hand under its old name updates the same
+way: that root is the fallback of the first update, and stays on the
+carrier until removed by hand.
+
 ## Per-device status
 
 | Device | Boot chain | Rollback today | Needed |
@@ -282,6 +483,7 @@ Settings shows a version that failed its trials as rolled back, from the same
 | Librem 5 | U-Boot `boot.scr` → kernel + initramfs from ext4 partition 1 | no | either U-Boot's EFI loader → systemd-boot (duranium's plan; FAT write and EFI variables at runtime to verify), or U-Boot `bootcount`/`bootlimit`/`altbootcmd` choosing the slot, with marathon-health clearing `bootcount`/`upgrade_available` via `fw_setenv` |
 | PinePhone | U-Boot (our `u-boot-pinephone-marathon` fork) `boot.scr` | no | same as the Librem 5; we already build its U-Boot, so `CONFIG_BOOTCOUNT_LIMIT` is in reach |
 | Raspberry Pi 5 / HackberryPi CM5 | Pi firmware → `autoboot.txt` (`tryboot_a_b=1`) → the slot's FAT boot partition → mkinitfs → ext4 root slot by GPT label | yes, with `MARATHON_IMAGE_LAYOUT=ab` (GPT) | validated on the HackberryPi 2026-10-17 ([results](#hackberrypi-validation)). One failed trial falls back; each version gets two |
+| Zinwa Q25 | U-Boot (lk) → systemd-boot on the nested-GPT ESP → carrier initramfs → root file `q25.rootfs_file=` | yes, every image ([Zinwa Q25](#zinwa-q25)) | on-device validation; systemd-boot's counter renames on this U-Boot are unproven |
 | OnePlus 6 | Android boot.img → U-Boot → EFI | untested | the EFI path should work as on QEMU; needs a device |
 
 `AB_DEVICES` in `mkosi-configure.py` (`qemu-aarch64`, `raspberry-pi5`), with
@@ -398,7 +600,7 @@ The host serves the feed at 192.168.68.78; the device is
    put a file in `~`, note `/etc/machine-id`, reboot twice: all unchanged.
 4. **Image N+1.** Build again with `--bump`, then
    ```sh
-   scripts/ota/marathon-ota publish --image-dir $D/mkosi.output/raspberry-pi5_marathon_edge \
+   scripts/ota/marathon-ota publish --image-dir $D/mkosi.output/hackberrypi-cm5_marathon_edge \
        --version <N+1> --feed ~/ota-test/feed --gnupghome ~/.marathon-secrets/ota/gnupg --notes notes.txt
    python3 -m http.server 8080 --bind 192.168.68.78 --directory ~/ota-test/feed
    ```
@@ -423,7 +625,8 @@ on the host and rewriting it.
 ## Known gaps
 
 - Full-image downloads only (about 2 GB per update); no delta or casync.
-- No staged rollout percentage; one public feed per image id.
+- No staged rollout percentage; one feed per channel and image id.
+- GitHub asset replacement is not atomic ([Hosting](#hosting-github-releases)).
 - duranium's dev-tools sysext/confext are no longer updated: their pmOS
   transfers are dropped, and Marathon does not publish them yet.
 - The UEFI boot path cannot take the dev-sim's extra kernel arguments
@@ -438,7 +641,19 @@ on the host and rewriting it.
   committed slot. The bootloader watchdog (EEPROM 2025-06-20 and later) and
   `PARTITION_WALK=1` (on by default from 2025-08-13) would harden this; the
   HackberryPi's EEPROM is 2025-06-13.
-- Raspberry Pi: `IMAGE_ID` is `raspberry-pi5` for vanilla Pi 5 and HackberryPi
-  builds alike, so both would share one feed directory. Publish HackberryPi
-  builds only.
 - Raspberry Pi: going from the single-root image to A/B needs a re-flash.
+- Zinwa Q25: nothing reboots a trial whose session never comes up
+  (`q25-boot-check` fails and the entry stays unblessed); each restart by
+  hand spends a try.
+- Zinwa Q25: an update from a root whose `q25-root-install` predates
+  `q25-boot` (1.0) boots the new root once on the old kernel, with the new
+  root's modules, until `sync-boot` restarts it on its own; drivers that
+  need a newer kernel's symbols fail to load for that one boot.
+- Zinwa Q25: `q25-boot` holds two kernels, the counted entry's and the
+  fallback's, about 30 MB each on a 236 MB ESP; `arm` refuses when it would
+  not fit.
+- Zinwa Q25: the state carried into a new root is a fixed list; state
+  outside it written on the running root stays in that root.
+- Zinwa Q25: `q25-lk-update` writes `lk_a` only and nothing falls back to
+  another U-Boot: one that never reaches fastboot needs mtkclient to put
+  the saved `lk_a` back.

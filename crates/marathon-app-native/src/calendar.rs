@@ -5,13 +5,15 @@ use std::collections::{HashMap, VecDeque};
 use std::pin::Pin;
 use std::time::Duration;
 
+use async_channel::Sender;
 use cxx_qt::{CxxQtType, Threading};
 use cxx_qt_lib::{QList, QMap, QMapPair_QString_QVariant, QString, QVariant};
+use futures_lite::{future, StreamExt};
 use jiff::civil::Date;
 use jiff::{Span, Zoned};
 use zbus::{OwnedVariant as OwnedValue, Variant as Value};
 
-use crate::shell::{allowed, Service};
+use crate::shell::{allowed, answers, Service};
 use crate::{notifications, variant};
 use marathon_rt::io;
 use marathon_rt::log;
@@ -20,6 +22,8 @@ use marathon_rt::log;
 pub mod qobject {
     #[namespace = ""]
     unsafe extern "C++" {
+        include!("cxx-qt-lib/qstring.h");
+        type QString = cxx_qt_lib::QString;
         include!("cxx-qt-lib/qlist.h");
         type QList_QVariant = cxx_qt_lib::QList<cxx_qt_lib::QVariant>;
         include!("cxx-qt-lib/qmap.h");
@@ -29,7 +33,16 @@ pub mod qobject {
     extern "RustQt" {
         #[qobject]
         #[qproperty(QList_QVariant, events, READ, NOTIFY = events_changed)]
+        #[qproperty(QString, synced_state, cxx_name = "syncedState", READ, NOTIFY = synced_state_changed)]
         type Calendar = super::CalendarRust;
+
+        #[qsignal]
+        #[cxx_name = "syncedStateChanged"]
+        fn synced_state_changed(self: Pin<&mut Self>);
+
+        #[qinvokable]
+        #[cxx_name = "refreshSynced"]
+        fn refresh_synced(self: Pin<&mut Calendar>);
 
         #[qsignal]
         #[cxx_name = "eventsChanged"]
@@ -57,6 +70,7 @@ use qobject::Calendar;
 
 const SETTINGS: Service = Service::shell("Settings");
 const KEY: &str = "calendar/events";
+const SYNCED: Service = Service::on("org.marathonos.Dav", "CalendarEvents");
 
 type Event = HashMap<String, Value<'static>>;
 
@@ -64,6 +78,11 @@ type Event = HashMap<String, Value<'static>>;
 pub struct CalendarRust {
     events: QList<QVariant>,
     list: Vec<Event>,
+    synced: QList<QVariant>,
+    synced_state: QString,
+    generation: u64,
+    // The QObject owns the only sender. Its drop closes both lifetime receivers.
+    stop: Option<Sender<()>>,
     // Reminders already shown, so a minute's two checks show one.
     shown: VecDeque<String>,
 }
@@ -141,10 +160,19 @@ fn due(event: &Event, now: &Zoned) -> bool {
 }
 
 impl CalendarRust {
-    fn publish(mut obj: Pin<&mut Calendar>) {
-        let events = obj.list.iter().map(|e| QVariant::from(&as_qt(e))).collect();
+    fn present(mut obj: Pin<&mut Calendar>) {
+        let events = obj
+            .list
+            .iter()
+            .map(|e| QVariant::from(&as_qt(e)))
+            .chain(obj.synced.iter().cloned())
+            .collect();
         obj.as_mut().rust_mut().events = events;
-        obj.as_mut().events_changed();
+        obj.events_changed();
+    }
+
+    fn publish(mut obj: Pin<&mut Calendar>) {
+        Self::present(obj.as_mut());
         let stored: Vec<Value<'static>> = obj
             .list
             .iter()
@@ -214,44 +242,158 @@ impl CalendarRust {
 }
 
 impl cxx_qt::Initialize for Calendar {
-    fn initialize(self: Pin<&mut Self>) {
+    fn initialize(mut self: Pin<&mut Self>) {
+        let (stop, stopped) = async_channel::bounded(1);
+        self.as_mut().rust_mut().stop = Some(stop);
         let qt = self.qt_thread();
+        let watching = qt.clone();
+        let until_dropped = stopped.clone();
         io::spawn(async move {
-            let stored: Option<OwnedValue> = SETTINGS
-                .ask("Get", &(KEY, Value::from(Vec::<Value>::new())))
-                .await
-                .ok();
-            let list: Vec<Event> = match stored.as_deref().map(variant::to_qt) {
-                Some(v) => v
-                    .value::<QList<QVariant>>()
-                    .map(|l| {
-                        l.iter()
-                            .filter_map(|e| {
-                                e.value::<QMap<QMapPair_QString_QVariant>>()
-                                    .map(|m| variant::map(&m))
-                            })
-                            .collect()
-                    })
-                    .unwrap_or_default(),
-                None => Vec::new(),
-            };
-            qt.queue(move |mut obj| {
-                obj.as_mut().rust_mut().list = list;
-                let events = obj.list.iter().map(|e| QVariant::from(&as_qt(e))).collect();
-                obj.as_mut().rust_mut().events = events;
-                obj.as_mut().events_changed();
-                CalendarRust::remind(obj);
+            future::or(watch_synced(&watching), async {
+                until_dropped.recv().await.ok();
             })
-            .ok();
-            loop {
-                async_io::Timer::after(Duration::from_secs(60)).await;
-                qt.queue(CalendarRust::remind).ok();
-            }
+            .await;
+        });
+        io::spawn(async move {
+            future::or(
+                async {
+                    let stored: Option<OwnedValue> = SETTINGS
+                        .ask("Get", &(KEY, Value::from(Vec::<Value>::new())))
+                        .await
+                        .ok();
+                    let list: Vec<Event> = match stored.as_deref().map(variant::to_qt) {
+                        Some(v) => v
+                            .value::<QList<QVariant>>()
+                            .map(|l| {
+                                l.iter()
+                                    .filter_map(|e| {
+                                        e.value::<QMap<QMapPair_QString_QVariant>>()
+                                            .map(|m| variant::map(&m))
+                                    })
+                                    .collect()
+                            })
+                            .unwrap_or_default(),
+                        None => Vec::new(),
+                    };
+                    qt.queue(move |mut obj| {
+                        obj.as_mut().rust_mut().list = list;
+                        CalendarRust::present(obj.as_mut());
+                        CalendarRust::remind(obj);
+                    })
+                    .ok();
+                    loop {
+                        async_io::Timer::after(Duration::from_secs(60)).await;
+                        qt.queue(CalendarRust::remind).ok();
+                    }
+                },
+                async {
+                    stopped.recv().await.ok();
+                },
+            )
+            .await;
         });
     }
 }
 
+type Qt = cxx_qt::CxxQtThread<Calendar>;
+
+async fn watch_synced(qt: &Qt) {
+    enum Change {
+        Refresh,
+        Denied,
+    }
+    let ready = async {
+        let changes = SYNCED.signals::<()>("EventsChanged").await?;
+        let grants = answers("PermissionGranted", "calendar").await?;
+        let denials = answers("PermissionDenied", "calendar").await?;
+        let revocations = answers("PermissionRevoked", "calendar").await?;
+        let dbus = zbus::fdo::DBusProxy::new(&io::session_bus().await?).await?;
+        let owners = dbus
+            .receive_name_owner_changed_with_args(&[(0, "org.marathonos.Dav")])
+            .await?;
+        let changes = changes
+            .map(|()| Change::Refresh)
+            .or(grants.map(|()| Change::Refresh))
+            .or(denials.map(|()| Change::Denied))
+            .or(revocations.map(|()| Change::Denied))
+            .or(owners.map(|_| Change::Refresh));
+        let mut changes = std::pin::pin!(changes);
+        qt.queue(Calendar::refresh_synced).ok();
+        while let Some(change) = changes.next().await {
+            match change {
+                Change::Refresh => {
+                    qt.queue(Calendar::refresh_synced).ok();
+                }
+                Change::Denied => {
+                    qt.queue(|mut obj| {
+                        let mut rust = obj.as_mut().rust_mut();
+                        rust.generation += 1;
+                        rust.synced = QList::default();
+                        rust.synced_state = QString::from("denied");
+                        obj.as_mut().synced_state_changed();
+                        CalendarRust::present(obj);
+                    })
+                    .ok();
+                }
+            }
+        }
+        Ok::<(), zbus::Error>(())
+    }
+    .await;
+    if let Err(error) = ready {
+        log::warn("Calendar", format_args!("calendar subscription: {error}"));
+        qt.queue(|mut obj| {
+            obj.as_mut().rust_mut().synced_state = QString::from("unavailable");
+            obj.synced_state_changed();
+        })
+        .ok();
+    }
+}
+
 impl Calendar {
+    fn refresh_synced(mut self: Pin<&mut Self>) {
+        self.as_mut().rust_mut().generation += 1;
+        let generation = self.generation;
+        self.as_mut().rust_mut().synced_state = QString::from("loading");
+        self.as_mut().synced_state_changed();
+        let qt = self.qt_thread();
+        io::spawn(async move {
+            let result = SYNCED.ask::<_, Vec<OwnedValue>>("ListEvents", &()).await;
+            qt.queue(move |mut obj| {
+                if obj.generation != generation {
+                    return;
+                }
+                let mut rust = obj.as_mut().rust_mut();
+                match result {
+                    Ok(events) => {
+                        rust.synced = variant::qlist(&events);
+                        rust.synced_state = QString::from("ready");
+                    }
+                    Err(error) => {
+                        let denied = match &error {
+                            zbus::Error::FDO(e) => {
+                                matches!(e.as_ref(), zbus::fdo::Error::AccessDenied(_))
+                            }
+                            zbus::Error::MethodError(name, _, _) => {
+                                name.as_str() == "org.freedesktop.DBus.Error.AccessDenied"
+                            }
+                            _ => false,
+                        };
+                        if denied {
+                            rust.synced = QList::default();
+                        }
+                        rust.synced_state =
+                            QString::from(if denied { "denied" } else { "unavailable" });
+                        log::warn("Calendar", format_args!("calendar cache: {error}"));
+                    }
+                }
+                obj.as_mut().synced_state_changed();
+                CalendarRust::present(obj);
+            })
+            .ok();
+        });
+    }
+
     fn create_event(
         mut self: Pin<&mut Self>,
         event: &QMap<QMapPair_QString_QVariant>,
@@ -274,6 +416,9 @@ impl Calendar {
 
     fn update_event(mut self: Pin<&mut Self>, event: &QMap<QMapPair_QString_QVariant>) -> bool {
         let mut event = normalized(event);
+        if matches!(event.get("readOnly"), Some(Value::Bool(true))) {
+            return false;
+        }
         let id = int(&event, "id");
         let Some(at) = self.list.iter().position(|e| int(e, "id") == id) else {
             return false;

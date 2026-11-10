@@ -8,7 +8,9 @@
 // its buttons go.
 
 import QtQuick
+import QtQuick.Layouts
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 import Shipwright.Pilot 1.0
 
 Glass {
@@ -55,11 +57,15 @@ Glass {
         onTriggered: clock.now = Date.now() / 1000
     }
 
-    Row {
+    GridLayout {
         width: parent.width
-        spacing: Theme.paddingLarge
+        columns: width < Theme.itemSizeHuge + Theme.buttonWidthSmall + Theme.paddingLarge ? 1 : 2
+        columnSpacing: Theme.paddingLarge
+        rowSpacing: Theme.paddingMedium
 
         Item {
+            Layout.alignment: Qt.AlignHCenter
+            Layout.preferredWidth: Theme.itemSizeHuge
             width: Theme.itemSizeHuge
             height: width
             ProgressCircleBase {
@@ -76,6 +82,7 @@ Glass {
                 }
             }
             Label {
+                textFormat: Text.PlainText
                 objectName: "timerLeft"
                 anchors.centerIn: parent
                 text: card.cancelled ? "–" : card.done ? qsTr("Done") : card.hms(card.remaining)
@@ -86,25 +93,26 @@ Glass {
         }
 
         Column {
-            width: parent.width - Theme.itemSizeHuge - Theme.paddingLarge
-            anchors.verticalCenter: parent.verticalCenter
+            Layout.fillWidth: true
             spacing: Theme.paddingSmall
 
             Label {
+                textFormat: Text.PlainText
                 width: parent.width
                 text: card.label.length > 0 ? card.label : qsTr("Timer")
-                truncationMode: TruncationMode.Fade
+                wrapMode: Text.Wrap
                 font.pixelSize: Theme.fontSizeLarge
                 color: Theme.highlightColor
             }
             Label {
+                textFormat: Text.PlainText
                 width: parent.width
                 wrapMode: Text.Wrap
                 font.pixelSize: Theme.fontSizeSmall
                 color: Theme.secondaryHighlightColor
                 text: card.cancelled ? qsTr("Cancelled") : card.done ? qsTr("Finished") : qsTr("Ends at %1").arg(Format.formatDate(new Date(card.endsAt * 1000), Formatter.TimeValue))
             }
-            Row {
+            Flow {
                 visible: card.live
                 width: parent.width
                 spacing: Theme.paddingMedium

@@ -46,8 +46,11 @@ Page {
             width: parent.width
 
             PageHeader {
+                objectName: "placeHeader"
                 title: root.place.name
                 description: Logic.placeKind(root.place.type)
+                wrapMode: Text.Wrap
+                descriptionWrapMode: Text.Wrap
             }
             DetailItem {
                 objectName: "addressItem"

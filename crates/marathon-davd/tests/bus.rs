@@ -3,10 +3,12 @@
 #![allow(clippy::unwrap_used, reason = "tests")]
 
 use std::collections::HashMap;
+use std::time::Duration;
 
+use futures_lite::StreamExt;
 use marathon_rt::testing::PrivateBus;
-use zbus::Connection;
-use zbus::OwnedVariant as OwnedValue;
+use zbus::{Connection, MatchRule, MessageStream};
+use zbus::{OwnedVariant as OwnedValue, Variant};
 
 const BUS: &str = "org.marathonos.Dav";
 
@@ -32,6 +34,53 @@ async fn call<R: serde::de::DeserializeOwned + zbus::Type>(
 
 fn text(row: &HashMap<String, OwnedValue>, key: &str) -> String {
     String::try_from(row[key].try_clone().unwrap()).unwrap()
+}
+
+#[test]
+fn sync_state_changes_reach_the_native_state_mirror() {
+    let Some(mut bus) = PrivateBus::start() else {
+        return;
+    };
+    let home = tempfile::tempdir().unwrap();
+    async_io::block_on(async {
+        let _shell = bus.shell(&[]).await.unwrap();
+        bus.run(env!("CARGO_BIN_EXE_marathon-davd"), home.path(), BUS)
+            .await
+            .unwrap();
+        let app = bus.connect().await.unwrap();
+        let rule = MatchRule::builder()
+            .msg_type(zbus::message::Type::Signal)
+            .sender(BUS)
+            .path("/org/marathonos/Shell/Dav")
+            .interface("org.marathonos.Shell.Dav1")
+            .member("StateChanged")
+            .build()
+            .unwrap();
+        let mut changes = MessageStream::for_match_rule(rule, &app, None)
+            .await
+            .unwrap();
+        call::<()>(&app, "Dav", "SyncNow", &()).await.unwrap();
+        for syncing in [true, false] {
+            let message = futures_lite::future::or(async { changes.next().await }, async {
+                async_io::Timer::after(Duration::from_secs(10)).await;
+                None
+            })
+            .await
+            .unwrap()
+            .unwrap();
+            // Match Marathon.Platform's real mirror: one a{sv} body, not an
+            // invalidation that would need a polling workaround.
+            let state: HashMap<String, OwnedValue> = message.body().deserialize().unwrap();
+            assert_eq!(bool::try_from(&state["syncing"]).unwrap(), syncing);
+            assert_eq!(text(&state, "lastError"), "");
+            if !syncing {
+                assert!(i64::try_from(&state["lastSyncMs"]).unwrap() > 0);
+                let read: HashMap<String, OwnedValue> =
+                    call(&app, "Dav", "GetState", &()).await.unwrap();
+                assert_eq!(state, read);
+            }
+        }
+    });
 }
 
 #[test]
@@ -69,6 +118,39 @@ fn the_address_book_answers_permitted_callers() {
                 .await
                 .unwrap();
         assert!(!none.contains_key("name"));
+
+        // As QML's contact editor sends it: av of a{sv}.
+        let entry = |kind: &str, value: &str| {
+            Variant::from(HashMap::from([
+                ("type".to_owned(), Variant::from(kind.to_owned())),
+                ("value".to_owned(), Variant::from(value.to_owned())),
+            ]))
+        };
+        let details = HashMap::from([
+            ("name".to_owned(), Variant::from("Sam Rivera")),
+            (
+                "phones".to_owned(),
+                Variant::from(vec![
+                    entry("mobile", "+1 555 0002"),
+                    entry("work", "+1 555 0003"),
+                ]),
+            ),
+            ("note".to_owned(), Variant::from("Met at the conference")),
+        ]);
+        let id: i32 = call(&app, "Contacts", "CreateContact", &(details,))
+            .await
+            .unwrap();
+        let sam: HashMap<String, OwnedValue> =
+            call(&app, "Contacts", "GetContactByNumber", &("15550003",))
+                .await
+                .unwrap();
+        assert_eq!(i32::try_from(&sam["id"]).unwrap(), id);
+        assert_eq!(text(&sam, "phone"), "+1 555 0002");
+        assert_eq!(text(&sam, "note"), "Met at the conference");
+        let phones =
+            Vec::<HashMap<String, OwnedValue>>::try_from(sam["phones"].try_clone().unwrap())
+                .unwrap();
+        assert_eq!(text(&phones[1], "type"), "work");
         assert!(home
             .path()
             .join("data/Marathon OS/Marathon Shell/marathon/contacts/Maya_Chen_1.vcf")
@@ -77,5 +159,93 @@ fn the_address_book_answers_permitted_callers() {
         let refused = call::<Vec<OwnedValue>>(&app, "Dav", "ListAccounts", &()).await;
         assert!(matches!(refused, Err(zbus::Error::FDO(error))
             if matches!(error.as_ref(), zbus::fdo::Error::AccessDenied(text) if text == "Missing permission: system")));
+    });
+}
+
+#[test]
+fn the_calendar_feed_hides_disabled_accounts_and_requires_calendar_permission() {
+    let Some(mut bus) = PrivateBus::start() else {
+        return;
+    };
+    let home = tempfile::tempdir().unwrap();
+    let data = home.path().join("data/Marathon OS/Marathon Shell/marathon");
+    std::fs::create_dir_all(&data).unwrap();
+    std::fs::write(data.join("dav-accounts.json"),
+        r#"{"accounts":[{"id":"account-a","displayName":"Personal","enabled":true,"collectionsCalendar":["https://calendar.example/events/"]}]}"#).unwrap();
+    async_io::block_on(async {
+        let _shell = bus.shell(&[]).await.unwrap();
+        bus.run(env!("CARGO_BIN_EXE_marathon-davd"), home.path(), BUS)
+            .await
+            .unwrap();
+        let app = bus.connect().await.unwrap();
+        // Write a cached provider row after the real daemon creates its schema.
+        let database = rusqlite::Connection::open(data.join("dav-events.db")).unwrap();
+        database
+            .execute(
+                "INSERT INTO calendar_events VALUES (?1, ?2, ?3, ?4, '', ?5, '', ?6, ?7, 0, '', 0)",
+                rusqlite::params![
+                    "account-a",
+                    "https://calendar.example/events/",
+                    "event.ics",
+                    "event-uid",
+                    "Dentist",
+                    1_792_490_400_000i64,
+                    1_792_491_300_000i64
+                ],
+            )
+            .unwrap();
+        let events: Vec<OwnedValue> = call(&app, "CalendarEvents", "ListEvents", &())
+            .await
+            .unwrap();
+        assert_eq!(events.len(), 1);
+        let event =
+            HashMap::<String, OwnedValue>::try_from(events.into_iter().next().unwrap()).unwrap();
+        assert_eq!(text(&event, "title"), "Dentist");
+        assert_eq!(text(&event, "accountLabel"), "Personal");
+        assert_eq!(text(&event, "source"), "caldav");
+        assert!(bool::try_from(&event["readOnly"]).unwrap());
+        assert!(text(&event, "id").contains("account-a"));
+
+        call::<()>(&app, "Dav", "EnableAccount", &("account-a", false))
+            .await
+            .unwrap();
+        let hidden: Vec<OwnedValue> = call(&app, "CalendarEvents", "ListEvents", &())
+            .await
+            .unwrap();
+        assert_eq!(hidden, Vec::<OwnedValue>::new());
+        call::<()>(&app, "Dav", "EnableAccount", &("account-a", true))
+            .await
+            .unwrap();
+        let restored: Vec<OwnedValue> = call(&app, "CalendarEvents", "ListEvents", &())
+            .await
+            .unwrap();
+        assert_eq!(restored.len(), 1);
+        assert!(call::<bool>(&app, "Dav", "RemoveAccount", &("account-a",))
+            .await
+            .unwrap());
+        let removed: Vec<OwnedValue> = call(&app, "CalendarEvents", "ListEvents", &())
+            .await
+            .unwrap();
+        assert_eq!(removed, Vec::<OwnedValue>::new());
+    });
+
+    let Some(mut refused_bus) = PrivateBus::start() else {
+        return;
+    };
+    let refused_home = tempfile::tempdir().unwrap();
+    async_io::block_on(async {
+        let _shell = refused_bus.shell(&["calendar"]).await.unwrap();
+        refused_bus
+            .run(
+                env!("CARGO_BIN_EXE_marathon-davd"),
+                refused_home.path(),
+                BUS,
+            )
+            .await
+            .unwrap();
+        let app = refused_bus.connect().await.unwrap();
+        let refused = call::<Vec<OwnedValue>>(&app, "CalendarEvents", "ListEvents", &()).await;
+        assert!(matches!(refused, Err(zbus::Error::FDO(error))
+            if matches!(error.as_ref(), zbus::fdo::Error::AccessDenied(text) if text == "Missing permission: calendar")));
     });
 }

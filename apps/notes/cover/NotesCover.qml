@@ -43,6 +43,7 @@ CoverBackground {
             spacing: Theme.paddingSmall
 
             Label {
+                textFormat: Text.PlainText
                 objectName: "coverNoteTitle"
                 width: parent.width
                 text: cover.latest ? Store.titleOf(Store.text(cover.latest)) || qsTr("Untitled") : ""
@@ -55,6 +56,7 @@ CoverBackground {
                 color: Theme.highlightColor
             }
             Label {
+                textFormat: Text.PlainText
                 objectName: "coverNoteBody"
                 width: parent.width
                 text: cover.lines.join("\n").trim()

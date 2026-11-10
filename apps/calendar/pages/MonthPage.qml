@@ -37,6 +37,12 @@ Page {
 
         PullDownMenu {
             MenuItem {
+                objectName: "reloadCalendarsItem"
+                text: qsTr("Reload account calendars")
+                enabled: page.app.syncedState !== "loading"
+                onClicked: page.app.refreshSynced()
+            }
+            MenuItem {
                 objectName: "agendaItem"
                 text: qsTr("All events")
                 onClicked: pageStack.push(Qt.resolvedUrl("AgendaPage.qml"), {
@@ -72,52 +78,83 @@ Page {
                 objectName: "monthHeader"
                 title: Qt.locale().standaloneMonthName(page.date.getMonth())
                 description: page.date.getFullYear()
-            }
-
-            DatePicker {
-                id: picker
-
-                objectName: "datePicker"
-                width: parent.width
-                // Without the week column the margins let the next month peek in.
-                leftMargin: 0
-                rightMargin: 0
-                // Six weeks fit on a short screen.
-                cellHeight: Math.min(cellWidth, Math.floor((page.height - header.height - dayRowHeight) / 6))
-                daysVisible: true
-                weeksVisible: false
-                monthYearVisible: false
-                delegate: Component {
-                    DayCell {
-                        picker: picker
-                        events: page.app.events
-                    }
-                }
-            }
-
-            SectionHeader {
-                objectName: "dayHeader"
-                text: page.showingToday ? qsTr("Today") : Format.formatDate(page.date, Formatter.DateLong)
-            }
-
-            Repeater {
-                objectName: "dayEvents"
-                model: page.dayEvents
-
-                EventItem {
-                    app: page.app
-                }
+                wrapMode: Text.Wrap
             }
 
             Label {
-                objectName: "noEvents"
+                id: loadNotice
+
+                objectName: "calendarLoadNotice"
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * Theme.horizontalPageMargin
-                visible: page.dayEvents.length === 0
-                text: qsTr("No events")
-                horizontalAlignment: Text.AlignHCenter
-                color: Theme.secondaryHighlightColor
+                visible: page.app.syncedState === "unavailable" || page.app.syncedState === "denied"
+                text: page.app.syncedState === "denied" ? qsTr("Calendar permission is needed to show account events.") : qsTr("Account calendars couldn’t refresh. Showing the events already loaded.")
                 wrapMode: Text.Wrap
+                color: Theme.secondaryColor
+                font.pixelSize: Theme.fontSizeSmall
+            }
+
+            // Use two panes only when both retain readable day and event widths.
+            Grid {
+                id: body
+
+                readonly property real minimumPaneWidth: Math.max(7 * Theme.itemSizeSmall, 14 * Theme.fontSizeMedium + 2 * Theme.horizontalPageMargin)
+                readonly property bool sideBySide: page.width > page.height && width >= 2 * minimumPaneWidth
+
+                width: parent.width
+                columns: sideBySide ? 2 : 1
+
+                DatePicker {
+                    id: picker
+
+                    readonly property int fillHeight: Math.floor((page.height - header.height - (loadNotice.visible ? loadNotice.height : 0) - dayRowHeight - Theme.paddingLarge) / 6)
+
+                    objectName: "datePicker"
+                    width: body.sideBySide ? body.width / 2 : body.width
+                    // Without the week column the margins let the next month peek in.
+                    leftMargin: 0
+                    rightMargin: 0
+                    // A short screen scrolls instead of shrinking day targets or text.
+                    cellHeight: Math.max(Theme.itemSizeSmall, Theme.fontSizeMedium + 2 * Theme.paddingMedium, body.sideBySide ? fillHeight : Math.min(cellWidth, fillHeight))
+                    daysVisible: true
+                    weeksVisible: false
+                    monthYearVisible: false
+                    delegate: Component {
+                        DayCell {
+                            picker: picker
+                            events: page.app.events
+                        }
+                    }
+                }
+
+                Column {
+                    width: body.width - (body.sideBySide ? picker.width : 0)
+
+                    SectionHeader {
+                        objectName: "dayHeader"
+                        text: page.showingToday ? qsTr("Today") : Format.formatDate(page.date, Formatter.DateLong)
+                    }
+
+                    Repeater {
+                        objectName: "dayEvents"
+                        model: page.dayEvents
+
+                        EventItem {
+                            app: page.app
+                        }
+                    }
+
+                    Label {
+                        objectName: "noEvents"
+                        x: Theme.horizontalPageMargin
+                        width: parent.width - 2 * Theme.horizontalPageMargin
+                        visible: page.dayEvents.length === 0
+                        text: qsTr("No events")
+                        horizontalAlignment: Text.AlignHCenter
+                        color: Theme.secondaryHighlightColor
+                        wrapMode: Text.Wrap
+                    }
+                }
             }
         }
 

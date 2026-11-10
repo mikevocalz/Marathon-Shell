@@ -80,6 +80,39 @@ TestCase {
         compare(app.currentSession.starts, 2);
     }
 
+    function test_failedSessionHasAKeyboardRestartAction() {
+        const app = makeApp();
+        app.currentSession.running = false;
+        app.currentSession.failed = true;
+        compare(item(app, "sessionStatus").text, "Couldn't start this session");
+        const restart = item(app, "restartButton");
+        verify(restart.visible);
+        restart.forceActiveFocus();
+        keyClick(Qt.Key_Return);
+        compare(app.currentSession.starts, 2);
+        tryVerify(() => app.pageStack.currentPage.currentView.activeFocus || item(app, "renderer").activeFocus);
+    }
+
+    function test_longSessionTitleStaysPlainAndSelectsItsOwnSession() {
+        const app = makeApp();
+        app.sessions[0].title = "<b>Build session with a long working directory and command</b>";
+        app.newSession();
+        app.width = 320;
+        item(app, "sessionsItem").clicked();
+        const page = pushed(app, 2);
+        const list = findChild(page, "sessionList");
+        tryVerify(() => list.itemAtIndex(0) !== null);
+        const row = list.itemAtIndex(0);
+        const label = findChild(row, "summaryText");
+        compare(label.textFormat, Text.PlainText);
+        verify(!label.truncated);
+        verify(label.lineCount > 1);
+        row.forceActiveFocus();
+        keyClick(Qt.Key_Return);
+        compare(app.currentIndex, 0);
+        pushed(app, 1);
+    }
+
     function test_newSessionFromMenu() {
         const app = makeApp();
         openMenu(app);

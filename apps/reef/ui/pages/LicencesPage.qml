@@ -6,6 +6,7 @@
 
 import QtQuick
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 import Shipwright.Reef 1.0
 import "../components/Texts.js" as Texts
 
@@ -64,7 +65,7 @@ Page {
                 wrapMode: Text.Wrap
                 color: Theme.errorColor
                 font.pixelSize: Theme.fontSizeSmall
-                text: Texts.message(Reef.lastError)
+                text: Texts.message(Texts.withoutCatalogue(Reef.lastError))
             }
         }
 

@@ -81,6 +81,20 @@ TestCase {
         compare(app.photos.length, 3);
     }
 
+    function test_imageRouteOpensThePhotoOnceListed() {
+        const app = makeApp([photo(1, "Trip")]);
+        const shot = photo(2, "Screenshots");
+        app.openRoute("/image", JSON.stringify({
+            path: shot.path.replace("file://", "")
+        }));
+        compare(app.pendingUrl, shot.path);
+        MediaLibrary.photos = [photo(1, "Trip"), shot];
+        MediaLibrary.libraryChanged();
+        tryCompare(app.pageStack, "busy", false);
+        compare(app.pendingUrl, "");
+        compare(app.pageStack.currentPage.photo.path, shot.path);
+    }
+
     function test_refreshesWhenLibraryChanges() {
         const app = makeApp(threePhotos());
         MediaLibrary.photos = [photo(7, "Trip")];
@@ -115,13 +129,39 @@ TestCase {
         verify(findChild(app.pageStack.currentPage, "placeholder").enabled);
     }
 
-    function test_rowsLeadWithTheItemCount() {
+    function test_rowsDescribeTheirMediaCounts() {
         const app = makeApp(threePhotos(), [video(2)]);
         const list = findChild(app.pageStack.currentPage, "collections");
         tryCompare(list, "count", 4);
         tryVerify(() => list.itemAtIndex(1) !== null);
-        compare(findChild(list.itemAtIndex(0), "rowCount").text, "4");
-        compare(findChild(list.itemAtIndex(1), "rowCount").text, "1");
+        compare(findChild(list.itemAtIndex(0), "rowCount").text, "3 photos · 1 video");
+        compare(findChild(list.itemAtIndex(1), "rowCount").text, "1 video");
+    }
+
+    function test_longAlbumNameGrowsWithoutChangingTheAlbum() {
+        const app = makeApp(threePhotos());
+        app.width = 320;
+        MediaLibrary.albums = [
+            {
+                id: "Trip",
+                name: "<b>A long album title with a family trip and many more words</b>",
+                photoCount: 2
+            }
+        ];
+        MediaLibrary.libraryChanged();
+        const list = findChild(app.pageStack.currentPage, "collections");
+        tryCompare(list, "count", 2);
+        tryVerify(() => list.itemAtIndex(1) !== null);
+        const row = list.itemAtIndex(1);
+        const title = findChild(row, "collectionTitle");
+        title.font.pixelSize = Theme.fontSizeLarge;
+        tryVerify(() => title.lineCount > 1);
+        compare(title.textFormat, Text.PlainText);
+        verify(!title.truncated);
+        tryVerify(() => title.mapToItem(row, 0, title.height).y <= row.contentHeight);
+        row.clicked(null);
+        tryCompare(app.pageStack, "busy", false);
+        compare(app.pageStack.currentPage.albumId, "Trip");
     }
 
     function test_openingAlbumShowsItsPhotos() {
@@ -225,6 +265,7 @@ TestCase {
         const app = makeApp(threePhotos(), [video(2)]);
         const list = findChild(app.pageStack.currentPage, "collections");
         tryCompare(list, "count", 4);
+        compare(app.pageStack.currentPage.rowTitle(list.model[0]), "Photos & videos");
         compare(app.pageStack.currentPage.rowDetail(list.model[0]), "3 photos · 1 video");
         compare(app.pageStack.currentPage.rowTitle(list.model[1]), "Videos");
         compare(app.pageStack.currentPage.rowDetail(list.model[1]), "1 video");

@@ -10,6 +10,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
 import "../components/Texts.js" as Texts
 
 Page {
@@ -27,7 +28,7 @@ Page {
 
     Rectangle {
         anchors.fill: parent
-        color: Theme.darkPrimaryColor
+        color: ContentStyle.mediaBackground
     }
 
     SlideshowView {
@@ -93,7 +94,7 @@ Page {
                 leftMargin: Theme.horizontalPageMargin
             }
             visible: page.paths.length > 1
-            color: Theme.lightPrimaryColor
+            color: ContentStyle.mediaForeground
             font.pixelSize: Theme.fontSizeSmall
             text: qsTr("%1 of %2").arg(slides.currentIndex + 1).arg(page.paths.length)
         }

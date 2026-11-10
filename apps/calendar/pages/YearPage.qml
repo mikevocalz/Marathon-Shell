@@ -9,6 +9,7 @@ Page {
     property int year: new Date().getFullYear()
     readonly property date today: new Date()
     readonly property int weekStart: Qt.locale().firstDayOfWeek
+    readonly property real minimumMonthWidth: 7 * Math.ceil(widestDay.advanceWidth) + 2 * Theme.paddingSmall
 
     signal monthChosen(int year, int month)
 
@@ -16,12 +17,16 @@ Page {
         id: widestDay
 
         font.pixelSize: Theme.fontSizeTiny
+        font.family: Theme.fontFamily
         text: "28"
     }
 
     SilicaFlickable {
+        id: yearView
+
         objectName: "yearView"
         anchors.fill: parent
+        contentWidth: Math.max(width, page.minimumMonthWidth + 2 * Theme.paddingSmall)
         contentHeight: column.height + Theme.paddingLarge
 
         PullDownMenu {
@@ -46,7 +51,7 @@ Page {
         Column {
             id: column
 
-            width: parent.width
+            width: yearView.contentWidth
 
             PageHeader {
                 objectName: "yearHeader"
@@ -56,9 +61,10 @@ Page {
             Grid {
                 id: grid
 
-                x: Theme.horizontalPageMargin - Theme.paddingSmall
+                objectName: "yearGrid"
+                x: Math.min(Theme.horizontalPageMargin - Theme.paddingSmall, Math.max(Theme.paddingSmall, (parent.width - page.minimumMonthWidth) / 2))
                 width: parent.width - 2 * x
-                columns: 3
+                columns: Math.max(1, Math.min(3, Math.floor(width / (7 * widestDay.advanceWidth + 5 * Theme.paddingSmall))))
                 rowSpacing: Theme.paddingLarge
 
                 Repeater {
@@ -73,7 +79,7 @@ Page {
                         readonly property int days: new Date(page.year, index + 1, 0).getDate()
                         readonly property bool current: page.today.getFullYear() === page.year && page.today.getMonth() === index
 
-                        width: grid.width / 3
+                        width: grid.width / grid.columns
                         height: monthTitle.height + miniDays.height + 2 * Theme.paddingSmall
                         Accessible.name: Qt.locale().standaloneMonthName(index) + " " + page.year
                         onClicked: page.monthChosen(page.year, index)
@@ -83,7 +89,9 @@ Page {
 
                             x: Theme.paddingSmall
                             y: Theme.paddingSmall
+                            width: parent.width - 2 * x
                             text: Qt.locale().standaloneMonthName(monthCell.index, Locale.ShortFormat)
+                            wrapMode: Text.Wrap
                             color: monthCell.current || monthCell.highlighted ? Theme.highlightColor : Theme.primaryColor
                             font.pixelSize: Theme.fontSizeMedium
                         }
@@ -91,6 +99,7 @@ Page {
                         Grid {
                             id: miniDays
 
+                            objectName: "miniDays"
                             anchors {
                                 top: monthTitle.bottom
                                 left: parent.left
@@ -98,7 +107,7 @@ Page {
                                 margins: Theme.paddingSmall
                             }
                             columns: 7
-                            columnSpacing: Theme.paddingSmall / 2
+                            columnSpacing: Math.min(Theme.paddingSmall / 2, Math.max(0, (width - 7 * widestDay.advanceWidth) / 6))
 
                             Repeater {
                                 model: 42
@@ -111,7 +120,7 @@ Page {
                                     width: (miniDays.width - 6 * miniDays.columnSpacing) / 7
                                     horizontalAlignment: Text.AlignHCenter
                                     text: day >= 1 && day <= monthCell.days ? day : ""
-                                    font.pixelSize: Math.min(Theme.fontSizeTiny, Math.floor(Theme.fontSizeTiny * width / widestDay.width))
+                                    font.pixelSize: Theme.fontSizeTiny
                                     color: isToday ? Theme.highlightColor : Theme.secondaryColor
                                 }
                             }
@@ -122,5 +131,6 @@ Page {
         }
 
         VerticalScrollDecorator {}
+        HorizontalScrollDecorator {}
     }
 }
