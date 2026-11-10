@@ -259,7 +259,7 @@ Page {
                 leftMargin: Theme.paddingMedium
                 rightMargin: Theme.paddingMedium
             }
-            columns: width >= 6 * (functionText.width + 2 * Theme.paddingMedium) ? 6 : width >= 4 * (functionText.width + 2 * Theme.paddingMedium) ? 4 : 3
+            columns: width >= 6 * (functionText.advanceWidth + 2 * Theme.paddingMedium) ? 6 : width >= 4 * (functionText.advanceWidth + 2 * Theme.paddingMedium) ? 4 : 3
 
             Repeater {
                 model: ["sin", "cos", "tan", "ln", "log", "!", "π", "e", "√", "x²", "mod", "ans"]

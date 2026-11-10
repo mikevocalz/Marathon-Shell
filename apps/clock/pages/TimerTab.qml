@@ -108,7 +108,7 @@ TabItem {
                 x: Theme.horizontalPageMargin
                 width: parent.width - 2 * Theme.horizontalPageMargin
                 visible: root.idle
-                columns: Math.max(1, Math.min(3, Math.floor((width + spacing) / (presetText.width + 2 * Theme.paddingLarge + spacing))))
+                columns: Math.max(1, Math.min(3, Math.floor((width + spacing) / (presetText.advanceWidth + 2 * Theme.paddingLarge + spacing))))
                 spacing: Theme.paddingMedium
 
                 TextMetrics {

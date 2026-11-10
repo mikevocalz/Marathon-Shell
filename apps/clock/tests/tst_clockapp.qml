@@ -139,7 +139,7 @@ TestCase {
         compare(summary.textFormat, Text.PlainText);
         verify(summary.text.indexOf(label) === 0);
         verify(row.contentHeight > Theme.itemSizeLarge);
-        verify(summary.mapToItem(row, 0, summary.height).y <= row.contentHeight);
+        tryVerify(() => summary.mapToItem(row, 0, summary.height).y <= row.contentHeight, 3000, "alarm summary must fit inside the grown row");
         row.clicked(null);
         compare(app.alarms[0].id, id);
         compare(app.alarms[0].enabled, false);

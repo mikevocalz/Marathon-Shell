@@ -120,6 +120,9 @@ TabItem {
                 text: item.info.time
                 font.pixelSize: Theme.fontSizeLarge
                 font.family: Theme.fontFamily
+                font.features: ({
+                        "tnum": 1
+                    })
             }
             TextMetrics {
                 id: weekdayWidth
@@ -132,7 +135,7 @@ TabItem {
             Grid {
                 id: cityLayout
 
-                readonly property real timeColumnWidth: Math.ceil(Math.max(timeWidth.width, weekdayWidth.width))
+                readonly property real timeColumnWidth: Math.ceil(Math.max(timeWidth.advanceWidth, weekdayWidth.advanceWidth))
 
                 objectName: "cityLayout"
                 x: Theme.horizontalPageMargin
