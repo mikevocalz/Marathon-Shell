@@ -3,7 +3,7 @@
 //
 // SPDX-License-Identifier: BSD-3-Clause
 
-import QtQuick 2.0
+import QtQuick
 import Sailfish.Silica 1.0
 import Marathon.Silica 1.0
 

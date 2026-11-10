@@ -165,13 +165,19 @@ ApplicationWindow {
 
             Component.onCompleted: app.cameraPage = page
 
-            ViewPlaceholder {
-                objectName: "cameraUnavailable"
-                width: page.width
-                enabled: app.noCamera && page.captureModeActive
-                text: qsTr("No camera available")
-                hintText: qsTr("Camera couldn't find a supported device")
-                palette.colorScheme: Theme.LightOnDark
+            SilicaFlickable {
+                anchors.fill: parent
+                contentHeight: height
+                interactive: false
+                visible: app.noCamera && page.captureModeActive
+
+                ViewPlaceholder {
+                    objectName: "cameraUnavailable"
+                    enabled: app.noCamera && page.captureModeActive
+                    text: qsTr("No camera available")
+                    hintText: qsTr("Camera couldn't find a supported device")
+                    palette.colorScheme: Theme.LightOnDark
+                }
             }
 
             // Back to the viewfinder, and zoom reset, after a while away.

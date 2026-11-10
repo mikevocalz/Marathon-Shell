@@ -119,6 +119,8 @@ TestCase {
         app.camera.controller.hasCameras = false;
         app.camera.controller.discovered = true;
         verify(placeholder.enabled);
+        tryVerify(() => placeholder.visible && placeholder.opacity > 0);
+        verify(placeholder.width > 0 && placeholder.height > 0);
         compare(placeholder.text, "No camera available");
     }
 

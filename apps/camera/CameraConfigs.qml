@@ -18,16 +18,16 @@ QtObject {
     property Camera camera
 
     readonly property CameraController _controller: camera ? camera.controller : null
-    readonly property bool ready: !!camera && camera.configured
+    readonly property bool ready: !!camera && !!_controller && camera.configured
     // The software ISP debayers each frame the viewfinder (or a video) gets:
     // nothing over 1080 lines, or a 12 MP sensor's full frame is offered.
-    readonly property var supportedViewfinderResolutions: ready ? _controller.previewResolutions.filter(s => s.height <= 1080) : []
+    readonly property var supportedViewfinderResolutions: ready && _controller ? _controller.previewResolutions.filter(s => s.height <= 1080) : []
     // A photo is one debayered frame: none over 3072 lines (a 50 MP one).
-    readonly property var supportedImageResolutions: ready ? _controller.photoResolutions.filter(s => s.height <= 3072) : []
+    readonly property var supportedImageResolutions: ready && _controller ? _controller.photoResolutions.filter(s => s.height <= 3072) : []
     readonly property var supportedHighresImageResolutions: []
     readonly property var supportedVideoResolutions: supportedViewfinderResolutions
     readonly property var supportedFlashModes: {
-        if (!ready || !_controller.flashAvailable)
+        if (!ready || !_controller || !_controller.flashAvailable)
             return [];
         return camera.captureMode === Camera.CaptureVideo ? [Camera.FlashOff, Camera.FlashTorch] : [Camera.FlashOff, Camera.FlashOn];
     }
