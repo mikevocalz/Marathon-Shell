@@ -1,0 +1,64 @@
+import QtQuick
+import QtQuick.Window
+import QtTest
+import Sailfish.Silica 1.0
+import Marathon.Silica 1.0
+import MarathonOS.Services
+import "@REPO@/apps/email"
+
+TestCase {
+    id: testCase
+    name: "NativeReviewMail"
+    when: windowShown
+    visible: true
+    width: 320
+    height: 640
+
+    Component { id: storeComponent; QtObject { property var value: "" } }
+    Component { id: appComponent; EmailApp {} }
+@HELPERS@
+
+    function test_capture() {
+        MailService.reset();
+        MailService.setAccount("Design studio");
+        const sender = "Alex Morgan · International planning";
+        const subject = "Wednesday review: accessible layouts and next steps";
+        MailService.addMessage(71, sender, subject, true, {
+            snippet: "The attached agenda includes the compact-screen review and follow-up owners.",
+            hasAttachment: true,
+            timestamp: "09:30"
+        });
+        MailService.addMessage(72, sender, subject, false, {
+            snippet: "An earlier message from the same sender. Its source identity is different.",
+            timestamp: "Yesterday"
+        });
+        MailService.addMessage(73, "Community workshop", "Saturday's schedule is ready", true, {
+            snippet: "Doors open at 10:00. Bring a notebook and your questions.", timestamp: "Monday"
+        });
+        MailService.bodies = {
+            "71": { subject: subject, from: sender + " <alex@example.org>",
+                to: ["review.team@example.org"], date: new Date("2026-11-10T09:30:00Z"),
+                bodyPlain: "Hello team,\n\nPlease review the compact layouts before Wednesday's meeting. The full sender, recipient and attachment names should remain readable.\n\nThe next step is to agree the follow-up owners.\n\nAlex",
+                attachments: [{ name: "Wednesday review — accessibility and follow-up agenda.pdf", size: 231424, location: "review-agenda" }] },
+            "72": { subject: subject, from: sender, to: ["earlier.thread@example.org"], bodyPlain: "Different source message." }
+        };
+        const app = createTemporaryObject(appComponent, testCase, {
+            width: 320, height: 640, draftStore: createTemporaryObject(storeComponent, testCase)
+        });
+        verify(app);
+        tryVerify(() => app.pageStack.currentPage !== null && !app.pageStack.busy);
+        const list = findChild(app.pageStack.currentPage, "messageView");
+        tryCompare(list, "count", 3);
+        let first = null;
+        tryVerify(() => (first = list.itemAtIndex(0)) !== null);
+        capture(app, "mail-inbox-320x640", 320, 640);
+        first.forceActiveFocus();
+        keyClick(Qt.Key_Return);
+        tryVerify(() => app.pageStack.depth === 2 && !app.pageStack.busy);
+        const message = app.pageStack.currentPage;
+        tryCompare(message, "loadState", "ready");
+        compare(message.messageId, "71");
+        compare(message.toList, ["review.team@example.org"]);
+        capture(app, "mail-source-720x720", 720, 720);
+    }
+}
