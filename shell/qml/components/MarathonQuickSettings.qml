@@ -56,7 +56,7 @@ Item {
         blurMax: MBlur.xl
         saturation: 0.8
         brightness: -0.05
-        tint: Qt.rgba(0, 0, 0, 0.5)
+        tint: MColors.scrim(0.5)
     }
 
     // The drawn height: follows UIStore while a finger drags the shade and
@@ -350,9 +350,9 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: 1
+        anchors.bottomMargin: height
         height: 1
-        color: Qt.rgba(0, 0, 0, 0.45)
+        color: MColors.scrim(0.45)
         z: 2
     }
 

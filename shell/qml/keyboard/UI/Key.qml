@@ -91,7 +91,7 @@ Rectangle {
         y: -height - Math.round(10 * Constants.scaleFactor)
         z: 1000
         radius: Silica.Theme.paddingMedium
-        color: Qt.rgba(0, 0, 0, 0.9)
+        color: MColors.scrim(0.9)
 
         Text {
             text: key.displayText
@@ -130,7 +130,7 @@ Rectangle {
             width: alternatePopup.popupWidth
             height: key.height + 2 * alternatePopup.padding
             radius: Silica.Theme.paddingMedium
-            color: Qt.rgba(0, 0, 0, 0.9)
+            color: MColors.scrim(0.9)
 
             Row {
                 anchors.centerIn: parent

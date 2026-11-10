@@ -275,7 +275,7 @@ Item {
     // The ambience, blurred and dimmed, behind the lock code.
     Rectangle {
         anchors.fill: parent
-        color: Qt.rgba(0, 0, 0, 0.45)
+        color: MColors.scrim(0.45)
         z: 2
     }
 

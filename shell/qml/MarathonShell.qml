@@ -1650,7 +1650,7 @@ Item {
     Rectangle {
         anchors.fill: parent
         z: Constants.zIndexAppWindow
-        color: "black"
+        color: MColors.contentBackground
         visible: appWindow.zooming || appWindowContainer.dock > 0
         opacity: appWindow.zooming ? 0.5 * appWindow.zoom : 0.5 * (1 - appWindowContainer.dock)
     }
@@ -2107,7 +2107,7 @@ Item {
 
         Rectangle {
             anchors.fill: parent
-            color: "#000000"
+            color: MColors.contentBackground
             opacity: 0.3 * Math.min(1, quickSettings.drawnHeight / Math.max(1, shell.quickSettingsThreshold))
         }
     }
@@ -2947,7 +2947,7 @@ Item {
         }
 
         anchors.fill: parent
-        color: "white"
+        color: MColors.contentForeground
         opacity: 0
         z: Constants.zIndexModalOverlay + 200
 
@@ -3164,19 +3164,19 @@ Item {
         anchors.top: parent.top
         anchors.right: parent.right
         anchors.topMargin: Constants.statusBarHeight + 4
-        anchors.rightMargin: 6
+        anchors.rightMargin: MSpacing.sm
         width: fpsLabel.implicitWidth + 14
         height: fpsLabel.implicitHeight + 8
-        radius: 5
-        color: "#cc000000"
+        radius: MRadius.md
+        color: MColors.scrim(0.8)
 
         Text {
             id: fpsLabel
 
             anchors.centerIn: parent
             text: (typeof fpsMonitor !== "undefined" ? fpsMonitor.fps.toFixed(0) : "0") + " fps"  // i18n: not user-facing
-            font.pixelSize: 15
-            font.family: "monospace"
+            font.pixelSize: MTypography.diagnosticSize
+            font.family: MTypography.monospaceFamily
             color: {
                 if (typeof fpsMonitor === "undefined")
                     return "#ffffff";
@@ -3201,7 +3201,7 @@ Item {
 
         anchors.fill: parent
         z: 99990
-        color: "black"
+        color: MColors.contentBackground
         visible: typeof MarathonBootHandover !== "undefined" && MarathonBootHandover && opacity > 0
 
         Image {
@@ -3214,9 +3214,9 @@ Item {
         Text {
             // Plymouth's "Sans 14" in its font (Plymouth.ttf, Sora) at 96 dpi.
             text: "M A R A T H O N" // i18n: literal
-            color: "white"
-            font.family: "Sora"
-            font.pixelSize: 19
+            color: MColors.contentForeground
+            font.family: MTypography.bootHandoverFamily
+            font.pixelSize: MTypography.bootHandoverSize
             x: Math.round(parent.width / 2 - width / 2)
             y: Math.round(parent.height / 2 + bootLogo.height / 2 - 24)
         }

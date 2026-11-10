@@ -1,6 +1,7 @@
 pragma Singleton
 import QtQuick
 import Sailfish.Silica 1.0 as Silica
+import Marathon.Silica 1.0 as NativeStyle
 
 QtObject {
     property FontLoader _phosphorThin: FontLoader {
@@ -14,6 +15,13 @@ QtObject {
 
     // Default family for callers that don't care about weight.
     readonly property string fontFamily: Silica.Theme.fontFamily
+    readonly property string monospaceFamily: NativeStyle.ContentStyle.monospaceFamily
+    readonly property string emojiFamily: "Noto Color Emoji"
+    readonly property int emojiSize: Math.round(28 * unit)
+    readonly property int diagnosticSize: Math.round(15 * unit)
+    // These match Plymouth's handover frame at 96 dpi, before shell scaling.
+    readonly property string bootHandoverFamily: "Sora"
+    readonly property int bootHandoverSize: 19
 
     // ── Type scale — design-system roles ──────────────────────
     // Body is Silica's body size; the other roles keep their ratio to it,

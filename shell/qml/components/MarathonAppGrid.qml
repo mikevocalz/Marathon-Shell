@@ -419,7 +419,7 @@ Item {
         id: iconGrid
 
         anchors.fill: parent
-        anchors.topMargin: 10
+        anchors.topMargin: MSpacing.sm
         // The page margin every app and the dock use, so the outer columns
         // line up with the rest of the UI instead of running to the edges.
         anchors.leftMargin: Silica.Theme.horizontalPageMargin
@@ -734,7 +734,7 @@ Item {
 
         Rectangle {
             anchors.fill: parent
-            color: "black"
+            color: MColors.contentBackground
             opacity: appGrid.editing ? 0.28 : 0
             visible: opacity > 0
 

@@ -30,7 +30,7 @@ Item {
     property real blurMultiplier: 1.0
     property real saturation: 0.5
     property real brightness: -0.1
-    property color tint: Qt.rgba(0, 0, 0, 0.2)
+    property color tint: MColors.scrim(0.2)
     // False when the layers cannot change underneath (a frozen app under the
     // lock screen): they are captured and blurred once.
     property bool live: true

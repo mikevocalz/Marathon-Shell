@@ -253,7 +253,7 @@ Item {
 
         Rectangle {
             anchors.fill: parent
-            color: "black"
+            color: MColors.contentBackground
             visible: lockWallpaper.status !== Image.Ready
         }
         Image {
@@ -281,7 +281,7 @@ Item {
             blurMax: MBlur.xl
             saturation: 0.4
             brightness: -0.15
-            tint: Qt.rgba(0, 0, 0, 0.25)
+            tint: MColors.scrim(0.25)
             // The lock screen sits over an app that has been frozen by
             // AppLifecycleManager — its surface texture does not change.
             // Sample once, then stop.

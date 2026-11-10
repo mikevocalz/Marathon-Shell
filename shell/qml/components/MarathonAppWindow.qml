@@ -390,7 +390,7 @@ Rectangle {
         readonly property bool showing: appWindow.isLoadingComponent && !appWindow.hasError && !(appWindow.waylandSurface && appContentLoader.status === Loader.Ready && appWindow.appContainer && appWindow.appContainer["appInstance"] && appWindow.appContainer["appInstance"].revealReady === true)
 
         anchors.fill: parent
-        color: "black"
+        color: MColors.contentBackground
         // Cross-fades into the app's first frame.
         opacity: showing ? 1 : 0
         visible: opacity > 0
@@ -495,7 +495,7 @@ Rectangle {
         id: errorState
 
         anchors.fill: parent
-        color: "black"
+        color: MColors.contentBackground
         visible: appWindow.hasError
         z: 1001
 

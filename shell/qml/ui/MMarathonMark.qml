@@ -61,7 +61,7 @@ Item {
                     radius: width / 2
                     color: "transparent"
                     border.width: Math.round(root.haloRadius * 0.35)
-                    border.color: Qt.rgba(0.114, 0.749, 0.647, 0.22 - index * 0.07)
+                    border.color: Qt.rgba(MColors.brandGlow.r, MColors.brandGlow.g, MColors.brandGlow.b, 0.22 - index * 0.07)
                     antialiasing: true
                     z: -1
                 }
@@ -73,17 +73,17 @@ Item {
                 anchors.fill: parent
                 radius: width / 2
                 border.width: 1
-                border.color: Qt.rgba(1, 1, 1, 0.15)
+                border.color: MColors.onContent(0.15)
                 antialiasing: true
 
                 gradient: Gradient {
                     GradientStop {
                         position: 0
-                        color: "#1de9b6"
+                        color: MColors.brandStart
                     }
                     GradientStop {
                         position: 1
-                        color: root.monochrome ? "#1de9b6" : "#00bfa5"
+                        color: root.monochrome ? MColors.brandStart : MColors.brandEnd
                     }
                 }
 
@@ -105,7 +105,7 @@ Item {
 
                     ShapePath {
                         strokeWidth: -1
-                        fillColor: "#000"
+                        fillColor: MColors.contentBackground
                         PathSvg {
                             path: "M10 44V14h6l12 18 12-18h6v30h-6V24L28 40 16 24v20z"
                         }
@@ -121,7 +121,7 @@ Item {
             visible: root.showLabel
             anchors.horizontalCenter: parent.horizontalCenter
             text: "marathon"  // i18n: literal
-            color: root.monochrome ? "#040404" : "#fff"
+            color: root.monochrome ? MColors.background : MColors.contentForeground
             font.family: MTypography.fontFamily
             font.pixelSize: root.wordSize
             font.weight: Font.Light

@@ -104,7 +104,7 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        color: "black"
+        color: MColors.contentBackground
         opacity: peekComponent.peekProgress * 0.6
         visible: peekComponent.peekProgress > 0
 

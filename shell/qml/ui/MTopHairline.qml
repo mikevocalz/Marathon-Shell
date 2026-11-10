@@ -1,3 +1,4 @@
+import MarathonOS.Shell
 import QtQuick
 import QtQuick.Shapes
 
@@ -21,8 +22,8 @@ import QtQuick.Shapes
 Item {
     id: root
 
-    property color color: Qt.rgba(1, 1, 1, 0.15)
-    property real radius: 14
+    property color color: MColors.onContent(0.15)
+    property real radius: parent && parent.radius !== undefined ? parent.radius : MRadius.md
     property real lineWidth: 1
     property real inset: 1
 

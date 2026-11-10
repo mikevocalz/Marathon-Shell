@@ -235,7 +235,7 @@ Item {
             width: Math.floor(taskCard.coverSize.width)
             height: Math.floor(taskCard.coverSize.height)
             // Neutral dark glass: the highlight colours only mark text and state.
-            color: Qt.rgba(0, 0, 0, 0.55)
+            color: MColors.scrim(0.55)
             radius: Theme.paddingMedium
             antialiasing: true
             visible: !taskCard.docking
@@ -316,7 +316,7 @@ Item {
 
         Rectangle {
             anchors.fill: glass
-            anchors.margins: 1
+            anchors.margins: border.width
             z: 3
             radius: glass.radius - 1
             color: "transparent"
@@ -576,7 +576,7 @@ Item {
                                 Rectangle {
                                     anchors.fill: parent
                                     visible: surfaceTree.drawsInSubsurfaces
-                                    color: "black"
+                                    color: MColors.contentBackground
                                     radius: glass.radius
                                 }
 

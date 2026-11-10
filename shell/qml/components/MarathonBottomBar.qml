@@ -89,7 +89,7 @@ Item {
             }
             GradientStop {
                 position: 1
-                color: Qt.rgba(0, 0, 0, 0.6)
+                color: MColors.scrim(0.6)
             }
         }
     }
