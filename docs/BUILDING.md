@@ -233,7 +233,7 @@ build host, not the device.
 This sequence copies the required packages and updates the optional
 browser or test app only when it is already installed:
 
-```sh
+```bash
 device=user@marathon.local
 apk_dir="$DURANIUM_DIR/mkosi.packages"
 shell_version=$(set +u; . packaging/packages/marathon-shell/APKBUILD; printf '%s-r%s' "$pkgver" "$pkgrel")

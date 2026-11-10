@@ -10,6 +10,9 @@ The capture tool is a visual review aid. The native interaction gate remains the
 behavioral test authority; these eight images do not establish that every state,
 translation, accessibility setting or device has been visually reviewed.
 
+The [10 November 2026 review](2026-11-10/README.md) contains the eight final
+captures, observed fixes and source/runtime provenance.
+
 ## Reproduce the review set
 
 Build the real modules and icon bundle described in

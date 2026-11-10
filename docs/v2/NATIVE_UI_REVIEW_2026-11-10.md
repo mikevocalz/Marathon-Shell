@@ -51,6 +51,11 @@ in the dedicated native CI job, not conditional on the compositor build.
 | Terminal | 64 | 76 | Pass |
 | Shared Marathon.Silica controls | 151 | 187 | Pass |
 
+The latest per-suite results total **1,361 behavioral rows / 1,571 Qt results**
+across the 16 apps and shared controls. This combines the complete runs with
+targeted repair reruns. The dedicated gate requires 27 CTest registrations,
+including the full product suites, shared controls and integration contracts.
+
 The full suites contain zero skipped cases. Separate shell tests cover Hub,
 PageViewHub, overview geometry, task switching, page indicators, keyboard keys
 and language selection. Native toolkit checks exercise actual module loading,
@@ -70,7 +75,11 @@ Current integration CI evidence is recorded on PR21.
 The reproducible native capture harness uses the production Mail, Phone,
 Notes and Pilot windows with synthetic fixture data. It checks page readiness,
 actual window dimensions and output images and records source/runtime
-provenance. Capture files and review findings accompany the PR.
+provenance. The [eight checked-in captures and visual findings](native-review/2026-11-10/README.md)
+include a [source/runtime manifest](native-review/2026-11-10/manifest.json).
+All fifteen selected source hashes, six aggregate input fingerprints and eight
+image hashes match the integrated source/evidence. The four capture functions
+passed twelve Qt results with zero failures or skips.
 
 | Profile | State and interaction | Evidence scope |
 | --- | --- | --- |
@@ -79,6 +88,30 @@ provenance. Capture files and review findings accompany the PR.
 | 1024 × 768 | Notes task/editor workspace and Pilot conversation/composer | Wider layout with the same task state |
 | Narrow → wide → narrow | Shared rows, headings/keypad; app rows, call controls, drafts and ambience selection | Native geometry, identity and focus regressions |
 | Reduced motion / scale changes | Shell task-page indicator and shared native controls | Live token scale 0.75/1/1.5/2 and final geometry |
+
+The compact Notes capture is a native huge-text stress case. It deliberately
+shows a long task continuing below the viewport, including long-word wrapping;
+it does not represent the default text size. The final visual review confirmed
+intact Phone action names, useful Pilot editing space, distinct numbers for
+duplicate contact names, complete Mail source/attachment identity and a Notes
+workspace without overlap.
+
+## Installed runtime and package propagation
+
+`marathon-silica` ships the common controls independently of the shell and pulls
+in its matching icon package. Shell, Pilot and Reef declare that shared runtime.
+Release staging, image caches, manual device installs and QML hot deployment now
+include the runtime and icons. Keel is built first and retains its separate
+package version. Optional browser/test packages are updated only when already
+installed by the development-device script.
+
+Fourteen focused checks exercised the actual cache, release-staging and device
+installation scripts with temporary artifacts and intercepted external commands.
+All passed. Production CMake installation rules staged QML and icons; actual
+Qt/Keel loaded shared controls and an icon from that installed tree without
+shell/source QML imports (two behavioral rows, four total results, zero failures
+or skips). No deployment was performed. Full Alpine APK construction and image
+boot were not run locally because this host has no Podman.
 
 ## Findings fixed during native verification
 
