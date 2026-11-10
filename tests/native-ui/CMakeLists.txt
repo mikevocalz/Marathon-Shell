@@ -81,13 +81,6 @@ else()
     set_tests_properties(Qml_apps_notes_tests PROPERTIES LABELS "native-ui-required"
         FIXTURES_REQUIRED NativeKeel TIMEOUT 180
         ENVIRONMENT "KEEL_QML=${KEEL_QML};QMLTESTRUNNER=${QMLTESTRUNNER}")
-    add_test(NAME Qml_apps_calendar_tests COMMAND "${Python3_EXECUTABLE}"
-        "${MARATHON_SOURCE_ROOT}/scripts/ci/run-qml-suite.py"
-        --report "${CMAKE_CURRENT_BINARY_DIR}/reports/calendar.xml" --
-        sh "${MARATHON_SOURCE_ROOT}/apps/calendar/tests/run.sh")
-    set_tests_properties(Qml_apps_calendar_tests PROPERTIES LABELS "native-ui-required"
-        FIXTURES_REQUIRED NativeKeel TIMEOUT 180
-        ENVIRONMENT "KEEL_QML=${KEEL_QML};QMLTESTRUNNER=${QMLTESTRUNNER}")
     # Production Rust transport, actual Notes app/schema/actions/store/editor.
     # The conductor owns a private bus and isolated Configuration state; a
     # small Navigation1 admission fixture cannot claim real cgroup thaw.
@@ -99,6 +92,13 @@ else()
         -input "${CMAKE_CURRENT_SOURCE_DIR}/tst_noteswire.qml")
     set_tests_properties(NativeUI_NotesWire PROPERTIES LABELS "native-ui-required"
         FIXTURES_REQUIRED NativeKeel TIMEOUT 180)
+    add_test(NAME Qml_apps_calendar_tests COMMAND "${Python3_EXECUTABLE}"
+        "${MARATHON_SOURCE_ROOT}/scripts/ci/run-qml-suite.py"
+        --report "${CMAKE_CURRENT_BINARY_DIR}/reports/calendar.xml" --
+        sh "${MARATHON_SOURCE_ROOT}/apps/calendar/tests/run.sh")
+    set_tests_properties(Qml_apps_calendar_tests PROPERTIES LABELS "native-ui-required"
+        FIXTURES_REQUIRED NativeKeel TIMEOUT 180
+        ENVIRONMENT "KEEL_QML=${KEEL_QML};QMLTESTRUNNER=${QMLTESTRUNNER}")
     # The changed uninstall/cleanup UI lives in Settings AppPages. Keep this
     # input explicit: it does not claim the rest of Settings is qualified.
     add_test(NAME Qml_settings_AppPages COMMAND "${Python3_EXECUTABLE}"
@@ -161,7 +161,7 @@ else()
         -input "${MARATHON_SOURCE_ROOT}/tests/ui/tst_taskswitcher.qml")
     set_tests_properties(Qml_shell_TaskSwitcher PROPERTIES LABELS "native-ui-required"
         FIXTURES_REQUIRED NativeKeel TIMEOUT 180)
-    message(STATUS "Required native UI scope: toolkit + complete Notes and Calendar + real Hub/Notes wire + Settings AppPages/PermissionPages + PageViewHub + Hub + overview geometry/task switcher; broader suites remain separate")
+    message(STATUS "Required native UI tests are registered under the native-ui-required CTest label")
 endif()
 
 if(Python3_Interpreter_FOUND)
