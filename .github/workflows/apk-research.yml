@@ -1,0 +1,40 @@
+name: Local APK research tools
+
+on:
+  pull_request:
+    paths:
+      - tools/blackberry-apk-lab/**
+      - .github/workflows/apk-research.yml
+      - tests/CMakeLists.txt
+  push:
+    branches: [v2]
+    paths:
+      - tools/blackberry-apk-lab/**
+      - .github/workflows/apk-research.yml
+      - tests/CMakeLists.txt
+
+permissions:
+  contents: read
+
+jobs:
+  fixtures:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+      - name: Check whitespace in the committed change
+        # New branches use their default-branch ancestor; without one the helper
+        # reports an unavailable range. PRs and existing pushes use exact SHAs.
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: >-
+          python3 tools/blackberry-apk-lab/check_whitespace.py "$BASE_SHA" "$GITHUB_SHA"
+          --default-branch "$DEFAULT_BRANCH" --head-ref "$GITHUB_REF"
+      - name: Run registered local-tool behavior cases
+        run: |
+          cmake -S tools/blackberry-apk-lab -B build-apk-research
+          ctest --test-dir build-apk-research --output-on-failure
+          python3 tests/lint/check-test-reachability.py

@@ -80,6 +80,8 @@ add_test(NAME Lint_IconMap COMMAND sh ${CMAKE_SOURCE_DIR}/tests/lint/check-icon-
 # Sailfish RPM installer (needs rpmbuild to build its fixture; skips without)
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_FOUND)
+    add_test(NAME BlackBerry_ApkResearch COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/blackberry-apk-lab/test_apk_lab.py)
+    set_tests_properties(BlackBerry_ApkResearch PROPERTIES TIMEOUT 60)
     add_test(NAME Sailfish_Install COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/sailfish-install/test_install.py)
     # Every test source is registered here, and every registered path exists
     add_test(NAME Lint_TestReachability COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/lint/check-test-reachability.py ${CMAKE_SOURCE_DIR})
