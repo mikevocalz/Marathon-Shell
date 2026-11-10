@@ -180,7 +180,7 @@ else()
         -input "${MARATHON_SOURCE_ROOT}/tests/ui/tst_taskswitcher.qml")
     set_tests_properties(Qml_shell_TaskSwitcher PROPERTIES LABELS "native-ui-required"
         FIXTURES_REQUIRED NativeKeel TIMEOUT 180)
-    message(STATUS "Required native UI scope: toolkit + complete Notes + real Hub/Notes wire + Settings AppPages/PermissionPages/rows + Silica summary rows + Phone people rows + PageViewHub + Hub + overview geometry/task switcher; broader suites remain separate")
+    message(STATUS "Required native UI tests are registered under the native-ui-required CTest label")
 endif()
 
 if(Python3_Interpreter_FOUND)
